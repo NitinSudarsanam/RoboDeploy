@@ -30,5 +30,24 @@ Before submitting a PR:
 - Run `mypy --strict .` to verify type safety.
 - Verify your code runs on an NVIDIA 3060 (12GB VRAM) or higher.
 
+## 📚 Library Selection: Which to use and When?
+
+To maintain the "100Hz Integrity" and "Zero-Copy" rules, follow this strict library allocation. Using the wrong library for a submodule will result in a rejected Pull Request.
+
+| Submodule | Library | Reason |
+| :--- | :--- | :--- |
+| **Sim Backends (`sim/`)** | **JAX (MJX)** | Allows for 10,000x parallel rollouts and differentiable physics. |
+| **Robot Policies (`policies/`)** | **PyTorch** | Most SOTA models (OpenVLA, $\pi_0$) are native PyTorch. Use `core.interop` to ingest JAX frames. |
+| **Real Backends (`real/`)** | **NumPy** | Low-latency hardware I/O (ROS 2/Serial) has lower overhead in NumPy than JAX/Torch. |
+| **Kinematics (`kinematics/`)** | **JAX + Pinocchio** | Pinocchio (C++) provides precision; JAX provides the speed for batch-solving IK. |
+| **Sensors (Real)** | **NumPy/OpenCV** | Direct hardware drivers (RealSense/ZED) output NumPy buffers. |
+| **Sensors (Sim)** | **JAX** | MJX renders directly to GPU memory; keep it in JAX to avoid CPU round-trips. |
+
+### 🧠 The "Zero-Copy" flow
+1. **Fetch:** `Observation` starts as **JAX** (Sim) or **NumPy** (Real).
+2. **Convert:** Real-world NumPy is moved to **JAX** via `jnp.array(data)` (fastest for 3060).
+3. **Bridge:** JAX is handed to the **PyTorch** Policy via `core.interop.to_torch()` (Zero-copy).
+4. **Command:** Policy output (Torch) is moved to **JAX** for safety filtering, then to **NumPy** for the motor drivers.
+
 ---
 **"Build for the cloud, deploy to the metal."**
