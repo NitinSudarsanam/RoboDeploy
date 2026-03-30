@@ -49,5 +49,17 @@ To maintain the "100Hz Integrity" and "Zero-Copy" rules, follow this strict libr
 3. **Bridge:** JAX is handed to the **PyTorch** Policy via `core.interop.to_torch()` (Zero-copy).
 4. **Command:** Policy output (Torch) is moved to **JAX** for safety filtering, then to **NumPy** for the motor drivers.
 
+
+### 3. The "Two-Second" Workflow to Ensure Context
+Even with these files, the AI can sometimes "hallucinate" generic Python code. Use these two VS Code tricks to keep it grounded:
+
+* **The `#` Reference:** In Copilot Chat, if you want it to look at the README specifically, just type:
+    > "Using **#README.md**, create a new test for the Franka gripper."
+
+* **The `@workspace` Command:** If you are starting a new module, always start your prompt with:
+    > "**@workspace** generate the boilerplate for a new ZED camera sensor."
+
+This forces Copilot to scan your file structure, the README, and your instructions before it types a single character.
+
 ---
 **"Build for the cloud, deploy to the metal."**
