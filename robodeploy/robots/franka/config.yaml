@@ -1,0 +1,4 @@
+name: franka
+dof: 7
+ee_link: robot0/ee_link
+default_qpos: [0.0, -0.7, 0.0, -2.1, 0.0, 1.6, 0.8]
