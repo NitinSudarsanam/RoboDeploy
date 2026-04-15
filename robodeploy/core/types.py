@@ -6,7 +6,10 @@ All values use SI units: Meters, Radians, Seconds, Newtons.
 from dataclasses import dataclass
 from typing import Optional
 
-import jax.numpy as jnp
+try:
+    import jax.numpy as jnp
+except ImportError:  # JAX not available (e.g. ros2_env without JAX installed)
+    import numpy as jnp  # type: ignore[assignment]
 
 
 @dataclass
@@ -40,6 +43,9 @@ class Observation:
     # Force/Torque sensors (if available)
     ft_force: Optional[jnp.ndarray] = None  # [3] in Newtons
     ft_torque: Optional[jnp.ndarray] = None  # [3] in N⋅m
+
+    # Gripper state (0.0 = fully open, 1.0 = fully closed)
+    gripper_state: Optional[float] = None
 
     # Timestamp
     timestamp: float = 0.0  # in seconds
