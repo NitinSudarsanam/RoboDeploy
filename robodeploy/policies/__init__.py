@@ -1,5 +1,5 @@
-"""Robot policy implementations: VLA, Diffusion, Robomimic, etc."""
+"""Policy implementations."""
 
-from .robomimic_policy import RobomimicPolicy
+from robodeploy.policies.learned.robomimic import RobomimicPolicy
 
 __all__ = ["RobomimicPolicy"]

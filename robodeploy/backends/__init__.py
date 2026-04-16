@@ -1,17 +1,6 @@
-"""Execution backends for simulation and real hardware.
+"""Execution backends for simulation and real hardware."""
 
-Imports are lazy: MujocoEngine requires JAX; FrankaRealBackend only requires
-rclpy (ros2_env).  Neither is pulled in until explicitly accessed.
-"""
+from robodeploy.backends.sim.mujoco.backend import MuJoCoBackend
+from robodeploy.backends.real.ros2.backend import ROS2Backend
 
-__all__ = ["MujocoEngine", "FrankaRealBackend"]
-
-
-def __getattr__(name: str):
-    if name == "MujocoEngine":
-        from .sim import MujocoEngine
-        return MujocoEngine
-    if name == "FrankaRealBackend":
-        from .real import FrankaRealBackend
-        return FrankaRealBackend
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+__all__ = ["MuJoCoBackend", "ROS2Backend"]

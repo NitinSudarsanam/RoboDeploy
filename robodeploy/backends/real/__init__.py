@@ -1,9 +1,5 @@
-"""Real-hardware backends powered by ROS 2 Jazzy.
+"""Real-hardware backends."""
 
-Activate the ros2_env conda environment before importing:
-    conda activate ros2_env
-"""
+from robodeploy.backends.real.ros2.backend import ROS2Backend
 
-from .franka_real_backend import FrankaRealBackend
-
-__all__ = ["FrankaRealBackend"]
+__all__ = ["ROS2Backend"]

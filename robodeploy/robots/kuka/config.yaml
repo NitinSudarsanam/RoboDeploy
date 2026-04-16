@@ -1,5 +1,0 @@
-name: kuka
-dof: 7
-ee_link: robot0/ee_link
-xml_file: kuka.xml
-default_qpos: [0.0, -0.6, 0.0, -1.8, 0.0, 1.2, 0.0]
