@@ -25,10 +25,12 @@ Extension point for batching:
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 
 from robodeploy.core.interfaces.backend import IBackend
-from robodeploy.core.types import Action, Observation
+from robodeploy.core.spaces import AssetFormat
+from robodeploy.core.types import Action, AssetSelection, Observation
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.sensor import ISensor
@@ -51,6 +53,7 @@ class BackendBase(IBackend):
         self._initialized:    bool = False
         self._episode_count:  int  = 0
         self._step_count:     int  = 0
+        self._asset_selections: dict[str, AssetSelection] = {}
 
         # Set by initialize() — subclasses access these freely
         self._description:    RobotDescription | None = None
@@ -71,6 +74,7 @@ class BackendBase(IBackend):
         self._description = description
         self._task        = task
         self._sensors     = sensors
+        self._asset_selections.clear()
         self._load(description, task, sensors)
         self._initialized = True
 
@@ -86,6 +90,53 @@ class BackendBase(IBackend):
         # Use first robot config for single-robot backends
         robot = robots[0]
         self.initialize(robot.description, task=None, sensors=robot.sensors + shared_sensors)  # type: ignore[arg-type]
+
+    @property
+    def asset_selections(self) -> dict[str, AssetSelection]:
+        """Asset selections made during initialize()."""
+        return dict(self._asset_selections)
+
+    def _resolve_asset_path(
+        self,
+        robot_id: str,
+        description: "RobotDescription",
+        fmt: AssetFormat,
+        *,
+        variant: str = "default",
+        allow_override_wildcard: bool = True,
+    ) -> Path:
+        overrides = self.config.get("asset_overrides", {}) or {}
+        fmt_key = fmt.value
+
+        override_path: Optional[str] = None
+        if isinstance(overrides, dict):
+            if robot_id in overrides and isinstance(overrides[robot_id], dict):
+                override_path = overrides[robot_id].get(fmt_key)
+            if override_path is None and allow_override_wildcard and "*" in overrides and isinstance(overrides["*"], dict):
+                override_path = overrides["*"].get(fmt_key)
+
+        if override_path:
+            p = Path(override_path).expanduser()
+            self._asset_selections[robot_id] = AssetSelection(
+                robot_id=robot_id,
+                requested_format=fmt,
+                used_format=fmt,
+                resolved_path=str(p),
+                source="override",
+                notes="asset_overrides",
+            )
+            return p
+
+        p = description.asset_path(fmt, variant=variant)
+        self._asset_selections[robot_id] = AssetSelection(
+            robot_id=robot_id,
+            requested_format=fmt,
+            used_format=fmt,
+            resolved_path=str(p),
+            source="description",
+            notes=f"variant={variant}",
+        )
+        return p
 
     def reset(self) -> Observation:
         """Guard + call _reset_impl()."""

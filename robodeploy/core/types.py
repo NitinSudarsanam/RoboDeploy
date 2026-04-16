@@ -15,6 +15,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
+from robodeploy.core.spaces import AssetFormat
+
 try:
     import jax.numpy as jnp
 except ImportError:
@@ -169,6 +171,18 @@ class SceneSpec:
     objects:      list[ObjectSpec] = field(default_factory=list)
     table_height: float = 0.0       # metres above world origin
     lighting:     str   = "default" # "default" | "random" | "dark"
+
+
+@dataclass
+class AssetSelection:
+    """Records which asset a backend requested/used for a robot."""
+
+    robot_id: str
+    requested_format: AssetFormat
+    used_format: AssetFormat
+    resolved_path: str
+    source: Literal["override", "description", "conversion"]
+    notes: str = ""
 
 
 # ---------------------------------------------------------------------------

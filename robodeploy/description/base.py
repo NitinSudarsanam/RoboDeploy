@@ -39,7 +39,6 @@ import numpy as np
 
 from robodeploy.core.spaces import AssetFormat
 
-
 class RobotDescription(ABC):
     """Static robot definition. Subclass one per robot type."""
 
@@ -153,3 +152,164 @@ class RobotDescription(ABC):
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(dof={self.dof}, ee={self.ee_link_name})"
+
+
+class URDFRobotDescription(RobotDescription):
+    """RobotDescription backed by a URDF XML file (canonical source).
+
+    This class is meant to be used by library users. A user can either
+    instantiate it directly, or subclass it and pass a fixed URDF path.
+    """
+
+    def __init__(
+        self,
+        urdf_path: str | Path,
+        *,
+        ee_link_name: str,
+        display_name: str | None = None,
+        home_qpos: np.ndarray | None = None,
+        joint_order: list[str] | None = None,
+        default_velocity_limit: float = 2.0,
+        default_effort_limit: float = 50.0,
+    ) -> None:
+        self._urdf_path = Path(urdf_path)
+        if not self._urdf_path.exists():
+            raise FileNotFoundError(f"URDF not found: {self._urdf_path}")
+
+        self.ee_link_name = ee_link_name
+
+        parsed = self._parse_urdf(
+            self._urdf_path,
+            joint_order=joint_order,
+            default_velocity_limit=default_velocity_limit,
+            default_effort_limit=default_effort_limit,
+        )
+        self.joint_names = parsed["joint_names"]
+        self.dof = len(self.joint_names)
+        self.joint_position_limits = parsed["pos_limits"]
+        self.joint_velocity_limits = parsed["vel_limits"]
+        self.joint_torque_limits = parsed["eff_limits"]
+        self.home_qpos = (
+            np.asarray(home_qpos, dtype=np.float64)
+            if home_qpos is not None
+            else np.zeros(self.dof, dtype=np.float64)
+        )
+        if self.home_qpos.shape[0] != self.dof:
+            raise ValueError("home_qpos must match dof.")
+
+        self.display_name = display_name or parsed["robot_name"] or f"URDFRobot({self._urdf_path.name})"
+
+    @classmethod
+    def from_urdf(
+        cls,
+        path: str | Path,
+        *,
+        ee_link_name: str,
+        display_name: str | None = None,
+        home_qpos: np.ndarray | None = None,
+        joint_order: list[str] | None = None,
+    ) -> "URDFRobotDescription":
+        return cls(
+            path,
+            ee_link_name=ee_link_name,
+            display_name=display_name,
+            home_qpos=home_qpos,
+            joint_order=joint_order,
+        )
+
+    def asset_path(self, fmt: AssetFormat, variant: str = "default") -> Path:
+        del variant
+        if fmt == AssetFormat.URDF:
+            return self._urdf_path
+        raise FileNotFoundError(
+            f"{type(self).__name__} provides only URDF by default. "
+            f"Backend requested {fmt.value}. Provide an override or a derived asset."
+        )
+
+    @staticmethod
+    def _parse_urdf(
+        urdf_path: Path,
+        *,
+        joint_order: list[str] | None,
+        default_velocity_limit: float,
+        default_effort_limit: float,
+    ) -> dict:
+        import math
+        import xml.etree.ElementTree as ET
+
+        root = ET.parse(str(urdf_path)).getroot()
+        robot_name = root.attrib.get("name", "")
+
+        joints: list[dict] = []
+        for joint in root.findall("joint"):
+            jtype = joint.attrib.get("type", "fixed")
+            if jtype == "fixed":
+                continue
+            name = joint.attrib.get("name", "")
+            if not name:
+                continue
+
+            limit = joint.find("limit")
+            lower = None
+            upper = None
+            vel = None
+            eff = None
+            if limit is not None:
+                if "lower" in limit.attrib:
+                    lower = float(limit.attrib["lower"])
+                if "upper" in limit.attrib:
+                    upper = float(limit.attrib["upper"])
+                if "velocity" in limit.attrib:
+                    vel = float(limit.attrib["velocity"])
+                if "effort" in limit.attrib:
+                    eff = float(limit.attrib["effort"])
+
+            if jtype == "continuous":
+                lower = lower if lower is not None else -math.pi
+                upper = upper if upper is not None else math.pi
+            else:
+                lower = lower if lower is not None else -math.pi
+                upper = upper if upper is not None else math.pi
+
+            joints.append({
+                "name": name,
+                "lower": lower,
+                "upper": upper,
+                "vel": vel if vel is not None else default_velocity_limit,
+                "eff": eff if eff is not None else default_effort_limit,
+            })
+
+        if joint_order is not None:
+            by_name = {j["name"]: j for j in joints}
+            ordered = []
+            for name in joint_order:
+                if name not in by_name:
+                    raise KeyError(f"Joint '{name}' not found in URDF {urdf_path}")
+                ordered.append(by_name[name])
+            joints = ordered
+
+        joint_names = [j["name"] for j in joints]
+        dof = len(joint_names)
+        pos_limits = (
+            np.asarray([[j["lower"], j["upper"]] for j in joints], dtype=np.float64)
+            if dof
+            else np.zeros((0, 2), dtype=np.float64)
+        )
+        vel_limits = (
+            np.asarray([j["vel"] for j in joints], dtype=np.float64)
+            if dof
+            else np.zeros((0,), dtype=np.float64)
+        )
+        eff_limits = (
+            np.asarray([j["eff"] for j in joints], dtype=np.float64)
+            if dof
+            else np.zeros((0,), dtype=np.float64)
+        )
+
+        return {
+            "robot_name": robot_name,
+            "joint_names": joint_names,
+            "pos_limits": pos_limits,
+            "vel_limits": vel_limits,
+            "eff_limits": eff_limits,
+        }

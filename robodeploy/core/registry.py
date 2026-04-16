@@ -49,6 +49,71 @@ _POLICIES:  dict[str, type] = {}
 _TASKS:     dict[str, type] = {}
 _SENSORS:   dict[str, type] = {}
 
+def _import_builtin_components() -> None:
+    """Best-effort import of built-in components to populate the registry.
+
+    Keeps optional dependencies optional: imports are wrapped in try/except.
+    """
+    # Backends
+    try:
+        import robodeploy.backends.sim.mujoco.backend  # noqa: F401
+    except Exception:
+        pass
+    try:
+        import robodeploy.backends.sim.isaacsim.backend  # noqa: F401
+    except Exception:
+        pass
+    try:
+        import robodeploy.backends.real.ros2.backend  # noqa: F401
+    except Exception:
+        pass
+
+    # Robots
+    try:
+        import robodeploy.description.franka.description  # noqa: F401
+    except Exception:
+        pass
+    try:
+        import robodeploy.description.kuka.description  # noqa: F401
+    except Exception:
+        pass
+
+    # Tasks
+    try:
+        import robodeploy.tasks.manipulation.pick_place  # noqa: F401
+    except Exception:
+        pass
+    try:
+        import robodeploy.tasks.manipulation.pour  # noqa: F401
+    except Exception:
+        pass
+    try:
+        import robodeploy.tasks.manipulation.peg_insertion  # noqa: F401
+    except Exception:
+        pass
+
+    # Policies
+    try:
+        import robodeploy.policies.learned.robomimic  # noqa: F401
+    except Exception:
+        pass
+    try:
+        import robodeploy.policies.learned.diffusion  # noqa: F401
+    except Exception:
+        pass
+    try:
+        import robodeploy.policies.learned.vla  # noqa: F401
+    except Exception:
+        pass
+    try:
+        import robodeploy.policies.scripted.waypoint  # noqa: F401
+    except Exception:
+        pass
+    try:
+        import robodeploy.policies.scripted.joint_pd  # noqa: F401
+    except Exception:
+        pass
+
 
 # ---------------------------------------------------------------------------
 # Registration decorators
@@ -145,6 +210,8 @@ def get_backend(name: str) -> type:
                   Message includes all registered names to aid debugging.
     """
     if name not in _BACKENDS:
+        _import_builtin_components()
+    if name not in _BACKENDS:
         raise KeyError(
             f"Backend '{name}' not found. Registered: {list(_BACKENDS)}\n"
             "Did you forget to import the backend module?"
@@ -154,6 +221,8 @@ def get_backend(name: str) -> type:
 
 def get_robot(name: str) -> type:
     """Look up a registered RobotDescription class by name."""
+    if name not in _ROBOTS:
+        _import_builtin_components()
     if name not in _ROBOTS:
         raise KeyError(
             f"Robot '{name}' not found. Registered: {list(_ROBOTS)}\n"
@@ -165,6 +234,8 @@ def get_robot(name: str) -> type:
 def get_policy(name: str) -> type:
     """Look up a registered policy class by name."""
     if name not in _POLICIES:
+        _import_builtin_components()
+    if name not in _POLICIES:
         raise KeyError(
             f"Policy '{name}' not found. Registered: {list(_POLICIES)}\n"
             "Did you forget to import the policy module?"
@@ -175,6 +246,8 @@ def get_policy(name: str) -> type:
 def get_task(name: str) -> type:
     """Look up a registered task class by name."""
     if name not in _TASKS:
+        _import_builtin_components()
+    if name not in _TASKS:
         raise KeyError(
             f"Task '{name}' not found. Registered: {list(_TASKS)}\n"
             "Did you forget to import the task module?"
@@ -184,6 +257,8 @@ def get_task(name: str) -> type:
 
 def get_sensor(name: str) -> type:
     """Look up a registered sensor class by name."""
+    if name not in _SENSORS:
+        _import_builtin_components()
     if name not in _SENSORS:
         raise KeyError(
             f"Sensor '{name}' not found. Registered: {list(_SENSORS)}\n"

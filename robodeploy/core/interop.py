@@ -8,13 +8,16 @@ The Zero-Copy flow:
 4. Command: Policy output (Torch) is moved to JAX for safety, then to NumPy for motors
 """
 
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
-import jax.numpy as jnp
+try:
+    import jax.numpy as jnp
+except Exception:  # pragma: no cover
+    jnp = None  # type: ignore[assignment]
 import numpy as np
 
 
-def to_torch(data: Union[jnp.ndarray, np.ndarray]) -> "torch.Tensor":
+def to_torch(data) -> "torch.Tensor":
     """
     Convert JAX or NumPy array to PyTorch tensor (zero-copy when possible).
     
@@ -29,7 +32,7 @@ def to_torch(data: Union[jnp.ndarray, np.ndarray]) -> "torch.Tensor":
     except ImportError:
         raise ImportError("PyTorch is required for to_torch(). Install with: pip install torch")
 
-    if isinstance(data, jnp.ndarray):
+    if jnp is not None and isinstance(data, jnp.ndarray):
         # JAX array -> NumPy (on CPU if needed)
         data = np.array(data)
 
@@ -37,7 +40,7 @@ def to_torch(data: Union[jnp.ndarray, np.ndarray]) -> "torch.Tensor":
     return torch.from_numpy(data)
 
 
-def to_jax(data: Union["torch.Tensor", np.ndarray]) -> jnp.ndarray:
+def to_jax(data: Union["torch.Tensor", np.ndarray]):
     """
     Convert PyTorch tensor or NumPy array to JAX array.
     
@@ -50,10 +53,14 @@ def to_jax(data: Union["torch.Tensor", np.ndarray]) -> jnp.ndarray:
     if hasattr(data, "cpu"):  # PyTorch tensor
         data = data.detach().cpu().numpy()
 
+    if jnp is None:
+        raise ImportError(
+            "JAX is required for to_jax(). Install with: pip install 'jax[cpu]'"
+        )
     return jnp.array(data)
 
 
-def to_numpy(data: Union[jnp.ndarray, "torch.Tensor"]) -> np.ndarray:
+def to_numpy(data) -> np.ndarray:
     """
     Convert JAX or PyTorch array to NumPy array.
     
@@ -63,7 +70,7 @@ def to_numpy(data: Union[jnp.ndarray, "torch.Tensor"]) -> np.ndarray:
     Returns:
         NumPy array
     """
-    if isinstance(data, jnp.ndarray):
+    if jnp is not None and isinstance(data, jnp.ndarray):
         return np.array(data)
 
     if hasattr(data, "cpu"):  # PyTorch tensor

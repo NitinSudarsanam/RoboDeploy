@@ -295,6 +295,13 @@ class RoboEnv:
         primary_robot_id = primary_task.robot_ids[0]
         info = EpisodeInfo(episode_id=self._episode_info.episode_id)
         info.extra["multi_agent"] = self._build_multi_info(obs_by_robot, {}, {}, {})
+        try:
+            from dataclasses import asdict
+            info.extra["assets"] = {
+                rid: asdict(sel) for rid, sel in getattr(self._backend, "asset_selections", {}).items()
+            }
+        except Exception:
+            info.extra["assets"] = {}
         return obs_by_robot[primary_robot_id], info
 
     def step(self, action: Optional[Action | List[Action] | Dict[str, Action]] = None):

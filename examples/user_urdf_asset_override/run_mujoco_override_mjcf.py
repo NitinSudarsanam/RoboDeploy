@@ -1,0 +1,54 @@
+"""Demonstrate URDF canonical description with explicit MJCF override."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+
+def _ensure_repo_on_path() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+
+
+_ensure_repo_on_path()
+
+from robodeploy import RoboEnv  # noqa: E402
+
+from examples.user_urdf_asset_override import components  # noqa: E402,F401
+
+
+def main() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    mjcf_path = repo_root / "robodeploy" / "description" / "kuka" / "assets" / "mjcf" / "kuka.xml"
+
+    env = RoboEnv.make(
+        robot="user_urdf_robot",
+        backend="mujoco",
+        task="user_dummy_task",
+        policy="user_hold_policy",
+        backend_kwargs={
+            "config": {
+                "enable_viewer": False,
+                "asset_overrides": {
+                    "robot0": {"mjcf": str(mjcf_path)},
+                },
+            }
+        },
+    )
+
+    try:
+        _, info = env.reset()
+    except ImportError as exc:
+        print(exc)
+        print("\nInstall mujoco to run:\n  pip install mujoco")
+        return
+
+    print("assets selection:", info.extra.get("assets"))
+    env.close()
+
+
+if __name__ == "__main__":
+    main()
+
