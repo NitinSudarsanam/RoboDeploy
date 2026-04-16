@@ -78,18 +78,18 @@ class BackendBase(IBackend):
         self._load(description, task, sensors)
         self._initialized = True
 
-    # Multi-robot shim: default implementation maps to single-robot initialize
+    # Multi-robot: require explicit backend support (no unsafe shims)
     def initialize_multi(
         self,
         robots: list["RobotConfig"],
-        scene,  # SceneSpec, kept untyped here to avoid circular import at runtime
+        scene,  # SceneSpec
         shared_sensors: list["ISensor"],
     ) -> None:
-        if not robots:
-            raise ValueError("initialize_multi() requires at least one RobotConfig.")
-        # Use first robot config for single-robot backends
-        robot = robots[0]
-        self.initialize(robot.description, task=None, sensors=robot.sensors + shared_sensors)  # type: ignore[arg-type]
+        del robots, scene, shared_sensors
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement initialize_multi(). "
+            "Use single-agent RoboEnv, or implement multi-robot support in this backend."
+        )
 
     @property
     def asset_selections(self) -> dict[str, AssetSelection]:

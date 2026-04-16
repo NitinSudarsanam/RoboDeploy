@@ -68,7 +68,7 @@ class FrankaDescription(RobotDescription):
     # Asset resolution
     # ------------------------------------------------------------------
 
-    def asset_path(self, fmt: AssetFormat) -> Path:
+    def asset_path(self, fmt: AssetFormat, variant: str = "default") -> Path:
         """Return path to the Franka asset in the requested format.
 
         MJCF is served directly from the bundled hand-tuned file.
@@ -84,6 +84,7 @@ class FrankaDescription(RobotDescription):
         Raises:
             FileNotFoundError: If the asset or conversion tool is unavailable.
         """
+        del variant
         assets = Path(__file__).parent / "assets"
 
         if fmt == AssetFormat.MJCF:

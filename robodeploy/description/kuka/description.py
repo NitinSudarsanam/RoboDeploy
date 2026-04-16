@@ -32,7 +32,8 @@ class KukaDescription(RobotDescription):
 
     home_qpos = np.array([0.0, -0.6, 0.0, -1.8, 0.0, 1.2, 0.0], dtype=np.float64)
 
-    def asset_path(self, fmt: AssetFormat) -> Path:
+    def asset_path(self, fmt: AssetFormat, variant: str = "default") -> Path:
+        del variant
         assets = Path(__file__).parent / "assets"
 
         if fmt == AssetFormat.MJCF:

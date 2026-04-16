@@ -124,6 +124,10 @@ class RoboEnv:
         policy_kwargs: Optional[dict] = None,
         obs_pipeline: Optional[ObsPipeline] = None,
     ) -> "RoboEnv":
+        # Import built-ins lazily from a non-core module.
+        from robodeploy.builtins import import_builtins
+
+        import_builtins()
         DescriptionClass = get_robot(robot)
         BackendClass = get_backend(backend)
         TaskClass = get_task(task)
@@ -201,6 +205,10 @@ class RoboEnv:
         seen: set[str] = set()
         for task_cfg in self._tasks_cfg:
             scene = task_cfg.task.scene_spec()
+            for prop in getattr(scene, "props", []):
+                if prop.name not in seen:
+                    merged.props.append(prop)
+                    seen.add(prop.name)
             for obj in scene.objects:
                 if obj.name not in seen:
                     merged.objects.append(obj)
@@ -214,7 +222,13 @@ class RoboEnv:
         if self._single_agent_mode:
             self._backend.initialize(self._description, self._task, self._sensors)
         else:
-            self._backend.initialize_multi(self._robots, self._merged_scene_spec(), self._shared_sensors)
+            try:
+                self._backend.initialize_multi(self._robots, self._merged_scene_spec(), self._shared_sensors)
+            except NotImplementedError as exc:
+                raise NotImplementedError(
+                    f"Backend '{type(self._backend).__name__}' does not support multi-robot initialization. "
+                    "Use the single-agent RoboEnv API, or choose a backend that implements initialize_multi()."
+                ) from exc
 
         for robot in self._robots:
             for sensor in robot.sensors:

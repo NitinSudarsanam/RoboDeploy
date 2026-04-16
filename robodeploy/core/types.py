@@ -162,12 +162,31 @@ class ObjectSpec:
 
 
 @dataclass
+class PropConfig:
+    """A scene prop (object) declaration.
+
+    This is the forward-compatible schema used by backends and visualization.
+    `ObjectSpec` remains supported for backward compatibility.
+    """
+
+    name: str
+    asset_path: str
+    position: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    orientation: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+    mass: float = 0.1
+    is_fixed: bool = False
+
+
+@dataclass
 class SceneSpec:
     """Full scene description for a task: objects, lighting, table, etc.
 
     Backends load these assets at initialize() time.
     DomainRandomizer.randomize() modifies poses each episode reset.
     """
+    # Preferred representation (matches ARCHITECTURE.md direction).
+    props:        list[PropConfig] = field(default_factory=list)
+    # Backward-compatible alias used by existing tasks/examples.
     objects:      list[ObjectSpec] = field(default_factory=list)
     table_height: float = 0.0       # metres above world origin
     lighting:     str   = "default" # "default" | "random" | "dark"
