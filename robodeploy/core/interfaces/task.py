@@ -32,7 +32,7 @@ Adding a new task:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING, Any, Iterator
 
 from robodeploy.core.types import Action, ObsSpec, Observation, SceneSpec
 
@@ -66,7 +66,7 @@ class ITask(ABC):
     def scene_spec(self) -> SceneSpec:
         """Declare the scene: which objects exist and their initial poses.
 
-        Called once at backend.initialize(). The backend loads all assets
+        Called once at env/backend initialization. The backend loads all assets
         listed here. DomainRandomizer.randomize() can vary poses each reset.
 
         Returns:
@@ -147,6 +147,23 @@ class ITask(ABC):
             bool: True triggers episode termination with success=False.
         """
         ...
+
+    # ------------------------------------------------------------------
+    # Optional visualization hook (backend-agnostic)
+    # ------------------------------------------------------------------
+
+    def viz_goals(self, obs: Observation | None = None) -> list[dict[str, Any]]:
+        """Return goal primitives for visualization (RViz/UI), backend-agnostic.
+
+        The return value must be JSON-friendly and contain only basic Python types.
+        Recommended schema for each item:
+          - {"kind": "pose", "position": [x,y,z], "orientation": [w,x,y,z], "label": "..."}
+          - {"kind": "point", "position": [x,y,z], "label": "..."}
+
+        Default: no goals.
+        """
+        del obs
+        return []
 
     # ------------------------------------------------------------------
     # Optional overrides

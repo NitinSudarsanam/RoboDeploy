@@ -14,11 +14,10 @@ from typing import TYPE_CHECKING, Any, Optional, Protocol
 from robodeploy.backends.base import BackendBase
 from robodeploy.core.registry import register_backend
 from robodeploy.core.spaces import ActionSpace, AssetFormat
-from robodeploy.core.types import Action, Observation
+from robodeploy.core.types import Action, Observation, SceneSpec
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.sensor import ISensor
-    from robodeploy.core.interfaces.task import ITask
     from robodeploy.description.base import RobotDescription
 
 
@@ -56,21 +55,62 @@ class IsaacSimBackend(BackendBase):
     control_hz = 100.0
     supported_action_spaces = [ActionSpace.JOINT_POS]
 
-    def _load(self, description: RobotDescription, task: ITask, sensors: list[ISensor]) -> None:
-        del task, sensors
+    def initialize_multi(self, robots, scene: SceneSpec, shared_sensors) -> None:  # type: ignore[override]
+        if len(robots) != 1:
+            raise NotImplementedError("IsaacSimBackend currently supports a single robot per backend instance.")
+        if shared_sensors:
+            raise NotImplementedError("IsaacSimBackend does not support shared sensors yet.")
+        robot = robots[0]
+        self._robot_id = str(robot.robot_id or "robot0")
+        super().initialize(robot.description, scene, robot.sensors)
+
+    def _load(self, description: RobotDescription, scene: SceneSpec, sensors: list[ISensor]) -> None:
+        self._sensors = list(sensors)
+        self._warnings: list[str] = []
         launch = self._parse_launch_config()
         self._simulation_app, self._isaac = self._launch_kit(launch)
         self._world = self._create_world(self._isaac)
 
-        urdf_path = self._resolve_asset_path("robot0", description, AssetFormat.URDF, variant="sim")
+        # Prefer USD when available (USD-first), but keep a safe URDF fallback.
+        usd_prefer = bool(self.config.get("usd_prefer", True))
+        usd_fallback = bool(self.config.get("usd_fallback_to_urdf", True))
+        if usd_prefer:
+            try:
+                usd_path = self._resolve_asset_path(self._robot_id, description, AssetFormat.USD, variant="sim")
+                if usd_path.exists():
+                    if not usd_fallback:
+                        raise NotImplementedError("USD import path is not implemented yet in IsaacSimBackend.")
+                    self._warnings.append(f"USD asset present ({usd_path}), falling back to URDF import for now.")
+            except Exception:
+                pass
+
+        urdf_path = self._resolve_asset_path(self._robot_id, description, AssetFormat.URDF, variant="sim")
         self._robot_prim_path = self._import_urdf_robot(self._isaac, urdf_path)
-        self._robot = self._isaac.SingleArticulation(prim_path=self._robot_prim_path, name="robot0")
+        self._robot = self._isaac.SingleArticulation(prim_path=self._robot_prim_path, name=self._robot_id)
 
         self._ensure_physics_ready(self._world, self._simulation_app)
         self._initialize_articulation(self._robot)
 
         self._init_timing()
         self._seed_home_pose(description, headless=launch.headless)
+
+        # Optional RViz sidecar (publishes RoboDeploy-standard topics).
+        self._rviz = None
+        self._latest_viz_payload: Optional[dict] = None
+        rviz_cfg = (self.config.get("rviz") or {}) if isinstance(self.config.get("rviz"), dict) else {}
+        if bool(rviz_cfg.get("enabled", False)):
+            from robodeploy.viz.rviz_publisher import RvizPublisher
+
+            self._rviz = RvizPublisher(
+                fixed_frame=str(rviz_cfg.get("fixed_frame", "world")),
+                publish_hz=float(rviz_cfg.get("publish_hz", 10.0)),
+                namespace="/robodeploy",
+            )
+            self._rviz.start()
+            try:
+                self._rviz.publish_scene(scene)
+            except Exception:
+                self._warnings.append("RViz scene publish failed (non-fatal).")
 
     # ------------------------------------------------------------------
     # Launch / world / asset loading (kept modular for future USD path)
@@ -299,7 +339,12 @@ class IsaacSimBackend(BackendBase):
                 self._world.step(render=not headless)
                 self._simulation_app.update()
 
-        return self._build_obs()
+        obs = self._build_obs()
+        if getattr(self, "_rviz", None) is not None:
+            self._rviz.publish_robot_state("robot0", obs)
+            if self._latest_viz_payload is not None:
+                self._rviz.publish_task_viz(self._latest_viz_payload)
+        return obs
 
     def _step_impl(self, action: Action) -> Observation:
         headless = bool(self.config.get("headless", True))
@@ -315,12 +360,22 @@ class IsaacSimBackend(BackendBase):
             self._simulation_app.update()
             self._sim_time += self._physics_dt
 
-        return self._build_obs()
+        obs = self._build_obs()
+        if getattr(self, "_rviz", None) is not None:
+            self._rviz.publish_robot_state("robot0", obs)
+            if self._latest_viz_payload is not None:
+                self._rviz.publish_task_viz(self._latest_viz_payload)
+        return obs
 
     def _get_obs_impl(self) -> Observation:
         return self._build_obs()
 
     def _close_impl(self) -> None:
+        if getattr(self, "_rviz", None) is not None:
+            try:
+                self._rviz.close()
+            except Exception:
+                pass
         try:
             if hasattr(self, "_world") and self._world is not None:
                 try:
@@ -333,6 +388,10 @@ class IsaacSimBackend(BackendBase):
                     self._simulation_app.close()
             except Exception:
                 pass
+
+    # Optional hook for RoboEnv to provide task-goal visualization payload.
+    def set_viz_payload(self, payload: Optional[dict]) -> None:
+        self._latest_viz_payload = payload
 
     def _build_obs(self) -> Observation:
         try:

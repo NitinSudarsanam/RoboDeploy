@@ -33,6 +33,7 @@ class FrankaDescription(RobotDescription):
     dof = 7
     display_name = "Franka Emika Panda"
     ee_link_name = "panda_hand"
+    ros2_preset_name = "franka_jtc"
 
     joint_names = [
         "panda_joint1",

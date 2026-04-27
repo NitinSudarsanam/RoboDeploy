@@ -28,8 +28,15 @@ no pipeline and get a no-op IdentityTransform pipeline by default.
 
 from __future__ import annotations
 
+from enum import Enum
+
 from robodeploy.core.transforms import ITransform, IdentityTransform
 from robodeploy.core.types      import Observation
+
+
+class ObsSyncMode(str, Enum):
+    DROP_LATEST = "drop_latest"
+    TIME_WINDOW = "time_window"
 
 
 class ObsPipeline:
@@ -55,8 +62,9 @@ class ObsPipeline:
         obs = pipeline.process(raw_obs)
     """
 
-    def __init__(self, transforms: list[ITransform] | None = None) -> None:
+    def __init__(self, transforms: list[ITransform] | None = None, *, sync_mode: ObsSyncMode = ObsSyncMode.DROP_LATEST) -> None:
         self.transforms: list[ITransform] = transforms or [IdentityTransform()]
+        self.sync_mode: ObsSyncMode = sync_mode
 
     def process(self, obs: Observation) -> Observation:
         """Apply all transforms in order and return the result.
@@ -96,6 +104,16 @@ class ObsPipeline:
         """
         self.transforms.append(transform)
         return self
+
+    def sync_policy(self, obs: Observation) -> None:
+        """Optional policy sync seam for real-time bridges.
+
+        ARCHITECTURE.md describes strategies like DROP_LATEST and TIME_WINDOW.
+        The current codebase does not yet implement buffering windows; this
+        method exists as an explicit extension point.
+        """
+        del obs
+        return
 
     def __repr__(self) -> str:
         names = [type(t).__name__ for t in self.transforms]

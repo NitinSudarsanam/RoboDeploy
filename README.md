@@ -46,6 +46,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync --extra sim --extra real
 ```
 
+## Backend setup (MuJoCo, ROS 2 + RViz, Isaac Sim)
+
+See [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md) and the curated example index in [examples/README.md](examples/README.md).
+
 ## 🛠️ Usage Example: Multi-Robot, Multi-Task
 ```python
 from robodeploy.backends.sim import MujocoEngine

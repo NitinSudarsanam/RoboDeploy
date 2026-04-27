@@ -32,9 +32,8 @@ from robodeploy.core.types  import Action, Observation, SceneSpec
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.sensor import ISensor
-    from robodeploy.core.interfaces.task   import ITask
+    from robodeploy.core.robot              import Robot
     from robodeploy.description.base       import RobotDescription
-    from robodeploy.core.robot_config      import RobotConfig
 
 
 class IBackend(ABC):
@@ -48,7 +47,7 @@ class IBackend(ABC):
     def initialize(
         self,
         description: RobotDescription,
-        task:        ITask,
+        scene:       SceneSpec,
         sensors:     list[ISensor],
     ) -> None:
         """Load robot model, scene assets, and sensors.
@@ -57,7 +56,7 @@ class IBackend(ABC):
 
         Args:
             description: Static robot definition (joints, limits, asset paths).
-            task:        Provides scene_spec() for loading objects into the world.
+            scene:       Scene specification for loading objects into the world.
             sensors:     Sensor instances that need a backend handle to render/read.
 
         Raises:
@@ -69,7 +68,7 @@ class IBackend(ABC):
     # Multi-robot initializer (optional; default raises if not overridden)
     def initialize_multi(
         self,
-        robots: List["RobotConfig"],
+        robots: List["Robot"],
         scene:  SceneSpec,
         shared_sensors: List["ISensor"],
     ) -> None:

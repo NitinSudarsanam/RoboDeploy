@@ -131,6 +131,9 @@ class SensorData:
     timestamp_hw:    float = 0.0
     timestamp_recv:  float = 0.0
 
+    # Optional provenance label for timestamp fields (e.g. "sim", "wall", "hardware").
+    timestamp_source: str = "unspecified"
+
 
 # ---------------------------------------------------------------------------
 # Task specification types

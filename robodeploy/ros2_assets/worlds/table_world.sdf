@@ -1,0 +1,13 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <world name="robodeploy_table">
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/Ground%20Plane</uri>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/Sun</uri>
+    </include>
+    <!-- Minimal table prop; replace with task SceneSpec props for richer worlds. -->
+  </world>
+</sdf>
+

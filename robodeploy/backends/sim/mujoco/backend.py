@@ -12,11 +12,10 @@ from typing import TYPE_CHECKING, Optional
 from robodeploy.backends.base import BackendBase
 from robodeploy.core.registry import register_backend
 from robodeploy.core.spaces import ActionSpace, AssetFormat
-from robodeploy.core.types import Action, Observation
+from robodeploy.core.types import Action, Observation, SceneSpec
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.sensor import ISensor
-    from robodeploy.core.interfaces.task import ITask
     from robodeploy.description.base import RobotDescription
 
 
@@ -28,13 +27,23 @@ class MuJoCoBackend(BackendBase):
     control_hz = 100.0
     supported_action_spaces = [ActionSpace.JOINT_POS, ActionSpace.JOINT_TORQUE]
 
+    def initialize_multi(self, robots, scene: SceneSpec, shared_sensors) -> None:  # type: ignore[override]
+        if len(robots) != 1:
+            raise NotImplementedError("MuJoCoBackend currently supports a single robot per backend instance.")
+        if shared_sensors:
+            raise NotImplementedError("MuJoCoBackend does not support shared sensors yet.")
+        robot = robots[0]
+        self._robot_id = str(robot.robot_id or "robot0")
+        super().initialize(robot.description, scene, robot.sensors)
+
     def _load(
         self,
         description: RobotDescription,
-        task: ITask,
+        scene: SceneSpec,
         sensors: list[ISensor],
     ) -> None:
-        del task, sensors
+        del scene
+        del sensors
         try:
             import mujoco
         except Exception as exc:
@@ -47,7 +56,7 @@ class MuJoCoBackend(BackendBase):
 
         self._mujoco = mujoco
         try:
-            mjcf_path = self._resolve_asset_path("robot0", description, AssetFormat.MJCF, variant="sim")
+            mjcf_path = self._resolve_asset_path(self._robot_id, description, AssetFormat.MJCF, variant="sim")
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 "MuJoCoBackend needs an MJCF asset.\n"
@@ -75,9 +84,16 @@ class MuJoCoBackend(BackendBase):
             # Prefer an actuator with matching joint name if present
             aid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_ACTUATOR, jname)
             if aid < 0:
-                # fallback: common naming used in provided MJCF (`act1..act7`)
+                if not bool(self.config.get("allow_actuator_name_fallback", False)):
+                    raise KeyError(
+                        f"MuJoCo actuator not found for joint '{jname}'. "
+                        "Either name actuators the same as joints, or enable "
+                        "`allow_actuator_name_fallback=True` to use the bundled "
+                        f"'{self._robot_id}/act{{i}}' convention."
+                    )
+                # fallback: common naming used in bundled MJCF (`act1..act7`)
                 idx = len(self._actuator_ids) + 1
-                aid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_ACTUATOR, f"robot0/act{idx}")
+                aid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_ACTUATOR, f"{self._robot_id}/act{idx}")
             if aid < 0:
                 raise KeyError(f"MuJoCo actuator not found for joint '{jname}'")
             self._actuator_ids.append(aid)
@@ -100,12 +116,35 @@ class MuJoCoBackend(BackendBase):
         self._set_home_qpos()
         mujoco.mj_forward(self._model, self._data)
 
+        # Optional RViz bridge (keeps ROS imports out unless enabled).
+        self._rviz_bridge = None
+        self._latest_viz_payload: Optional[dict] = None
+        rviz_cfg = (self.config.get("rviz") or {}) if isinstance(self.config.get("rviz"), dict) else {}
+        if bool(rviz_cfg.get("enabled", False)):
+            from .ros2_bridge import MujocoRos2Bridge, MujocoRos2BridgeConfig
+
+            self._rviz_bridge = MujocoRos2Bridge(MujocoRos2BridgeConfig(
+                fixed_frame=str(rviz_cfg.get("fixed_frame", "world")),
+                publish_hz=float(rviz_cfg.get("publish_hz", 10.0)),
+                namespace="/robodeploy",
+            ))
+            self._rviz_bridge.start()
+            try:
+                self._rviz_bridge.publish_scene(self._scene)
+            except Exception:
+                pass
+
     def _reset_impl(self) -> Observation:
         mujoco = self._mujoco
         mujoco.mj_resetData(self._model, self._data)
         self._set_home_qpos()
         mujoco.mj_forward(self._model, self._data)
-        return self._build_obs()
+        obs = self._build_obs()
+        if self._rviz_bridge is not None:
+            self._rviz_bridge.publish_robot_state("robot0", obs)
+            if self._latest_viz_payload is not None:
+                self._rviz_bridge.publish_task_viz(self._latest_viz_payload)
+        return obs
 
     def _step_impl(self, action: Action) -> Observation:
         mujoco = self._mujoco
@@ -127,18 +166,32 @@ class MuJoCoBackend(BackendBase):
             except Exception:
                 pass
 
-        return self._build_obs()
+        obs = self._build_obs()
+        if self._rviz_bridge is not None:
+            self._rviz_bridge.publish_robot_state("robot0", obs)
+            if self._latest_viz_payload is not None:
+                self._rviz_bridge.publish_task_viz(self._latest_viz_payload)
+        return obs
 
     def _get_obs_impl(self) -> Observation:
         return self._build_obs()
 
     def _close_impl(self) -> None:
+        if getattr(self, "_rviz_bridge", None) is not None:
+            try:
+                self._rviz_bridge.close()
+            except Exception:
+                pass
         if self._viewer is not None:
             try:
                 self._viewer.close()
             except Exception:
                 pass
             self._viewer = None
+
+    # Optional hook for RoboEnv to provide task-goal visualization payload.
+    def set_viz_payload(self, payload: Optional[dict]) -> None:
+        self._latest_viz_payload = payload
 
     def render(self) -> None:
         if self._viewer is not None:

@@ -30,13 +30,12 @@ from typing import TYPE_CHECKING, Optional
 
 from robodeploy.core.interfaces.backend import IBackend
 from robodeploy.core.spaces import AssetFormat
-from robodeploy.core.types import Action, AssetSelection, Observation
+from robodeploy.core.types import Action, AssetSelection, Observation, SceneSpec
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.sensor import ISensor
-    from robodeploy.core.interfaces.task   import ITask
+    from robodeploy.core.robot              import Robot
     from robodeploy.description.base       import RobotDescription
-    from robodeploy.core.robot_config      import RobotConfig
 
 
 class BackendBase(IBackend):
@@ -48,8 +47,19 @@ class BackendBase(IBackend):
             config: Backend-specific configuration dict. Each concrete backend
                     documents its accepted keys. Passed through to subclass
                     _setup() after lifecycle state is initialised.
+
+        Compatibility:
+            Many examples pass nested settings as ``{"config": {...}}``.
+            For convenience, if ``config`` contains a mapping under the key
+            ``"config"``, those entries are merged into the top-level config
+            (nested values win on key collisions).
         """
-        self.config:          dict = config or {}
+        raw = dict(config or {})
+        nested = raw.pop("config", None)
+        merged: dict = {**raw}
+        if isinstance(nested, dict):
+            merged = {**merged, **nested}
+        self.config: dict = merged
         self._initialized:    bool = False
         self._episode_count:  int  = 0
         self._step_count:     int  = 0
@@ -57,7 +67,7 @@ class BackendBase(IBackend):
 
         # Set by initialize() — subclasses access these freely
         self._description:    RobotDescription | None = None
-        self._task:           ITask | None            = None
+        self._scene:          SceneSpec | None        = None
         self._sensors:        list[ISensor]           = []
 
     # ------------------------------------------------------------------
@@ -67,21 +77,21 @@ class BackendBase(IBackend):
     def initialize(
         self,
         description: RobotDescription,
-        task:        ITask,
+        scene:       SceneSpec,
         sensors:     list[ISensor],
     ) -> None:
         """Store references and call _load(), which subclasses implement."""
         self._description = description
-        self._task        = task
+        self._scene       = scene
         self._sensors     = sensors
         self._asset_selections.clear()
-        self._load(description, task, sensors)
+        self._load(description, scene, sensors)
         self._initialized = True
 
     # Multi-robot: require explicit backend support (no unsafe shims)
     def initialize_multi(
         self,
-        robots: list["RobotConfig"],
+        robots: list["Robot"],
         scene,  # SceneSpec
         shared_sensors: list["ISensor"],
     ) -> None:
@@ -186,7 +196,7 @@ class BackendBase(IBackend):
     def _load(
         self,
         description: RobotDescription,
-        task:        ITask,
+        scene:       SceneSpec,
         sensors:     list[ISensor],
     ) -> None:
         """Load the robot model and scene assets. Called once by initialize()."""

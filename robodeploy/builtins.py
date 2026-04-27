@@ -17,6 +17,7 @@ _BUILTIN_MODULES: tuple[str, ...] = (
     "robodeploy.backends.sim.mujoco.backend",
     "robodeploy.backends.sim.isaacsim.backend",
     "robodeploy.backends.real.ros2.backend",
+    "robodeploy.backends.sim.gazebo.backend",
     # Robots
     "robodeploy.description.franka.description",
     "robodeploy.description.kuka.description",

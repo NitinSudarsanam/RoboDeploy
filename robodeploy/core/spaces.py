@@ -36,3 +36,20 @@ class AssetFormat(Enum):
     URDF = "urdf"
     MJCF = "mjcf"
     USD  = "usd"
+
+
+def infer_action_space(action) -> ActionSpace:
+    """Infer ActionSpace from an Action instance.
+
+    This keeps RoboEnv open/closed: new ActionSpace inference logic can be
+    updated here without changing the env/router code.
+    """
+    if getattr(action, "joint_positions", None) is not None:
+        return ActionSpace.JOINT_POS
+    if getattr(action, "joint_velocities", None) is not None:
+        return ActionSpace.JOINT_VEL
+    if getattr(action, "joint_torques", None) is not None:
+        return ActionSpace.JOINT_TORQUE
+    if getattr(action, "ee_position", None) is not None:
+        return ActionSpace.CARTESIAN_POSE
+    return ActionSpace.JOINT_POS

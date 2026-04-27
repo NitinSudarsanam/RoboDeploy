@@ -71,6 +71,11 @@ class RobotDescription(ABC):
     #: Display name for logging and UI.
     display_name: str
 
+    #: Optional ROS2 wiring preset name (data-only) used by the ROS2 backends when
+    #: the user does not explicitly provide `robotX.preset`.
+    #: See `robodeploy/backends/real/ros2/presets.py`.
+    ros2_preset_name: str | None = None
+
     # ------------------------------------------------------------------
     # Asset resolution (implemented by subclasses)
     # ------------------------------------------------------------------

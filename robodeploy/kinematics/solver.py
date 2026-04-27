@@ -190,3 +190,31 @@ class KinematicsSolver:
             self._model, self._data, ee_id,
             pin.ReferenceFrame.LOCAL_WORLD_ALIGNED,
         ))
+
+    def plan(
+        self,
+        q_start: np.ndarray,
+        q_goal: np.ndarray,
+        *,
+        steps: int = 50,
+        obstacles=None,  # reserved for future OMPL/MoveIt2 integration
+    ) -> list[np.ndarray]:
+        """Plan a joint-space path from q_start to q_goal.
+
+        This is a minimal, deterministic fallback planner (straight-line in joint space).
+        It exists to provide the contract surface required by ARCHITECTURE.md and the
+        Arbitrator switch sequencing. Real deployments should replace this with a
+        collision-aware planner.
+        """
+        del obstacles
+        qs = np.asarray(q_start, dtype=np.float64).reshape(-1)
+        qg = np.asarray(q_goal, dtype=np.float64).reshape(-1)
+        if qs.shape != qg.shape:
+            raise ValueError("q_start and q_goal must have the same shape.")
+        n = int(steps)
+        n = max(2, n)
+        out: list[np.ndarray] = []
+        for i in range(n):
+            a = float(i) / float(n - 1)
+            out.append(((1.0 - a) * qs + a * qg).copy())
+        return out

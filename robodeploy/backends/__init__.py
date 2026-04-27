@@ -3,7 +3,7 @@
 from robodeploy.backends.sim.mujoco.backend import MuJoCoBackend
 
 try:
-    from robodeploy.backends.real.ros2.backend import ROS2Backend  # type: ignore
+    from robodeploy.backends.real.ros2.backend import ROS2RealBackend as ROS2Backend  # type: ignore
 except ImportError:  # pragma: no cover
     ROS2Backend = None  # type: ignore[assignment]
 

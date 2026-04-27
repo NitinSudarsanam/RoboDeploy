@@ -22,6 +22,7 @@ class KukaDescription(RobotDescription):
     dof = 7
     display_name = "KUKA (demo)"
     ee_link_name = "robot0/ee_link"
+    ros2_preset_name = "kuka_jtc"
 
     joint_names = [f"robot0/joint{i}" for i in range(1, 8)]
 

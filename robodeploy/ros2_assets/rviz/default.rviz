@@ -1,0 +1,29 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 0
+    Name: Displays
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/RobotModel
+      Name: RobotModel
+      Robot Description: robot_description
+    - Class: rviz_default_plugins/MarkerArray
+      Name: SceneMarkers
+      Topic: /robodeploy/scene/markers
+    - Class: rviz_default_plugins/MarkerArray
+      Name: TaskMarkers
+      Topic: /robodeploy/tasks/markers
+    - Class: rviz_default_plugins/Pose
+      Name: EE_Pose
+      Topic: /robodeploy/robot0/ee_pose
+    - Class: rviz_default_plugins/Marker
+      Name: EE_Trace
+      Topic: /robodeploy/robot0/trace
+  Global Options:
+    Fixed Frame: world
+

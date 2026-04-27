@@ -117,6 +117,15 @@ class IPolicy(ABC):
         """Optional batch inference hook for multi-robot task configs."""
         return [self.get_action(obs) for obs in obs_batch]
 
+    def notify_rejected(self, obs: Observation, action: Action) -> None:
+        """Notification hook when an action is rejected by arbitration.
+
+        Sequence models that maintain internal state (history buffers, latent plans)
+        can use this to stay consistent when their proposed action is not executed.
+        Default is a no-op.
+        """
+        return
+
     @property
     def action_hz(self) -> float:
         """Nominal action production rate used by real-time bridges."""
