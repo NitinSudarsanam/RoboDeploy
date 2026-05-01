@@ -19,6 +19,12 @@ Level 1 — direct construction (recommended for full control):
     )
     env = RoboEnv(backend=MuJoCoBackend(), robots=[franka])
 
+To swap simulators without hand-built backend dicts (ROS2 imports load lazily):
+
+    from robodeploy.backends.simulator import backend_for_simulator
+
+    env = RoboEnv(backend=backend_for_simulator("mujoco", robots=[franka]), robots=[franka])
+
 Level 2 — string-based make() after registering your components:
 
     from robodeploy import use, RoboEnv

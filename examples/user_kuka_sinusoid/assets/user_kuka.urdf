@@ -1,63 +1,192 @@
 <?xml version="1.0"?>
 <robot name="user_kuka">
+  <!--
+    Mesh-free URDF that visually matches the bundled MuJoCo MJCF model:
+      robodeploy/description/kuka/assets/mjcf/kuka.xml
+
+    - Keeps ROS-friendly joint names: joint1..joint7
+    - Approximates MuJoCo capsules using URDF cylinders (same length/radius)
+    - Kinematic offsets match the MJCF `body pos` chain (Z offsets)
+  -->
+
+  <material name="kuka_link">
+    <color rgba="0.75 0.75 0.75 1.0"/>
+  </material>
+  <material name="kuka_base">
+    <color rgba="0.2 0.2 0.2 1.0"/>
+  </material>
+  <material name="kuka_ee">
+    <color rgba="0.1 0.1 0.1 1.0"/>
+  </material>
+  <material name="kuka_finger">
+    <color rgba="0.3 0.3 0.3 1.0"/>
+  </material>
+
+  <!--
+    Match MJCF placement: the MuJoCo model places the base at z=0.4:
+      <body name="robot0/base" pos="0.0 0.0 0.4">
+    Add an explicit world root so RViz Fixed Frame "world" works naturally.
+  -->
+  <link name="world"/>
+  <joint name="world_to_base" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0.4" rpy="0 0 0"/>
+  </joint>
+
   <!-- Minimal inertials so Isaac Sim can create a physics articulation. -->
   <link name="base_link">
+    <!-- MJCF: geom type=cylinder size="0.09 0.06" (radius, half-length) -->
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.09" length="0.12"/>
+      </geometry>
+      <material name="kuka_base"/>
+    </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="1.0"/>
       <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
     </inertial>
   </link>
+
   <link name="link1">
+    <!-- MJCF: capsule fromto="0 0 0 0 0 0.18" size="0.04" -->
+    <visual>
+      <origin xyz="0 0 0.09" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.04" length="0.18"/>
+      </geometry>
+      <material name="kuka_link"/>
+    </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="1.0"/>
       <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
     </inertial>
   </link>
+
   <link name="link2">
+    <!-- MJCF: capsule length=0.2 radius=0.038 -->
+    <visual>
+      <origin xyz="0 0 0.10" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.038" length="0.20"/>
+      </geometry>
+      <material name="kuka_link"/>
+    </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="1.0"/>
       <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
     </inertial>
   </link>
+
   <link name="link3">
+    <!-- MJCF: capsule length=0.2 radius=0.034 -->
+    <visual>
+      <origin xyz="0 0 0.10" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.034" length="0.20"/>
+      </geometry>
+      <material name="kuka_link"/>
+    </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="1.0"/>
       <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
     </inertial>
   </link>
+
   <link name="link4">
+    <!-- MJCF: capsule length=0.17 radius=0.03 -->
+    <visual>
+      <origin xyz="0 0 0.085" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.17"/>
+      </geometry>
+      <material name="kuka_link"/>
+    </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="1.0"/>
       <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
     </inertial>
   </link>
+
   <link name="link5">
+    <!-- MJCF: capsule length=0.14 radius=0.027 -->
+    <visual>
+      <origin xyz="0 0 0.07" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.027" length="0.14"/>
+      </geometry>
+      <material name="kuka_link"/>
+    </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="1.0"/>
       <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
     </inertial>
   </link>
+
   <link name="link6">
+    <!-- MJCF: capsule length=0.12 radius=0.024 -->
+    <visual>
+      <origin xyz="0 0 0.06" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.024" length="0.12"/>
+      </geometry>
+      <material name="kuka_link"/>
+    </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="1.0"/>
       <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
     </inertial>
   </link>
+
   <link name="link7">
+    <!-- MJCF: capsule length=0.10 radius=0.022 -->
+    <visual>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.022" length="0.10"/>
+      </geometry>
+      <material name="kuka_link"/>
+    </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="1.0"/>
       <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
     </inertial>
   </link>
+
   <link name="ee_link">
+    <!-- MJCF: geom type=sphere size="0.025" -->
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.025"/>
+      </geometry>
+      <material name="kuka_ee"/>
+    </visual>
+    <!-- MJCF: finger boxes size="0.01 0.005 0.03" (half-sizes) -->
+    <visual>
+      <origin xyz="0 0.03 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.01 0.06"/>
+      </geometry>
+      <material name="kuka_finger"/>
+    </visual>
+    <visual>
+      <origin xyz="0 -0.03 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.01 0.06"/>
+      </geometry>
+      <material name="kuka_finger"/>
+    </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="0.1"/>
@@ -65,52 +194,59 @@
     </inertial>
   </link>
 
-  <joint name="robot0/joint1" type="revolute">
+  <!-- Kinematic chain: offsets match MJCF `body pos` values (Z-only). -->
+  <joint name="joint1" type="revolute">
     <parent link="base_link"/>
     <child link="link1"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 0 0.06" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="-2.97" upper="2.97" effort="50.0" velocity="2.0"/>
   </joint>
-  <joint name="robot0/joint2" type="revolute">
+
+  <joint name="joint2" type="revolute">
     <parent link="link1"/>
     <child link="link2"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 0 0.18" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
     <limit lower="-2.09" upper="2.09" effort="50.0" velocity="2.0"/>
   </joint>
-  <joint name="robot0/joint3" type="revolute">
+
+  <joint name="joint3" type="revolute">
     <parent link="link2"/>
     <child link="link3"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 0 0.20" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
     <limit lower="-2.97" upper="2.97" effort="50.0" velocity="2.0"/>
   </joint>
-  <joint name="robot0/joint4" type="revolute">
+
+  <joint name="joint4" type="revolute">
     <parent link="link3"/>
     <child link="link4"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 0 0.20" rpy="0 0 0"/>
     <axis xyz="1 0 0"/>
     <limit lower="-2.09" upper="2.09" effort="50.0" velocity="2.0"/>
   </joint>
-  <joint name="robot0/joint5" type="revolute">
+
+  <joint name="joint5" type="revolute">
     <parent link="link4"/>
     <child link="link5"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 0 0.17" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
     <limit lower="-2.97" upper="2.97" effort="50.0" velocity="2.0"/>
   </joint>
-  <joint name="robot0/joint6" type="revolute">
+
+  <joint name="joint6" type="revolute">
     <parent link="link5"/>
     <child link="link6"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 0 0.14" rpy="0 0 0"/>
     <axis xyz="1 0 0"/>
     <limit lower="-2.09" upper="2.09" effort="50.0" velocity="2.0"/>
   </joint>
-  <joint name="robot0/joint7" type="revolute">
+
+  <joint name="joint7" type="revolute">
     <parent link="link6"/>
     <child link="link7"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 0 0.12" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
     <limit lower="-3.05" upper="3.05" effort="50.0" velocity="2.0"/>
   </joint>
@@ -118,7 +254,7 @@
   <joint name="ee_fixed" type="fixed">
     <parent link="link7"/>
     <child link="ee_link"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 0 0.10" rpy="0 0 0"/>
   </joint>
 </robot>
 

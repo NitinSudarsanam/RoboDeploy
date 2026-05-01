@@ -21,6 +21,7 @@ _BUILTIN_MODULES: tuple[str, ...] = (
     # Robots
     "robodeploy.description.franka.description",
     "robodeploy.description.kuka.description",
+    "robodeploy.description.so101.description",
     # Tasks
     "robodeploy.tasks.manipulation.pick_place",
     "robodeploy.tasks.manipulation.pour",

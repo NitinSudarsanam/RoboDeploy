@@ -31,6 +31,7 @@ def main() -> None:
         backend_kwargs={
             "config": {
                 "enable_viewer": False,
+                "allow_actuator_name_fallback": True,
                 "asset_overrides": {
                     "robot0": {"mjcf": str(mjcf_path)},
                 },

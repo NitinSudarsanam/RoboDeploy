@@ -76,6 +76,9 @@ class RobotDescription(ABC):
     #: See `robodeploy/backends/real/ros2/presets.py`.
     ros2_preset_name: str | None = None
 
+    #: Base link name as used in URDF / TF for ROS2 backends (``backend_for_simulator``).
+    ros_base_link_name: str = "base_link"
+
     # ------------------------------------------------------------------
     # Asset resolution (implemented by subclasses)
     # ------------------------------------------------------------------
@@ -112,6 +115,54 @@ class RobotDescription(ABC):
             FileNotFoundError: If the asset cannot be found or converted.
         """
         ...
+
+    # ------------------------------------------------------------------
+    # ROS / multi-simulator hooks (used by ``backend_for_simulator``)
+    # ------------------------------------------------------------------
+
+    def ros_transport_joint_names(self) -> list[str]:
+        """Joint names as they appear on ``sensor_msgs/JointState`` (URDF leaf names).
+
+        MuJoCo MJCF often uses a namespace prefix (``robot0/joint1``); ROS topics use
+        ``joint1``. Default: strip the first path segment when ``joint_names`` entries
+        contain ``/``, otherwise return names unchanged.
+        """
+        out: list[str] = []
+        for jn in self.joint_names:
+            if "/" in jn:
+                out.append(jn.split("/", 1)[1])
+            else:
+                out.append(jn)
+        return out
+
+    def ros_ee_frame_id(self) -> str:
+        """End-effector link id for ROS TF / EE topics (no namespace prefix)."""
+        n = self.ee_link_name
+        return n.split("/", 1)[1] if "/" in n else n
+
+    def ros_base_frame_id(self) -> str:
+        """Base link id for ROS TF (matches ``ros_base_link_name``)."""
+        return str(self.ros_base_link_name)
+
+    def gazebo_sim_launch_config(self) -> dict | None:
+        """If returning a dict, merged into ``config['sim']`` for ``ROS2GazeboBackend``.
+
+        Must include at least ``kind: "gazebo"`` and a ``world`` path when non-empty.
+        Return ``None`` if this description does not define a default Gazebo layout
+        (callers pass ``config_overrides`` with a ``sim`` mapping instead).
+        """
+        return None
+
+    def gazebo_ros2_extra_config(self, robot_id: str) -> dict | None:
+        """Extra ROS2 transport keys when using ``ROS2GazeboBackend`` (per-robot topics, sensors).
+
+        Keys should use the ``{robot_id}.`` prefix (e.g. ``robot0.joint_states_topic``).
+        """
+        return None
+
+    def mujoco_backend_extra_config(self) -> dict | None:
+        """Extra ``MuJoCoBackend`` config merged after library defaults."""
+        return None
 
     # ------------------------------------------------------------------
     # Kinematics access

@@ -1,0 +1,107 @@
+{
+  "project_goals": [
+    "RoboDeploy: a maintainable robotics framework with clear layers (backend, task, policy, sensors) and registry-based discovery.",
+    "Support multiple backends (MuJoCo, Isaac Sim, ROS2 real/RViz, Gazebo) with minimal robot-specific code in the core library.",
+    "Enable N robots : K tasks : M policies with arbitration, selectors, and a robot-centric aggregate model.",
+    "Sim-to-real alignment: shared contracts (Observation, Action, SceneSpec), presets for ROS2 control families, and safe hardware pacing.",
+    "Keep user/example code free of ROS2 boilerplate while centralizing transport, devtools, and visualization inside robodeploy."
+  ],
+  "architectural_decisions": [
+    {
+      "decision": "One axis of variation per layer (IBackend, ITask, IPolicy, ISensor) with explicit data contracts in core/types.",
+      "timestamp": "2026-04-01T12:00:00Z",
+      "reason": "Enforce modularity and testability instead of monolithic env classes.",
+      "goal": "Make swapping sim, real hardware, or policies a local change without ripple refactors."
+    },
+    {
+      "decision": "Registry pattern (@register_*) plus use() for optional string-based wiring alongside direct injection.",
+      "timestamp": "2026-04-05T12:00:00Z",
+      "reason": "Balance config-driven demos with the preferred pattern of passing concrete classes.",
+      "goal": "Support plugins and user packages without hardcoding imports in RoboEnv."
+    },
+    {
+      "decision": "Robot-centric model: Robot + RobotTask replace global RobotConfig/TaskConfig lists on RoboEnv.",
+      "timestamp": "2026-04-15T12:00:00Z",
+      "reason": "Per-robot tasks, policies, and arbitration belong with the robot aggregate.",
+      "goal": "Scale cleanly to multi-robot with per-robot task_weights, ITaskSelector, and IPolicySelector."
+    },
+    {
+      "decision": "IBackend.initialize(description, scene: SceneSpec, sensors) instead of passing ITask.",
+      "timestamp": "2026-04-18T12:00:00Z",
+      "reason": "Scene composition can come from multiple tasks; backend should not depend on a single task object.",
+      "goal": "Correct multi-task / merged scene initialization for initialize_multi."
+    },
+    {
+      "decision": "Split ROS2 into ROS2RealBackend (transport, is_real=True) and ROS2GazeboBackend (sim via ROS, is_real=False).",
+      "timestamp": "2026-04-20T12:00:00Z",
+      "reason": "Gazebo lifecycle and real hardware differ; one class mixed both concerns.",
+      "goal": "Clear semantics for sim vs real and independent launcher behavior (e.g., RSP with Gazebo)."
+    },
+    {
+      "decision": "Ros2Runtime singleton: single rclpy.init and shared MultiThreadedExecutor across components.",
+      "timestamp": "2026-04-21T12:00:00Z",
+      "reason": "Multiple nodes calling init caused RuntimeError and flaky startup.",
+      "goal": "Deterministic ROS2 process lifecycle for backends, sensors, and devtools."
+    },
+    {
+      "decision": "Stable robodeploy/ros2 package: runtime shim, Ros2NodeAdapter, resolve_ros_topic for controllers and sensors.",
+      "timestamp": "2026-04-27T10:00:00Z",
+      "reason": "ROS2 should be a reusable transport layer, not scattered rclpy in each module.",
+      "goal": "One place for executor/node lifecycle and namespaced topic construction."
+    },
+    {
+      "decision": "RvizPublisher moved to robodeploy/viz/ with backward-compatible shim under backends/real/ros2/rviz.py.",
+      "timestamp": "2026-04-22T12:00:00Z",
+      "reason": "Visualization is not backend-specific; MuJoCo/Isaac bridges also publish to RViz.",
+      "goal": "Neutral viz module usable from any backend without importing real-backend internals."
+    },
+    {
+      "decision": "ActionTrajectory seqlock ring buffer + ControlLoop as multiprocessing.Process in RoboBridge.",
+      "timestamp": "2026-04-23T12:00:00Z",
+      "reason": "Real-time control needs GIL escape and non-blocking handoff from inference.",
+      "goal": "Safer timing and isolation between control and policy threads/processes."
+    },
+    {
+      "decision": "ROS2 presets (e.g. kuka_jtc) as data-only config on RobotDescription.ros2_preset_name.",
+      "timestamp": "2026-04-24T12:00:00Z",
+      "reason": "Avoid hardcoding controller topics per robot class in backend code.",
+      "goal": "Users pick a preset string; backend resolves joint command and trajectory topics consistently."
+    },
+    {
+      "decision": "RobotStatePublisherLauncher uses temp YAML params file and remaps /joint_states to /<robot_id>/joint_states.",
+      "timestamp": "2026-04-25T12:00:00Z",
+      "reason": "CLI length limits and default RSP subscription to global /joint_states broke multi-robot RViz.",
+      "goal": "Reliable robot_description + TF per namespace for RViz RobotModel."
+    },
+    {
+      "decision": "Fake joint-position sim lives under robodeploy/ros2/devtools/; examples only thin-import wrappers.",
+      "timestamp": "2026-04-27T10:05:00Z",
+      "reason": "User asked to remove rclpy/Ros2Runtime from examples while keeping an example entrypoint.",
+      "goal": "Robot-agnostic devtool config (robot_ns, joint_names, topics) with no KUKA logic inside robodeploy/ros2/*."
+    },
+    {
+      "decision": "EnvRouter encapsulates normalize_explicit_actions and task/robot action resolution from RoboEnv.",
+      "timestamp": "2026-04-19T12:00:00Z",
+      "reason": "RoboEnv grew too many routing helpers; SRP suggests a dedicated orchestration helper.",
+      "goal": "Smaller env.py and easier unit testing of routing rules."
+    },
+    {
+      "decision": "GazeboLauncher decomposed into RosGzBridgeLauncher, UrdfSpawner, ControllerSpawner orchestrated by GazeboLauncher.",
+      "timestamp": "2026-04-22T15:00:00Z",
+      "reason": "Single file was hard to test and extend for different spawn/bridge strategies.",
+      "goal": "Composable sim launch with clearer failure points and reuse."
+    },
+    {
+      "decision": "IRos2Sensor + registry + LastValueCache; first concrete Ros2RgbdCameraSensor.",
+      "timestamp": "2026-04-23T15:00:00Z",
+      "reason": "Sensors need the same SOLID boundaries as policies and backends.",
+      "goal": "Pluggable ROS2 sensor streams without coupling Observation construction to one backend."
+    },
+    {
+      "decision": "MuJoCo actuator resolution uses robot_id prefix with allow_actuator_name_fallback opt-in.",
+      "timestamp": "2026-04-20T15:00:00Z",
+      "reason": "Hardcoded robot0/actuators hid misconfiguration and broke multi-robot naming.",
+      "goal": "Fail-fast by default; explicit escape hatch for legacy MJCF naming."
+    }
+  ]
+}

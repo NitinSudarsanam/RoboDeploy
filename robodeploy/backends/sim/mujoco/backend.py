@@ -7,6 +7,9 @@ and keep tasks/policies backend-agnostic.
 
 from __future__ import annotations
 
+from pathlib import Path
+import tempfile
+import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Optional
 
 from robodeploy.backends.base import BackendBase
@@ -55,17 +58,54 @@ class MuJoCoBackend(BackendBase):
             ) from exc
 
         self._mujoco = mujoco
+        mjcf_path = None
         try:
             mjcf_path = self._resolve_asset_path(self._robot_id, description, AssetFormat.MJCF, variant="sim")
-        except FileNotFoundError as exc:
-            raise FileNotFoundError(
-                "MuJoCoBackend needs an MJCF asset.\n"
-                "Provide one of:\n"
-                "- RobotDescription.asset_path(AssetFormat.MJCF, variant='sim')\n"
-                "- backend config override: config={'asset_overrides': {'robot0': {'mjcf': '/path/to/model.xml'}}}\n"
-                "URDF-only descriptions are supported as canonical input, but MuJoCo requires MJCF or a conversion step."
-            ) from exc
-        self._model = mujoco.MjModel.from_xml_path(str(mjcf_path))
+        except FileNotFoundError:
+            mjcf_path = None
+
+        if mjcf_path is not None:
+            self._model = mujoco.MjModel.from_xml_path(str(mjcf_path))
+        else:
+            # Auto-path: load the URDF directly using MuJoCo's compiler.
+            # This keeps robot definitions URDF-first while letting MuJoCo run without a hand-written MJCF.
+            # Users can still supply an MJCF via asset_path/asset_overrides for full feature support.
+            try:
+                urdf_path = self._resolve_asset_path(self._robot_id, description, AssetFormat.URDF, variant="sim")
+            except FileNotFoundError as exc:
+                raise FileNotFoundError(
+                    "MuJoCoBackend needs either an MJCF or a URDF asset.\n"
+                    "Provide one of:\n"
+                    "- RobotDescription.asset_path(AssetFormat.MJCF, variant='sim')\n"
+                    "- RobotDescription.asset_path(AssetFormat.URDF, variant='sim')\n"
+                    "- backend config override: config={'asset_overrides': {'robot0': {'mjcf': '/path/to/model.xml'}}}\n"
+                ) from exc
+
+            # Step 1: compile URDF once.
+            urdf_model = mujoco.MjModel.from_xml_path(str(urdf_path))
+
+            # Step 2: convert to MJCF text (MuJoCo's last compiled XML), then inject position actuators.
+            # URDF import does not create actuators, but RoboDeploy's JOINT_POS control path expects them.
+            xml_text = self._compile_mjcf_with_position_actuators(
+                mujoco,
+                urdf_model,
+                joint_names=list(description.joint_names),
+            )
+
+            # Step 3: recompile the augmented MJCF into the actual runtime model.
+            self._model = mujoco.MjModel.from_xml_string(xml_text)
+
+            # Best-effort cache: if MuJoCo exposes the last-compiled MJCF, write it out so users can iterate.
+            # This is optional and failure is non-fatal.
+            if bool(self.config.get("cache_compiled_mjcf", True)):
+                try:
+                    cache_dir = Path(self.config.get("compiled_cache_dir", Path.home() / ".robodeploy" / "mujoco")).expanduser()
+                    cache_dir.mkdir(parents=True, exist_ok=True)
+                    out_path = cache_dir / f"{self._robot_id}_compiled.xml"
+                    out_path.write_text(xml_text, encoding="utf-8")
+                    self.config.setdefault("compiled_mjcf_path", str(out_path))
+                except Exception:
+                    pass
         self._data = mujoco.MjData(self._model)
 
         self._joint_ids: list[int] = []
@@ -133,6 +173,98 @@ class MuJoCoBackend(BackendBase):
                 self._rviz_bridge.publish_scene(self._scene)
             except Exception:
                 pass
+
+    def _compile_mjcf_with_position_actuators(self, mujoco, model, *, joint_names: list[str]) -> str:  # noqa: ANN001
+        """Return MJCF XML with `<actuator><position joint=.../></actuator>` for each joint.
+
+        MuJoCo can compile URDF directly, but the resulting model typically has zero actuators.
+        RoboDeploy's MuJoCo backend expects actuators for JOINT_POS control, so we inject them.
+        """
+        # Get last compiled XML by writing to a temp file (MuJoCo API is file-based here).
+        fd, tmp_path = tempfile.mkstemp(prefix="robodeploy_mj_", suffix=".xml")
+        try:
+            Path(tmp_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+        try:
+            mujoco.mj_saveLastXML(str(tmp_path), model)
+            xml_text = Path(tmp_path).read_text(encoding="utf-8")
+        finally:
+            try:
+                Path(tmp_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        root = ET.fromstring(xml_text)
+        if root.tag != "mujoco":
+            # Unexpected, but keep it safe.
+            return xml_text
+
+        # Ensure a minimal visible world exists (light + ground + camera).
+        # URDF imports may omit these, leading to a black viewer.
+        worldbody = root.find("worldbody")
+        if worldbody is None:
+            worldbody = ET.SubElement(root, "worldbody")
+
+        has_light = any(child.tag == "light" for child in list(worldbody))
+        if not has_light:
+            ET.SubElement(
+                worldbody,
+                "light",
+                {"pos": "0 0 2.0", "dir": "0 0 -1", "diffuse": "0.8 0.8 0.8", "specular": "0.2 0.2 0.2"},
+            )
+
+        has_floor = any(child.tag == "geom" and child.attrib.get("type") == "plane" for child in list(worldbody))
+        if not has_floor:
+            ET.SubElement(
+                worldbody,
+                "geom",
+                {
+                    "name": "floor",
+                    "type": "plane",
+                    "size": "2 2 0.1",
+                    "rgba": "0.85 0.85 0.85 1",
+                    "pos": "0 0 0",
+                },
+            )
+
+        has_camera = any(child.tag == "camera" for child in list(worldbody))
+        if not has_camera:
+            ET.SubElement(
+                worldbody,
+                "camera",
+                {
+                    "name": "main",
+                    "pos": "0 -1.2 0.6",
+                    "xyaxes": "1 0 0 0 0 1",
+                },
+            )
+
+        # Ensure there is an <actuator> section.
+        actuator = root.find("actuator")
+        if actuator is None:
+            actuator = ET.SubElement(root, "actuator")
+
+        # Collect existing joints that already have an actuator entry.
+        existing: set[str] = set()
+        for elem in list(actuator):
+            j = elem.attrib.get("joint")
+            n = elem.attrib.get("name")
+            if j:
+                existing.add(str(j))
+            if n:
+                existing.add(str(n))
+
+        # Add missing position actuators.
+        # Choose modest gains to avoid instability with placeholder inertials.
+        kp = float(self.config.get("urdf_position_kp", 50.0))
+        for jn in joint_names:
+            if jn in existing:
+                continue
+            # Name the actuator the same as the joint so `mj_name2id(..., ACTUATOR, jname)` works.
+            ET.SubElement(actuator, "position", {"name": str(jn), "joint": str(jn), "kp": str(kp)})
+
+        return ET.tostring(root, encoding="unicode")
 
     def _reset_impl(self) -> Observation:
         mujoco = self._mujoco

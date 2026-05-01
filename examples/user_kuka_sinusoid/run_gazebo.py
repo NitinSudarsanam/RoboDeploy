@@ -1,20 +1,25 @@
-"""Run the user-defined Kuka sinusoid demo on Isaac Sim (if installed)."""
+"""Run the user-defined Kuka sinusoid demo on Gazebo via ROS2GazeboBackend.
+
+RoboDeploy starts Gazebo (best-effort) when configured on the description;
+ROS2 transport + RViz follow the same ``backend_for_simulator`` path as other simulators.
+"""
 
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
-from robodeploy.backends.sim.isaacsim.backend import IsaacSimBackend
+from robodeploy.backends.simulator import backend_for_simulator
 from robodeploy.core.robot import Robot, RobotTask
 from robodeploy.env import RoboEnv
 
-# Import registers @register_* components and exposes the user classes.
 from examples.user_kuka_sinusoid.components import (  # noqa: E402
     UserKukaDescription,
     UserKukaSinusoidTask,
     UserSinusoidPolicy,
 )
+
 
 def _ensure_repo_on_path() -> None:
     repo_root = Path(__file__).resolve().parents[2]
@@ -26,14 +31,6 @@ _ensure_repo_on_path()
 
 
 def main() -> None:
-    backend = IsaacSimBackend(config={
-            # Use a lighter experience by default to avoid optional extensions
-            # failing to load on some Windows GPU/driver setups.
-            "experience": "isaacsim.exp.base.python.kit",
-            "headless": False,
-            "renderer": "RaytracedLighting",
-        })
-
     desc = UserKukaDescription()
     task = UserKukaSinusoidTask(max_steps=2000)
     policy = UserSinusoidPolicy(amplitude=0.35, frequency_hz=0.2)
@@ -49,14 +46,21 @@ def main() -> None:
             )
         },
     )
+
+    backend = backend_for_simulator("gazebo", robots=[robot])
     env = RoboEnv(backend=backend, robots=[robot])
 
-    env.reset()
-    for _ in range(1000):
-        env.step()
+    obs, info = env.reset()
+    print("reset:", info)
+    for i in range(2000):
+        obs, reward, done, info = env.step()
+        if i % 100 == 0 and obs.joint_positions is not None and len(obs.joint_positions) > 0:
+            print("step", i, "q0", float(obs.joint_positions[0]))
+        if done:
+            break
+        time.sleep(0.02)
     env.close()
 
 
 if __name__ == "__main__":
     main()
-

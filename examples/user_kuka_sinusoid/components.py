@@ -25,6 +25,7 @@ class UserKukaDescription(RobotDescription):
 
     dof = 7
     display_name = "UserKuka"
+    # MJCF (`robodeploy/description/kuka/assets/mjcf/kuka.xml`) uses namespaced bodies/joints.
     ee_link_name = "robot0/ee_link"
     joint_names = [f"robot0/joint{i}" for i in range(1, 8)]
 
@@ -47,6 +48,34 @@ class UserKukaDescription(RobotDescription):
                 raise FileNotFoundError(f"Expected URDF at {path}")
             return path
         raise FileNotFoundError(f"UserKukaDescription demo provides URDF+MJCF only (requested {fmt}).")
+
+    def gazebo_sim_launch_config(self) -> dict | None:
+        assets = Path(__file__).resolve().parent / "assets"
+        return {
+            "kind": "gazebo",
+            "world": str(assets / "gazebo_world.sdf"),
+            "headless": False,
+            "robot_urdf": str(assets / "user_kuka.urdf"),
+            "robot_name": "robot0",
+            "controllers_to_spawn": ["joint_state_broadcaster", "joint_trajectory_controller"],
+            "wait_for_topics": ["/clock", "/robot0/joint_states"],
+        }
+
+    def gazebo_ros2_extra_config(self, robot_id: str) -> dict | None:
+        return {
+            f"{robot_id}.preset": "kuka_jtc",
+            f"{robot_id}.controller": "joint_trajectory",
+            f"{robot_id}.joint_states_topic": "/joint_states",
+            f"{robot_id}.sensors": [
+                {
+                    "type": "rgbd",
+                    "name": "front",
+                    "rgb": "camera/color/image_raw",
+                    "depth": "camera/depth/image_raw",
+                    "info": "camera/color/camera_info",
+                }
+            ],
+        }
 
 
 @register_task("user_kuka_sinusoid")
