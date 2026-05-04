@@ -46,16 +46,18 @@ class SO101SinusoidPolicy(PolicyBase):
         self,
         amplitude: float = 0.15,
         frequency_hz: float = 0.15,
+        action_hz: float = 50.0,
     ) -> None:
+        ah = float(action_hz)
         super().__init__(
             action_space=ActionSpace.JOINT_POS,
-            config={"action_hz": 50.0},
+            config={"action_hz": ah},
         )
         self._home = SO101Description().home_qpos.astype(np.float64)
         self._amp = float(amplitude)
         self._freq = float(frequency_hz)
         self._t = 0.0
-        self._dt = 1.0 / 50.0
+        self._dt = 1.0 / max(ah, 1e-6)
         self._mask = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 0.0], dtype=np.float64)
 
     def _reset_impl(self) -> None:

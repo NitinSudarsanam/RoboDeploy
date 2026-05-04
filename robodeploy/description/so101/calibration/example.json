@@ -1,0 +1,53 @@
+{
+  "is_template": true,
+  "joints": [
+    {
+      "name": "1",
+      "motor_id": 1,
+      "zero_ticks": 2048,
+      "ticks_per_rad": 651.74,
+      "soft_min_rad": -0.174533,
+      "soft_max_rad": 1.74533
+    },
+    {
+      "name": "2",
+      "motor_id": 2,
+      "zero_ticks": 2048,
+      "ticks_per_rad": 651.74,
+      "soft_min_rad": -2.74385,
+      "soft_max_rad": 2.84121
+    },
+    {
+      "name": "3",
+      "motor_id": 3,
+      "zero_ticks": 2048,
+      "ticks_per_rad": 651.74,
+      "soft_min_rad": -1.65806,
+      "soft_max_rad": 1.65806
+    },
+    {
+      "name": "4",
+      "motor_id": 4,
+      "zero_ticks": 2048,
+      "ticks_per_rad": 651.74,
+      "soft_min_rad": -1.74533,
+      "soft_max_rad": 1.5708
+    },
+    {
+      "name": "5",
+      "motor_id": 5,
+      "zero_ticks": 2048,
+      "ticks_per_rad": 651.74,
+      "soft_min_rad": -1.74533,
+      "soft_max_rad": 1.74533
+    },
+    {
+      "name": "6",
+      "motor_id": 6,
+      "zero_ticks": 2048,
+      "ticks_per_rad": 651.74,
+      "soft_min_rad": -1.91986,
+      "soft_max_rad": 1.91986
+    }
+  ]
+}

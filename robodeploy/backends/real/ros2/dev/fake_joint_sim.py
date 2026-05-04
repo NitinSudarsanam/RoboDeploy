@@ -32,6 +32,8 @@ class FakeJointPosSimConfig:
     ee_frame: str = "ee_link"
     publish_hz: float = 50.0
     follow_tau_s: float = 0.15  # first-order lag time constant
+    # Optional per-joint max velocity (rad/s) to cap motion between publishes.
+    max_joint_velocity: tuple[float, ...] | None = None
 
 
 class FakeJointPosSim(Ros2NodeAdapter):
@@ -85,7 +87,12 @@ class FakeJointPosSim(Ros2NodeAdapter):
         tau = max(1e-3, float(self._cfg.follow_tau_s))
         alpha = 1.0 - math.exp(-float(dt) / tau)
         with self._lock:
-            self._q[:] = (1.0 - alpha) * self._q + alpha * self._q_cmd
+            dq = alpha * (self._q_cmd - self._q)
+            vmax = self._cfg.max_joint_velocity
+            if vmax is not None and len(vmax) == dq.shape[0]:
+                cap = np.asarray(vmax, dtype=np.float64) * float(dt)
+                dq = np.minimum(np.maximum(dq, -cap), cap)
+            self._q[:] = self._q + dq
 
     def _publish_loop(self) -> None:
         period_s = 1.0 / max(1.0, float(self._cfg.publish_hz))

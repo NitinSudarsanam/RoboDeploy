@@ -13,6 +13,8 @@ RoboDeploy does not require a specific layout, but one working split is:
 
 Use whichever Python actually has `mujoco` for MuJoCo-only demos and whichever is bound to your ROS2 install for `run_ros2_rviz` / `run_gazebo`.
 
+**SO-101 on real USB (Feetech)**: for `backend_for_simulator("real_world", robots=[so101_robot], ...)`, the library selects the `so101_feetech` controller (lerobot serial bus + ROS2 topic bridge). Install extras, udev, calibration CLI, and safety notes are in [SO101_REAL.md](SO101_REAL.md).
+
 ---
 
 ## Shared: how backend configuration works

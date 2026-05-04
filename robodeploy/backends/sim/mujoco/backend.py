@@ -90,6 +90,7 @@ class MuJoCoBackend(BackendBase):
                 mujoco,
                 urdf_model,
                 joint_names=list(description.joint_names),
+                meshdir=str(Path(urdf_path).resolve().parent),
             )
 
             # Step 3: recompile the augmented MJCF into the actual runtime model.
@@ -174,7 +175,14 @@ class MuJoCoBackend(BackendBase):
             except Exception:
                 pass
 
-    def _compile_mjcf_with_position_actuators(self, mujoco, model, *, joint_names: list[str]) -> str:  # noqa: ANN001
+    def _compile_mjcf_with_position_actuators(  # noqa: ANN001
+        self,
+        mujoco,
+        model,
+        *,
+        joint_names: list[str],
+        meshdir: str | None = None,
+    ) -> str:
         """Return MJCF XML with `<actuator><position joint=.../></actuator>` for each joint.
 
         MuJoCo can compile URDF directly, but the resulting model typically has zero actuators.
@@ -199,6 +207,55 @@ class MuJoCoBackend(BackendBase):
         if root.tag != "mujoco":
             # Unexpected, but keep it safe.
             return xml_text
+
+        # Ensure meshes resolve when recompiling from XML string.
+        # When we call `MjModel.from_xml_string(xml_text)`, MuJoCo has no base directory,
+        # so relative mesh filenames may fail. Point the MJCF compiler at the URDF directory.
+        if meshdir:
+            compiler = root.find("compiler")
+            if compiler is None:
+                compiler = ET.SubElement(root, "compiler")
+            compiler.attrib.setdefault("meshdir", str(meshdir).replace("\\", "/"))
+
+        # Stability: set conservative option defaults for URDF-imported robots.
+        opt = root.find("option")
+        if opt is None:
+            opt = ET.SubElement(root, "option")
+        opt.attrib.setdefault("timestep", str(self.config.get("urdf_timestep", 0.001)))
+        opt.attrib.setdefault("integrator", str(self.config.get("urdf_integrator", "RK4")))
+
+        # Clamp tiny inertials (common for dummy frames) to avoid numeric issues.
+        min_mass = float(self.config.get("urdf_min_mass", 0.01))
+        min_inertia_diag = float(self.config.get("urdf_min_inertia_diag", 1e-4))
+        for body in root.iter("body"):
+            inertial = body.find("inertial")
+            if inertial is None:
+                continue
+            if "mass" in inertial.attrib:
+                try:
+                    m = float(inertial.attrib["mass"])
+                except Exception:
+                    m = min_mass
+                if m < min_mass:
+                    inertial.attrib["mass"] = str(min_mass)
+            if "diaginertia" in inertial.attrib:
+                parts = str(inertial.attrib.get("diaginertia", "")).split()
+                if len(parts) == 3:
+                    new = []
+                    for s in parts:
+                        try:
+                            v = float(s)
+                        except Exception:
+                            v = min_inertia_diag
+                        new.append(str(max(v, min_inertia_diag)))
+                    inertial.attrib["diaginertia"] = " ".join(new)
+
+        # Add joint damping / armature defaults (URDF imports often omit these).
+        damping = float(self.config.get("urdf_joint_damping", 1.0))
+        armature = float(self.config.get("urdf_joint_armature", 0.01))
+        for joint in root.iter("joint"):
+            joint.attrib.setdefault("damping", str(damping))
+            joint.attrib.setdefault("armature", str(armature))
 
         # Ensure a minimal visible world exists (light + ground + camera).
         # URDF imports may omit these, leading to a black viewer.

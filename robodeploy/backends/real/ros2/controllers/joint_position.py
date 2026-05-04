@@ -20,6 +20,7 @@ from robodeploy.backends.real.common import Commander, StateCache
 from robodeploy.core.spaces import ActionSpace
 from robodeploy.core.types import Action, Observation
 
+from ._clamp import slew_limit_command
 from .base import ControllerConfig, register_controller
 from robodeploy.ros2 import Ros2NodeAdapter
 
@@ -52,10 +53,15 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
         self._tau = np.zeros(0, dtype=np.float64)
 
         self._obs_cache = StateCache()
-        rate_hz = float(cfg.command_hz or 0.0)
+        self._cmd_hz = float(cfg.command_hz or 0.0)
+        self._max_vel = (
+            np.asarray(cfg.max_joint_velocity, dtype=np.float64).reshape(-1)
+            if cfg.max_joint_velocity is not None
+            else None
+        )
         self._commander = Commander(
             self._publish_joint_positions,
-            min_period_s=(1.0 / rate_hz) if rate_hz > 0 else 0.0,
+            min_period_s=(1.0 / self._cmd_hz) if self._cmd_hz > 0 else 0.0,
         )
 
         self.node_name = f"robodeploy_jointpos_{self._robot_id}"
@@ -188,8 +194,16 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
     def send_action(self, action: Action) -> None:
         if action.joint_positions is None:
             return
-        q = np.asarray(action.joint_positions, dtype=np.float64).reshape(-1)
-        self._commander.send(q)
+        q_des = np.asarray(action.joint_positions, dtype=np.float64).reshape(-1)
+        with self._lock:
+            q_cur = self._q.copy()
+        q_des = slew_limit_command(
+            q_des,
+            q_cur,
+            max_joint_velocity=self._max_vel,
+            command_hz=self._cmd_hz,
+        )
+        self._commander.send(q_des)
 
     def send_action_and_wait(self, action: Action) -> None:
         with self._lock:

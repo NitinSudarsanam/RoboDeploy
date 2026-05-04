@@ -34,8 +34,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from robodeploy.behavior import BehaviorProfile
 
 from robodeploy.core.spaces import AssetFormat
 
@@ -78,6 +82,10 @@ class RobotDescription(ABC):
 
     #: Base link name as used in URDF / TF for ROS2 backends (``backend_for_simulator``).
     ros_base_link_name: str = "base_link"
+
+    #: ROS2 controller registry key for ``real_world`` / ``ros2_rviz`` when not overridden by preset.
+    #: Examples: ``"joint_position"``, ``"so101_feetech"``.
+    real_controller_name: str = "joint_position"
 
     # ------------------------------------------------------------------
     # Asset resolution (implemented by subclasses)
@@ -163,6 +171,17 @@ class RobotDescription(ABC):
     def mujoco_backend_extra_config(self) -> dict | None:
         """Extra ``MuJoCoBackend`` config merged after library defaults."""
         return None
+
+    def default_behavior_profile(self) -> "BehaviorProfile":
+        """Simulator-neutral speed / stiffness / stability defaults for this robot.
+
+        Merged with the caller's ``behavior=`` argument in ``backend_for_simulator``,
+        then translated per backend. Override on concrete descriptions for robot-specific
+        tuning (e.g. CAD-heavy URDFs often want a ``smooth`` preset).
+        """
+        from robodeploy.behavior import BehaviorProfile
+
+        return BehaviorProfile()
 
     # ------------------------------------------------------------------
     # Kinematics access

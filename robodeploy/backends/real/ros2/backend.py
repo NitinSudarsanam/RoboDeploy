@@ -14,6 +14,8 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
+import numpy as np
+
 from robodeploy.backends.errors import BackendTimeoutError
 from robodeploy.backends.base import BackendBase
 from robodeploy.core.registry import register_backend
@@ -30,6 +32,7 @@ from .runtime import Ros2Runtime
 # Ensure built-in controller adapters are registered (side-effect imports).
 from .controllers import joint_position as _builtin_joint_position  # noqa: F401
 from .controllers import joint_trajectory as _builtin_joint_trajectory  # noqa: F401
+from .controllers import so101_feetech as _builtin_so101_feetech  # noqa: F401
 from .sensors import camera_rgbd as _builtin_rgbd_sensor  # noqa: F401
 
 if TYPE_CHECKING:
@@ -195,6 +198,27 @@ class ROS2RealBackend(BackendBase):
             )
             hz = float(cfg.command_hz_by_robot_id.get(robot_id, cfg.command_hz) or 0.0)
 
+            mv = _get("max_joint_velocity", None)
+            if isinstance(mv, list):
+                mv_t = tuple(float(x) for x in mv)
+            else:
+                mv_t = None
+
+            home_q = getattr(robot.description, "home_qpos", None)
+            home_t = (
+                tuple(float(x) for x in np.asarray(home_q, dtype=np.float64).reshape(-1))
+                if home_q is not None
+                else None
+            )
+            jv = getattr(robot.description, "joint_velocity_limits", None)
+            jv_t = (
+                tuple(float(x) for x in np.asarray(jv, dtype=np.float64).reshape(-1))
+                if jv is not None
+                else None
+            )
+            port_raw = _get("port", None)
+            cal_path = _get("calibration_path", None)
+
             ctl_cfg = ControllerConfig(
                 robot_id=robot_id,
                 namespace=ns,
@@ -205,6 +229,21 @@ class ROS2RealBackend(BackendBase):
                 joint_names=list(joint_names) if joint_names else None,
                 joint_state_timeout_s=float(_get("joint_state_timeout_s", 1.0)),
                 command_hz=hz,
+                max_joint_velocity=mv_t,
+                port=str(port_raw) if port_raw else None,
+                baud=int(_get("baud", 1_000_000)),
+                state_hz=float(_get("state_hz", 0.0) or 0.0),
+                calibration_path=str(cal_path) if cal_path else None,
+                reset_ramp_s=float(_get("reset_ramp_s", 3.0)),
+                watchdog_timeout_s=float(_get("watchdog_timeout_s", 0.5)),
+                temperature_max_c=float(_get("temperature_max_c", 70.0)),
+                temperature_poll_s=float(_get("temperature_poll_s", 0.5)),
+                enable_console_estop=bool(_get("enable_console_estop", True)),
+                publish_state=bool(_get("publish_state", True)),
+                publish_command_echo=bool(_get("publish_command_echo", True)),
+                allow_uncalibrated=bool(_get("allow_uncalibrated", False)),
+                home_qpos=home_t,
+                joint_velocity_limits=jv_t,
             )
 
             controller = make_controller(controller_type, ctl_cfg, dict(self.config))

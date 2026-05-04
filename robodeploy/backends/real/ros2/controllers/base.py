@@ -39,6 +39,25 @@ class ControllerConfig:
     # Optional outgoing command pacing.
     command_hz: float = 0.0
 
+    # Optional per-joint max velocity (rad/s) for command slew-limiting (length dof).
+    max_joint_velocity: Optional[tuple[float, ...]] = None
+
+    # --- SO-101 Feetech / hardware (optional; used by ``so101_feetech`` controller) ---
+    port: Optional[str] = None
+    baud: int = 1_000_000
+    state_hz: float = 0.0
+    calibration_path: Optional[str] = None
+    reset_ramp_s: float = 3.0
+    watchdog_timeout_s: float = 0.5
+    temperature_max_c: float = 70.0
+    temperature_poll_s: float = 0.5
+    enable_console_estop: bool = True
+    publish_state: bool = True
+    publish_command_echo: bool = True
+    allow_uncalibrated: bool = False
+    home_qpos: Optional[tuple[float, ...]] = None
+    joint_velocity_limits: Optional[tuple[float, ...]] = None
+
 
 @runtime_checkable
 class IControllerAdapter(Protocol):

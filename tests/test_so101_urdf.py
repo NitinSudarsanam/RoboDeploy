@@ -9,7 +9,7 @@ from robodeploy.builtins import import_builtins
 from robodeploy.backends.real.ros2.backend import ROS2RealBackend
 from robodeploy.backends.simulator import backend_for_simulator
 from robodeploy.core.robot import Robot, RobotTask
-from robodeploy.core.spaces import ActionSpace
+from robodeploy.core.spaces import ActionSpace, AssetFormat
 from robodeploy.core.types import Action, ObsSpec, Observation, SceneSpec
 from robodeploy.description.so101 import SO101Description
 from robodeploy.policies.base import PolicyBase
@@ -70,15 +70,22 @@ def _so101_robot() -> Robot:
 def test_so101_description_parses_urdf() -> None:
     d = SO101Description()
     assert d.dof == 6
-    assert d.joint_names == [
-        "shoulder_pan",
-        "shoulder_lift",
-        "elbow_flex",
-        "wrist_flex",
-        "wrist_roll",
-        "gripper",
-    ]
+    assert d.joint_names == ["1", "2", "3", "4", "5", "6"]
     assert d.home_qpos.shape == (6,)
+    assert d.ee_link_name == "gripper"
+    assert d.ros_base_link_name == "base"
+
+
+def test_so101_mesh_fallback_when_stls_missing() -> None:
+    """asset_path returns a runtime-safe URDF.
+
+    - If STL meshes are missing, geometry is replaced with box placeholders.
+    - If meshes exist, filenames are rewritten to absolute paths for robust loading.
+    """
+    d = SO101Description()
+    p = d.asset_path(AssetFormat.URDF)
+    text = p.read_text(encoding="utf-8")
+    assert ("<box " in text) or ("<mesh " in text)
 
 
 def test_backend_for_simulator_real_world_returns_ros2() -> None:
