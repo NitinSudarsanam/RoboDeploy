@@ -55,6 +55,9 @@ class ControllerConfig:
     publish_state: bool = True
     publish_command_echo: bool = True
     allow_uncalibrated: bool = False
+    # When True, write calibration-derived limits to the motors (persistent).
+    # Default is True: real hardware should have motor-level clamps even if software misbehaves.
+    apply_motor_limits: bool = True
     home_qpos: Optional[tuple[float, ...]] = None
     joint_velocity_limits: Optional[tuple[float, ...]] = None
 

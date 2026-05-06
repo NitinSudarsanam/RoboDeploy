@@ -45,6 +45,16 @@ class SO101Calibration:
     def from_dict(cls, data: dict[str, Any]) -> SO101Calibration:
         data = dict(data)
         data.pop("is_template", None)
+        # Compatibility: accept LeRobot-style MotorCalibration dict:
+        # {
+        #   "shoulder_pan": {"id": 1, "homing_offset": ..., "range_min": ..., "range_max": ...},
+        #   ...
+        # }
+        # We convert to the neutral linear model using a nominal ticks_per_rad and treat
+        # `zero_ticks` as (half_turn + homing_offset). This keeps the file usable without
+        # rewriting existing calibration exports.
+        if "joints" not in data and _looks_like_lerobot_calibration(data):
+            return cls._from_lerobot_style(data)
         joints_in = data.get("joints") or []
         if not isinstance(joints_in, list) or len(joints_in) != 6:
             raise ValueError("calibration JSON must contain a 'joints' list of length 6")
@@ -67,6 +77,52 @@ class SO101Calibration:
             gripper_open_rad=_optional_float(data.get("gripper_open_rad")),
             gripper_closed_rad=_optional_float(data.get("gripper_closed_rad")),
         )
+
+    @classmethod
+    def _from_lerobot_style(cls, data: dict[str, Any]) -> SO101Calibration:
+        # Feetech STS3215: 4096 ticks / 2π rad ≈ 651.9
+        ticks_per_rad = 4096.0 / (2.0 * float(np.pi))
+        half_turn = 2048
+
+        items: list[dict[str, Any]] = []
+        for name, cfg in data.items():
+            if not isinstance(cfg, dict):
+                continue
+            try:
+                mid = {
+                    "name": name,
+                    "id": int(cfg["id"]),
+                    "homing_offset": int(cfg.get("homing_offset", 0)),
+                    "range_min": int(cfg["range_min"]),
+                    "range_max": int(cfg["range_max"]),
+                }
+            except Exception:
+                continue
+            items.append(mid)
+
+        if len(items) != 6:
+            raise ValueError("lerobot-style calibration must include exactly 6 motor entries")
+
+        items.sort(key=lambda x: int(x["id"]))
+        joints: list[JointCalibration] = []
+        for it in items:
+            motor_id = int(it["id"])
+            # Present_Position = Actual_Position - Homing_Offset (lerobot docs). We read raw ticks
+            # with normalize=False, so we fold the offset into our `zero_ticks` guess.
+            zero_ticks = int(half_turn + int(it["homing_offset"]))
+            soft_min_rad = float((int(it["range_min"]) - zero_ticks) / ticks_per_rad)
+            soft_max_rad = float((int(it["range_max"]) - zero_ticks) / ticks_per_rad)
+            joints.append(
+                JointCalibration(
+                    name=str(motor_id),
+                    motor_id=motor_id,
+                    zero_ticks=zero_ticks,
+                    ticks_per_rad=float(ticks_per_rad),
+                    soft_min_rad=soft_min_rad,
+                    soft_max_rad=soft_max_rad,
+                )
+            )
+        return cls(joints=tuple(joints))
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -176,3 +232,16 @@ def _optional_float(x: Any) -> float | None:
     if x is None:
         return None
     return float(x)
+
+
+def _looks_like_lerobot_calibration(data: dict[str, Any]) -> bool:
+    if not data:
+        return False
+    # Heuristic: values are dicts with {id, range_min, range_max} keys.
+    seen = 0
+    for v in data.values():
+        if not isinstance(v, dict):
+            continue
+        if {"id", "range_min", "range_max"}.issubset(set(v.keys())):
+            seen += 1
+    return seen >= 4

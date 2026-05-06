@@ -87,6 +87,9 @@ class EStop:
             raise SafetyError("E-stop active (SIGINT or console 'q').")
 
     def start(self) -> None:
+        # Make re-runs predictable: a previous trip should not carry over.
+        self._event.clear()
+
         def _handler(signum: int, frame: Any) -> None:
             del signum, frame
             self._event.set()

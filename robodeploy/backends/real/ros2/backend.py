@@ -205,6 +205,9 @@ class ROS2RealBackend(BackendBase):
                 mv_t = None
 
             home_q = getattr(robot.description, "home_qpos", None)
+            home_q_over = _get("home_qpos", None)
+            if isinstance(home_q_over, list):
+                home_q = home_q_over
             home_t = (
                 tuple(float(x) for x in np.asarray(home_q, dtype=np.float64).reshape(-1))
                 if home_q is not None
@@ -242,6 +245,7 @@ class ROS2RealBackend(BackendBase):
                 publish_state=bool(_get("publish_state", True)),
                 publish_command_echo=bool(_get("publish_command_echo", True)),
                 allow_uncalibrated=bool(_get("allow_uncalibrated", False)),
+                apply_motor_limits=bool(_get("apply_motor_limits", bool(self.config.get("apply_motor_limits", True)))),
                 home_qpos=home_t,
                 joint_velocity_limits=jv_t,
             )

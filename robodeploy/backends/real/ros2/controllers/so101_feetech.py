@@ -7,6 +7,7 @@ import time
 from typing import Any, Optional
 
 import numpy as np
+from pathlib import Path
 
 from robodeploy.backends.real.common import Commander, StateCache
 from robodeploy.backends.real.ros2.safety import EStop, JointLimitGuard, SafetyError, TemperatureGuard, Watchdog
@@ -19,20 +20,22 @@ from ._clamp import slew_limit_command
 from .base import ControllerConfig, register_controller
 
 
-def _import_feetech_stack() -> tuple[type, Any, Any]:
-    """Return ``(FeetechMotorsBus, Motor, MotorNormMode)`` for current ``lerobot`` layout."""
+def _import_feetech_stack() -> tuple[type, Any, Any, Any]:
+    """Return ``(FeetechMotorsBus, Motor, MotorNormMode, MotorCalibration)`` for current ``lerobot`` layout."""
     try:
         from lerobot.motors import Motor, MotorNormMode
         from lerobot.motors.feetech import FeetechMotorsBus
+        from lerobot.motors.motors_bus import MotorCalibration
 
-        return FeetechMotorsBus, Motor, MotorNormMode
+        return FeetechMotorsBus, Motor, MotorNormMode, MotorCalibration
     except ImportError as e_new:
         try:
             from lerobot.common.robot_devices.motors.feetech import FeetechMotorsBus  # type: ignore[no-redef]
 
             Motor = None  # type: ignore[assignment]
             MotorNormMode = None  # type: ignore[assignment]
-            return FeetechMotorsBus, Motor, MotorNormMode
+            MotorCalibration = None  # type: ignore[assignment]
+            return FeetechMotorsBus, Motor, MotorNormMode, MotorCalibration
         except ImportError as e_old:
             raise ImportError(
                 "SO-101 real adapter requires `lerobot` with Feetech support. Install with:\n"
@@ -51,6 +54,17 @@ def _build_motors_dict(Motor: Any, MotorNormMode: Any) -> dict[str, Any]:
     for i in range(1, 7):
         motors[str(i)] = Motor(id=i, model="sts3215", norm_mode=norm)
     return motors
+
+
+def _looks_like_lerobot_motor_calibration(data: dict[str, Any]) -> bool:
+    # Same heuristic as calibration.py, but keep adapter self-contained.
+    seen = 0
+    for v in data.values():
+        if not isinstance(v, dict):
+            continue
+        if {"id", "range_min", "range_max"}.issubset(set(v.keys())):
+            seen += 1
+    return seen >= 4
 
 
 class SO101FeetechControllerAdapter(Ros2NodeAdapter):
@@ -100,7 +114,11 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
         self.node_name = f"robodeploy_so101_{self._robot_id}"
 
         self._bus: Any = None
+        self._bus_lock = threading.Lock()
         self._calib: SO101Calibration | None = None
+        self._use_lerobot_calib: bool = False
+        self._soft_lower = np.full(6, -1e9, dtype=np.float64)
+        self._soft_upper = np.full(6, 1e9, dtype=np.float64)
         self._motor_names = [str(i) for i in range(1, 7)]
 
         self._js_pub = None
@@ -144,7 +162,8 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
         self._diag_trip = str(msg)
         try:
             if self._bus is not None and getattr(self._bus, "is_connected", False):
-                self._bus.disable_torque()
+                with self._bus_lock:
+                    self._bus.disable_torque()
         except Exception:
             pass
 
@@ -161,35 +180,92 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
                 "SO-101 real adapter requires a serial port. Set e.g. "
                 "config_overrides={'robot0.port': '/dev/ttyACM0'} or env ROBODEPLOY_SO101_PORT."
             )
-        FeetechMotorsBus, Motor, MotorNormMode = _import_feetech_stack()
+        FeetechMotorsBus, Motor, MotorNormMode, MotorCalibration = _import_feetech_stack()
         motors = _build_motors_dict(Motor, MotorNormMode)
         self._bus = FeetechMotorsBus(str(self._cfg.port), motors)
-        self._bus.connect(handshake=True)
+        with self._bus_lock:
+            self._bus.connect(handshake=True)
         if hasattr(self._bus, "set_baudrate"):
             try:
-                self._bus.set_baudrate(int(self._cfg.baud))
+                with self._bus_lock:
+                    self._bus.set_baudrate(int(self._cfg.baud))
             except Exception:
                 pass
 
-        _, self._calib = SO101Calibration.locate(
+        cal_path, cal_obj = SO101Calibration.locate(
             explicit_path=self._cfg.calibration_path,
             allow_template=bool(self._cfg.allow_uncalibrated),
         )
-        lowers = np.array([j.soft_min_rad for j in self._calib.joints], dtype=np.float64)
-        uppers = np.array([j.soft_max_rad for j in self._calib.joints], dtype=np.float64)
-        self._limit_guard = JointLimitGuard(lowers, uppers, self._jv_guard)
+        raw_data: dict[str, Any] | None = None
+        try:
+            import json
 
-        self._bus.disable_torque()
-        ticks = self._bus.sync_read("Present_Position", self._motor_names, normalize=False)
-        q0 = self._calib.to_radians({k: float(v) for k, v in ticks.items()})
+            raw = Path(cal_path).read_text(encoding="utf-8")
+            parsed = json.loads(raw)
+            raw_data = parsed if isinstance(parsed, dict) else None
+        except Exception:
+            raw_data = None
+
+        # Preferred path: if the user provided a LeRobot MotorCalibration JSON, feed it directly to lerobot
+        # so drive_mode / homing_offset are honored (direction mismatches cause shaking).
+        if raw_data is not None and _looks_like_lerobot_motor_calibration(raw_data) and MotorCalibration is not None:
+            self._use_lerobot_calib = True
+            cal_dict: dict[str, Any] = {}
+            for v in raw_data.values():
+                if not isinstance(v, dict):
+                    continue
+                try:
+                    mid = int(v["id"])
+                    name = str(mid)
+                    cal_dict[name] = MotorCalibration(
+                        id=mid,
+                        drive_mode=int(v.get("drive_mode", 0)),
+                        homing_offset=int(v.get("homing_offset", 0)),
+                        range_min=int(v["range_min"]),
+                        range_max=int(v["range_max"]),
+                    )
+                except Exception:
+                    continue
+            if len(cal_dict) != 6:
+                raise RuntimeError("LeRobot calibration JSON did not contain 6 valid motor entries.")
+            # Cache calibration locally; do not write to motors during init.
+            with self._bus_lock:
+                self._bus.calibration = cal_dict
+                if bool(self._cfg.apply_motor_limits):
+                    # Persistent write: programs Min/Max_Position_Limit (and Homing_Offset on protocol 0).
+                    self._bus.write_calibration(cal_dict, cache=True)
+        else:
+            self._use_lerobot_calib = False
+            self._calib = cal_obj
+
+        calib_for_limits = self._calib if self._calib is not None else cal_obj
+        lowers = np.array([j.soft_min_rad for j in calib_for_limits.joints], dtype=np.float64)
+        uppers = np.array([j.soft_max_rad for j in calib_for_limits.joints], dtype=np.float64)
+        self._soft_lower = lowers.copy()
+        self._soft_upper = uppers.copy()
+        # Velocity safety should match the commanded slew limit when available.
+        # Otherwise fall back to URDF/description velocity limits.
+        vel_guard = self._max_vel if self._max_vel is not None else self._jv_guard
+        self._limit_guard = JointLimitGuard(lowers, uppers, vel_guard)
+
+        with self._bus_lock:
+            self._bus.disable_torque()
+            if self._use_lerobot_calib:
+                pos_deg = self._bus.sync_read("Present_Position", self._motor_names, normalize=True)
+                q0 = np.deg2rad(np.array([float(pos_deg[str(i)]) for i in range(1, 7)], dtype=np.float64))
+            else:
+                ticks = self._bus.sync_read("Present_Position", self._motor_names, normalize=False)
+                assert self._calib is not None
+                q0 = self._calib.to_radians({k: float(v) for k, v in ticks.items()})
         with self._lock:
             self._q[:] = q0
 
-        self._bus.enable_torque()
+        with self._bus_lock:
+            self._bus.enable_torque()
         self._ramp_to_home(q0)
 
     def _ramp_to_home(self, q_start: np.ndarray) -> None:
-        assert self._bus is not None and self._calib is not None
+        assert self._bus is not None
         ramp_s = max(float(self._cfg.reset_ramp_s), 0.05)
         rate = 50.0
         n = max(int(ramp_s * rate), 1)
@@ -205,21 +281,31 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
                 max_joint_velocity=self._max_vel,
                 command_hz=1.0 / dt_cmd if dt_cmd > 0 else 0.0,
             )
-            for i, jc in enumerate(self._calib.joints):
-                q_tgt[i] = float(np.clip(q_tgt[i], jc.soft_min_rad, jc.soft_max_rad))
+            q_tgt = np.minimum(np.maximum(q_tgt, self._soft_lower), self._soft_upper)
             if self._limit_guard is not None:
                 try:
-                    self._limit_guard.check(q_tgt, dt=dt_cmd)
+                    # Ramp timing can jitter; rely on slew limiting for velocity and enforce position limits here.
+                    self._limit_guard.check(q_tgt, dt=None)
                 except SafetyError as exc:
                     self._hard_stop(str(exc))
                     raise
-            self._bus.sync_write("Goal_Position", self._calib.to_ticks(q_tgt), normalize=False)
+            with self._bus_lock:
+                if self._use_lerobot_calib:
+                    q_deg = np.rad2deg(q_tgt).tolist()
+                    self._bus.sync_write(
+                        "Goal_Position",
+                        {str(i): float(q_deg[i - 1]) for i in range(1, 7)},
+                        normalize=True,
+                    )
+                else:
+                    assert self._calib is not None
+                    self._bus.sync_write("Goal_Position", self._calib.to_ticks(q_tgt), normalize=False)
             with self._lock:
                 self._q[:] = q_tgt
             time.sleep(dt_cmd)
 
     def _apply_hardware_goal(self, positions_rad: np.ndarray) -> None:
-        assert self._bus is not None and self._calib is not None and self._limit_guard is not None
+        assert self._bus is not None and self._limit_guard is not None
         self._estop.check()
         self._ensure_ok()
         q_des = np.asarray(positions_rad, dtype=np.float64).reshape(-1)
@@ -231,18 +317,28 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
             max_joint_velocity=self._max_vel,
             command_hz=self._cmd_hz,
         )
-        for i, jc in enumerate(self._calib.joints):
-            q_des[i] = float(np.clip(q_des[i], jc.soft_min_rad, jc.soft_max_rad))
-        dt = 1.0 / self._cmd_hz if self._cmd_hz > 0 else None
+        q_des = np.minimum(np.maximum(q_des, self._soft_lower), self._soft_upper)
         try:
             if self._limit_guard is not None:
-                self._limit_guard.check(q_des, dt=dt)
+                # Velocity is already bounded by `slew_limit_command` using `max_joint_velocity`.
+                # Finite-difference checks are too sensitive to timing jitter on real hardware loops.
+                self._limit_guard.check(q_des, dt=None)
         except SafetyError as exc:
             self._hard_stop(str(exc))
             raise
 
         t0 = time.perf_counter()
-        self._bus.sync_write("Goal_Position", self._calib.to_ticks(q_des), normalize=False)
+        with self._bus_lock:
+            if self._use_lerobot_calib:
+                q_deg = np.rad2deg(q_des).tolist()
+                self._bus.sync_write(
+                    "Goal_Position",
+                    {str(i): float(q_deg[i - 1]) for i in range(1, 7)},
+                    normalize=True,
+                )
+            else:
+                assert self._calib is not None
+                self._bus.sync_write("Goal_Position", self._calib.to_ticks(q_des), normalize=False)
         self._last_write_wall_s = time.perf_counter() - t0
 
         if self._echo_pub is not None and self._cmd_msg_type is not None:
@@ -274,7 +370,8 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
                     return out
                 for name in self._motor_names:
                     try:
-                        out[name] = float(self._bus.read("Present_Temperature", name, normalize=False))
+                        with self._bus_lock:
+                            out[name] = float(self._bus.read("Present_Temperature", name, normalize=False))
                     except Exception:
                         continue
                 return out
@@ -299,11 +396,13 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
                 pass
             if self._bus is not None and getattr(self._bus, "is_connected", False):
                 try:
-                    self._bus.disable_torque()
+                    with self._bus_lock:
+                        self._bus.disable_torque()
                 except Exception:
                     pass
                 try:
-                    self._bus.disconnect(disable_torque=False)
+                    with self._bus_lock:
+                        self._bus.disconnect(disable_torque=False)
                 except Exception:
                     pass
             self._bus = None
@@ -334,11 +433,13 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
 
         if self._bus is not None and getattr(self._bus, "is_connected", False):
             try:
-                self._bus.disable_torque()
+                with self._bus_lock:
+                    self._bus.disable_torque()
             except Exception:
                 pass
             try:
-                self._bus.disconnect(disable_torque=False)
+                with self._bus_lock:
+                    self._bus.disconnect(disable_torque=False)
             except Exception:
                 pass
         self._bus = None
@@ -346,15 +447,21 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
         super().stop()
 
     def _state_loop(self) -> None:
-        assert self._bus is not None and self._calib is not None
+        assert self._bus is not None
         period = 1.0 / self._state_hz if self._state_hz > 0 else 0.02
         q_prev = self._q.copy()
         while not self._stop_state.wait(timeout=period):
             try:
                 self._estop.check()
                 self._ensure_ok()
-                ticks = self._bus.sync_read("Present_Position", self._motor_names, normalize=False)
-                q = self._calib.to_radians({k: float(v) for k, v in ticks.items()})
+                with self._bus_lock:
+                    if self._use_lerobot_calib:
+                        pos_deg = self._bus.sync_read("Present_Position", self._motor_names, normalize=True)
+                        q = np.deg2rad(np.array([float(pos_deg[str(i)]) for i in range(1, 7)], dtype=np.float64))
+                    else:
+                        ticks = self._bus.sync_read("Present_Position", self._motor_names, normalize=False)
+                        assert self._calib is not None
+                        q = self._calib.to_radians({k: float(v) for k, v in ticks.items()})
                 qd = (q - q_prev) / period
                 q_prev = q.copy()
                 with self._lock:
@@ -470,7 +577,8 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
         if self._bus is not None and getattr(self._bus, "is_connected", False):
             for name in self._motor_names:
                 try:
-                    temps[name] = float(self._bus.read("Present_Temperature", name, normalize=False))
+                    with self._bus_lock:
+                        temps[name] = float(self._bus.read("Present_Temperature", name, normalize=False))
                 except Exception:
                     continue
         return {

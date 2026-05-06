@@ -47,18 +47,29 @@ class SO101SinusoidPolicy(PolicyBase):
         amplitude: float = 0.15,
         frequency_hz: float = 0.15,
         action_hz: float = 50.0,
+        home_qpos: np.ndarray | None = None,
     ) -> None:
         ah = float(action_hz)
         super().__init__(
             action_space=ActionSpace.JOINT_POS,
             config={"action_hz": ah},
         )
-        self._home = SO101Description().home_qpos.astype(np.float64)
+        self._home = (
+            np.asarray(home_qpos, dtype=np.float64).reshape(-1)
+            if home_qpos is not None
+            else SO101Description().home_qpos.astype(np.float64)
+        )
         self._amp = float(amplitude)
         self._freq = float(frequency_hz)
         self._t = 0.0
         self._dt = 1.0 / max(ah, 1e-6)
         self._mask = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 0.0], dtype=np.float64)
+
+    def set_home_qpos(self, q: np.ndarray) -> None:
+        qv = np.asarray(q, dtype=np.float64).reshape(-1)
+        if qv.shape[0] != self._home.shape[0]:
+            raise ValueError(f"home_qpos must have length {self._home.shape[0]}, got {qv.shape[0]}")
+        self._home = qv.copy()
 
     def _reset_impl(self) -> None:
         self._t = 0.0

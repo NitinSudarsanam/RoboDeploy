@@ -26,6 +26,7 @@ import sys
 import time
 from pathlib import Path
 from typing import cast
+import json
 
 # ---------------------------------------------------------------------------
 # Only edit this block (and optionally LOCAL_ROS_GRAPH for ros2_rviz).
@@ -61,6 +62,87 @@ def _parse_calibration_path() -> str | None:
     return v or None
 
 
+def _torque_off_now(port: str) -> None:
+    """Best-effort: disable torque and disconnect (LeRobot bus)."""
+    try:
+        from lerobot.motors import Motor, MotorNormMode
+        from lerobot.motors.feetech import FeetechMotorsBus
+    except ImportError as exc:
+        print(exc)
+        print('\nInstall:  pip install "lerobot[feetech]"')
+        raise SystemExit(1) from exc
+
+    motors = {str(i): Motor(id=i, model="sts3215", norm_mode=MotorNormMode.DEGREES) for i in range(1, 7)}
+    bus = FeetechMotorsBus(str(port), motors)
+    bus.connect(handshake=True)
+    bus.disable_torque()
+    bus.disconnect(disable_torque=False)
+
+
+def _read_positions_now(port: str, *, calibration_path: str | None) -> list[float]:
+    """Best-effort: read current joint positions (radians) without commanding motion.
+
+    Uses the same calibration resolution as the real backend:
+    - If the calibration JSON is LeRobot-style, register it on the bus and read normalized degrees.
+    - Otherwise, read raw ticks and convert via ``SO101Calibration``.
+    """
+    try:
+        from lerobot.motors import Motor, MotorNormMode
+        from lerobot.motors.feetech import FeetechMotorsBus
+        from lerobot.motors.motors_bus import MotorCalibration
+    except ImportError as exc:
+        print(exc)
+        print('\nInstall:  pip install "lerobot[feetech]"')
+        raise SystemExit(1) from exc
+
+    motors = {str(i): Motor(id=i, model="sts3215", norm_mode=MotorNormMode.DEGREES) for i in range(1, 7)}
+    bus = FeetechMotorsBus(str(port), motors)
+    bus.connect(handshake=True)
+    names = [str(i) for i in range(1, 7)]
+
+    # Resolve calibration file (prefer explicit, else env/default via SO101Calibration.locate)
+    try:
+        cal_path, _ = SO101Calibration.locate(explicit_path=calibration_path, allow_template=True)
+        raw = Path(cal_path).read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except Exception:
+        data = None
+
+    import numpy as np
+
+    if isinstance(data, dict) and all(isinstance(v, dict) for v in data.values()) and any(
+        {"id", "range_min", "range_max"}.issubset(set(v.keys())) for v in data.values() if isinstance(v, dict)
+    ):
+        cal_dict: dict[str, MotorCalibration] = {}
+        for v in data.values():
+            if not isinstance(v, dict):
+                continue
+            try:
+                mid = int(v["id"])
+                cal_dict[str(mid)] = MotorCalibration(
+                    id=mid,
+                    drive_mode=int(v.get("drive_mode", 0)),
+                    homing_offset=int(v.get("homing_offset", 0)),
+                    range_min=int(v["range_min"]),
+                    range_max=int(v["range_max"]),
+                )
+            except Exception:
+                continue
+        if len(cal_dict) == 6:
+            bus.calibration = cal_dict
+            pos_deg = bus.sync_read("Present_Position", names, normalize=True)
+            bus.disconnect(disable_torque=False)
+            q = np.deg2rad(np.array([float(pos_deg[str(i)]) for i in range(1, 7)], dtype=np.float64))
+            return [float(x) for x in q.tolist()]
+
+    # Fallback: raw tick -> radians using neutral calibration
+    ticks = bus.sync_read("Present_Position", names, normalize=False)
+    bus.disconnect(disable_torque=False)
+    cal = SO101Calibration.load(SO101Calibration.locate(explicit_path=calibration_path, allow_template=True)[0])
+    q = cal.to_radians({k: float(v) for k, v in ticks.items()})
+    return [float(x) for x in q.tolist()]
+
+
 def _parse_profile_override() -> str | None:
     if "--profile" in sys.argv:
         i = sys.argv.index("--profile")
@@ -68,6 +150,24 @@ def _parse_profile_override() -> str | None:
             return str(sys.argv[i + 1])
     v = os.environ.get("ROBODEPLOY_PROFILE")
     return str(v) if v else None
+
+
+def _parse_home_qpos() -> list[float] | None:
+    if "--home-qpos" in sys.argv:
+        i = sys.argv.index("--home-qpos")
+        vals = []
+        for j in range(i + 1, min(i + 7, len(sys.argv))):
+            vals.append(float(sys.argv[j]))
+        if len(vals) != 6:
+            raise ValueError("--home-qpos expects 6 floats (joint1..joint6)")
+        return vals
+    v = os.environ.get("ROBODEPLOY_SO101_HOME_QPOS", "").strip()
+    if v:
+        parts = v.replace(",", " ").split()
+        if len(parts) != 6:
+            raise ValueError("ROBODEPLOY_SO101_HOME_QPOS must contain 6 floats")
+        return [float(x) for x in parts]
+    return None
 
 
 def _ensure_repo_on_path() -> None:
@@ -101,11 +201,19 @@ def main() -> None:
     behavior = BehaviorProfile(preset=cast(PresetName, pr)) if pr else None
     resolved = desc.default_behavior_profile().merged_with(behavior).resolved()
 
+    home_override = _parse_home_qpos()
+    if home_override is not None:
+        import numpy as np
+
+        desc.home_qpos = np.asarray(home_override, dtype=np.float64)
+
     task = SO101DemoTask(max_steps=2000)
+    home_only = "--home" in sys.argv
     policy = SO101SinusoidPolicy(
-        amplitude=0.12,
-        frequency_hz=0.12,
+        amplitude=0.0 if home_only else 0.12,
+        frequency_hz=0.0 if home_only else 0.12,
         action_hz=float(resolved.control_hz),
+        home_qpos=desc.home_qpos,
     )
     robot = Robot(
         robot_id="robot0",
@@ -131,6 +239,19 @@ def main() -> None:
                 "  python -m examples.so101.calibrate_so101 --port ... --out ~/.robodeploy/so101_calibration.json"
             )
             return
+        if "--torque-off" in sys.argv:
+            _torque_off_now(port)
+            print(f"Torque disabled on SO-101 (port={port}). You can move the arm by hand now.")
+            return
+        if "--read-pos" in sys.argv:
+            q = _read_positions_now(port, calibration_path=_parse_calibration_path())
+            print("Current joint_positions (radians, joint1..joint6):")
+            print("  " + " ".join(f"{x:.6f}" for x in q))
+            print("\nAs --home-qpos:")
+            print("  --home-qpos " + " ".join(f"{x:.6f}" for x in q))
+            print("\nAs env:")
+            print('  ROBODEPLOY_SO101_HOME_QPOS="' + " ".join(f"{x:.6f}" for x in q) + '"')
+            return
         cal_path = _parse_calibration_path()
         allow_uncal = "--allow-uncalibrated" in sys.argv
         try:
@@ -143,6 +264,9 @@ def main() -> None:
             config_overrides["robot0.calibration_path"] = cal_path
         if allow_uncal:
             config_overrides["robot0.allow_uncalibrated"] = True
+        if "--apply-motor-limits" in sys.argv:
+            # Persistent write to servo registers. Use only when your calibration is correct.
+            config_overrides["apply_motor_limits"] = True
 
     try:
         backend = backend_for_simulator(
@@ -186,8 +310,18 @@ def main() -> None:
 
     print("BACKEND =", BACKEND, "| reset:", info)
 
+    if "--print-home" in sys.argv:
+        if obs.joint_positions is not None:
+            q = [float(x) for x in obs.joint_positions.tolist()]
+            print("\nCurrent joint_positions (use as home):")
+            print("  --home-qpos", " ".join(f"{x:.6f}" for x in q))
+            print("Or env:")
+            print('  ROBODEPLOY_SO101_HOME_QPOS="' + " ".join(f"{x:.6f}" for x in q) + '"')
+        env.close()
+        return
+
     step_sleep = 1.0 / max(float(getattr(backend, "control_hz", resolved.control_hz)), 1e-6)
-    max_steps = 2000
+    max_steps = 250 if home_only else 2000
 
     for i in range(max_steps):
         obs, reward, done, info = env.step()
