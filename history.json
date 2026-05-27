@@ -1313,6 +1313,33 @@
       "repo_state": { "implemented": ["MASTER_PLAN_GOAL19.md added; history.json updated."], "known_gaps": [] },
       "verification": ["git status clean after commit/push"],
       "next_subtask": { "id": "goal20-subtask1", "title": "TBD next iteration" }
+    },
+    {
+      "subtask_id": "goal20-subtask1",
+      "title": "CLI dummy preset optional",
+      "timestamp": "2026-05-27T17:25:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["run-episode/export-episode accept --dummy without --preset."], "known_gaps": [] },
+      "verification": ["tests/test_cli.py"],
+      "next_subtask": { "id": "goal20-subtask2", "title": "Unit tests for missing preset with dummy" }
+    },
+    {
+      "subtask_id": "goal20-subtask2",
+      "title": "Unit tests for missing preset with dummy",
+      "timestamp": "2026-05-27T17:26:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["tests/test_cli.py covers run-episode --dummy without --preset."], "known_gaps": [] },
+      "verification": ["python -m unittest discover -s tests -q"],
+      "next_subtask": { "id": "goal20-subtask3", "title": "Update history + commit/push + cleanup" }
+    },
+    {
+      "subtask_id": "goal20-subtask3",
+      "title": "Update history + commit/push + cleanup",
+      "timestamp": "2026-05-27T17:27:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["MASTER_PLAN_GOAL20.md added; history.json updated."], "known_gaps": [] },
+      "verification": ["git status clean after commit/push"],
+      "next_subtask": { "id": "goal21-subtask1", "title": "TBD next iteration" }
     }
   ]
 }

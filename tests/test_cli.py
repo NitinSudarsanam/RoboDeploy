@@ -121,6 +121,17 @@ class CliTests(unittest.TestCase):
         payload = _json.loads(buf.getvalue().strip())
         self.assertIn("episode_id", payload)
 
+    def test_run_episode_dummy_without_preset_is_ok(self):
+        import json as _json
+
+        from robodeploy.cli import main
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["run-episode", "--dummy", "--steps", "1"])
+        self.assertEqual(code, 0)
+        _json.loads(buf.getvalue().strip())
+
 
 if __name__ == "__main__":
     unittest.main()

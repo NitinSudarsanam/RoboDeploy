@@ -41,7 +41,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_reg.add_argument("--json", action="store_true", help="Print as JSON object.")
 
     p_export = sub.add_parser("export-episode", help="Run a preset and export a recorded episode.")
-    p_export.add_argument("--preset", required=True, help="Preset name from robodeploy.config.")
+    p_export.add_argument("--preset", default="", help="Preset name from robodeploy.config.")
     p_export.add_argument(
         "--custom-module",
         action="append",
@@ -69,7 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     p_run = sub.add_parser("run-episode", help="Run an episode and print a small EpisodeInfo summary JSON.")
-    p_run.add_argument("--preset", required=True, help="Preset name from robodeploy.config.")
+    p_run.add_argument("--preset", default="", help="Preset name from robodeploy.config.")
     p_run.add_argument(
         "--custom-module",
         action="append",
@@ -188,6 +188,8 @@ def _cmd_export_episode(
         )
         env = RoboEnv(backend=DummyBackend(), robots=[robot])
     else:
+        if not str(preset).strip():
+            raise ValueError("--preset is required unless --dummy is set.")
         env = RoboEnv.from_preset(preset)
     out_path = Path(out)
     try:
@@ -281,6 +283,8 @@ def _cmd_run_episode(*, preset: str, steps: int, dummy: bool, custom_modules: li
         )
         env = RoboEnv(backend=DummyBackend(), robots=[robot])
     else:
+        if not str(preset).strip():
+            raise ValueError("--preset is required unless --dummy is set.")
         env = RoboEnv.from_preset(preset)
 
     try:
