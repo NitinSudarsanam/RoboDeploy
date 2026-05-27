@@ -85,6 +85,19 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertTrue(out_path.exists())
 
+    def test_run_episode_dummy_prints_json_summary(self):
+        import json as _json
+
+        from robodeploy.cli import main
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["run-episode", "--preset", "kuka_pick_mujoco", "--dummy", "--steps", "2"])
+        self.assertEqual(code, 0)
+        payload = _json.loads(buf.getvalue().strip())
+        self.assertIn("episode_id", payload)
+        self.assertIn("reward", payload)
+
 
 if __name__ == "__main__":
     unittest.main()

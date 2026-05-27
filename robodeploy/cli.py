@@ -62,6 +62,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Use built-in dummy backend/robot/task instead of a preset (no simulator required).",
     )
 
+    p_run = sub.add_parser("run-episode", help="Run an episode and print a small EpisodeInfo summary JSON.")
+    p_run.add_argument("--preset", required=True, help="Preset name from robodeploy.config.")
+    p_run.add_argument(
+        "--custom-module",
+        action="append",
+        default=[],
+        help="Import dotted module path(s) before running (register project components).",
+    )
+    p_run.add_argument("--steps", type=int, default=50, help="Number of env steps to run.")
+    p_run.add_argument(
+        "--dummy",
+        action="store_true",
+        help="Use built-in dummy backend/robot/task instead of a preset (no simulator required).",
+    )
+
     p_serve = sub.add_parser("serve-policy", help="Serve a registered policy via ZMQ or gRPC.")
     p_serve.add_argument(
         "--custom-module",
@@ -119,6 +134,19 @@ def _cmd_list_registry(*, discover: bool, custom_modules: list[str], builtins: b
     return 0
 
 
+def _episode_info_summary(info) -> dict[str, Any]:  # noqa: ANN001
+    extra = getattr(info, "extra", {}) or {}
+    keep = ("diagnostics", "multi_agent")
+    return {
+        "episode_id": int(getattr(info, "episode_id", 0)),
+        "step": int(getattr(info, "step", 0)),
+        "reward": float(getattr(info, "reward", 0.0)),
+        "success": bool(getattr(info, "success", False)),
+        "failure": bool(getattr(info, "failure", False)),
+        "extra": {k: extra.get(k) for k in keep if k in extra},
+    }
+
+
 def _cmd_export_episode(
     *,
     preset: str,
@@ -166,6 +194,40 @@ def _cmd_export_episode(
             pass
     print(str(out_path))
     return 0
+
+
+def _cmd_run_episode(*, preset: str, steps: int, dummy: bool, custom_modules: list[str]) -> int:
+    from robodeploy.env import RoboEnv
+    from robodeploy.policies.remote.http_client import to_jsonable
+
+    if custom_modules:
+        from robodeploy.core.registry import use
+
+        for mod in custom_modules:
+            use(str(mod))
+
+    if dummy:
+        from robodeploy.core.robot import Robot, RobotTask
+        from robodeploy.testing import DummyBackend, DummyPolicy, DummyRobot, DummyTask
+
+        robot = Robot(
+            robot_id="robot0",
+            description=DummyRobot(),
+            tasks={"task0": RobotTask(task=DummyTask(), policies={"p": DummyPolicy(0.0)})},
+        )
+        env = RoboEnv(backend=DummyBackend(), robots=[robot])
+    else:
+        env = RoboEnv.from_preset(preset)
+
+    try:
+        _, info = env.run_episode(int(steps), record=False)
+        print(json.dumps(to_jsonable(_episode_info_summary(info))))
+        return 0
+    finally:
+        try:
+            env.close()
+        except Exception:
+            pass
 
 
 def _cmd_serve_policy(*, policy: str, host: str, port: int, transport: str, quiet: bool) -> int:
@@ -216,6 +278,13 @@ def main(argv: list[str] | None = None) -> int:
             steps=int(args.steps),
             out=str(args.out),
             fmt=str(args.format),
+            dummy=bool(args.dummy),
+            custom_modules=list(args.custom_module or []),
+        )
+    if cmd == "run-episode":
+        return _cmd_run_episode(
+            preset=str(args.preset),
+            steps=int(args.steps),
             dummy=bool(args.dummy),
             custom_modules=list(args.custom_module or []),
         )

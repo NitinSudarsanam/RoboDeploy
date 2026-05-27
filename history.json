@@ -1226,6 +1226,36 @@
       "repo_state": { "implemented": ["MASTER_PLAN_GOAL16.md added; history.json updated."], "known_gaps": [] },
       "verification": ["git status clean after commit/push"],
       "next_subtask": { "id": "goal17-subtask1", "title": "TBD next iteration" }
+    },
+    {
+      "subtask_id": "goal17-subtask1",
+      "title": "CLI run-episode command",
+      "timestamp": "2026-05-27T16:35:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["robodeploy run-episode prints JSON EpisodeInfo summary; supports --preset/--dummy/--custom-module."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_cli.py"],
+      "next_subtask": { "id": "goal17-subtask2", "title": "Unit test for run-episode JSON output" }
+    },
+    {
+      "subtask_id": "goal17-subtask2",
+      "title": "Unit test for run-episode JSON output",
+      "timestamp": "2026-05-27T16:36:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["tests/test_cli.py validates run-episode output parses as JSON."], "known_gaps": [] },
+      "verification": ["python -m unittest discover -s tests -q"],
+      "next_subtask": { "id": "goal17-subtask3", "title": "Update history + commit/push + cleanup" }
+    },
+    {
+      "subtask_id": "goal17-subtask3",
+      "title": "Update history + commit/push + cleanup",
+      "timestamp": "2026-05-27T16:37:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["MASTER_PLAN_GOAL17.md added; history.json updated."], "known_gaps": [] },
+      "verification": ["git status clean after commit/push"],
+      "next_subtask": { "id": "goal18-subtask1", "title": "TBD next iteration" }
     }
   ]
 }
