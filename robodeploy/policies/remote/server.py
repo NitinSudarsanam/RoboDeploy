@@ -95,6 +95,10 @@ class PolicyServer:
         """Request the server to stop after the current request."""
         self._running = False
 
+    def infer(self, obs) -> "Action":  # noqa: ANN001
+        """Run one local inference step (for tests and non-ZMQ integrations)."""
+        return self._policy.get_action(obs)
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------

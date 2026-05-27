@@ -118,6 +118,31 @@ class MuJoCoSmokeTests(unittest.TestCase):
             finally:
                 env.close()
 
+    def test_run_episode_on_mujoco(self):
+        try:
+            import mujoco  # noqa: F401
+        except ImportError:
+            self.skipTest("mujoco not installed")
+        with tempfile.TemporaryDirectory() as td:
+            mjcf = Path(td) / "tiny.xml"
+            mjcf.write_text(MJCF, encoding="utf-8")
+            robot = Robot(
+                robot_id="tiny0",
+                description=_TinyDesc(mjcf),
+                tasks={"t": RobotTask(task=_TinyTask(), policies={"p": _Hold()})},
+            )
+            env = RoboEnv(backend=MuJoCoBackend(config={"enable_viewer": False}), robots=[robot])
+            try:
+                recorder = env.run_episode(
+                    1,
+                    action_fn=lambda obs: Action(
+                        joint_positions=jnp.asarray([0.0], dtype=jnp.float32)
+                    ),
+                )
+                self.assertEqual(len(recorder.frames), 1)
+            finally:
+                env.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -22,6 +22,10 @@ def _load_all_presets() -> dict[str, dict[str, Any]]:
 _REQUIRED_PRESET_KEYS = ("robot", "backend", "task", "policy")
 
 
+def list_presets() -> list[str]:
+    return sorted(_load_all_presets().keys())
+
+
 def load_preset(name: str) -> dict[str, Any]:
     presets = _load_all_presets()
     if name not in presets:

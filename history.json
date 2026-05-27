@@ -1043,6 +1043,51 @@
       },
       "verification": ["73 tests OK"],
       "next_subtask": { "id": "goal12-subtask1", "title": "Registry list_presets API" }
+    },
+    {
+      "subtask_id": "goal12-subtask1",
+      "title": "list_presets API",
+      "timestamp": "2026-05-27T10:30:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["list_presets() returns sorted preset names."], "known_gaps": [] },
+      "verification": ["tests/test_presets.py"],
+      "next_subtask": { "id": "goal12-subtask2", "title": "MuJoCo run_episode test" }
+    },
+    {
+      "subtask_id": "goal12-subtask2",
+      "title": "MuJoCo run_episode test",
+      "timestamp": "2026-05-27T10:35:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["test_mujoco_smoke run_episode on live MuJoCo env."], "known_gaps": [] },
+      "verification": ["test_run_episode_on_mujoco"],
+      "next_subtask": { "id": "goal12-subtask3", "title": "PolicyServer mock smoke" }
+    },
+    {
+      "subtask_id": "goal12-subtask3",
+      "title": "PolicyServer mock smoke",
+      "timestamp": "2026-05-27T10:40:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["PolicyServer.infer() for local one-step tests."], "known_gaps": [] },
+      "verification": ["tests/test_policy_server.py"],
+      "next_subtask": { "id": "goal12-subtask4", "title": "Multi-preset VecEnv step" }
+    },
+    {
+      "subtask_id": "goal12-subtask4",
+      "title": "Multi-preset VecEnv step",
+      "timestamp": "2026-05-27T10:45:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["SequentialVecEnv.from_presets contract test."], "known_gaps": [] },
+      "verification": ["tests/test_vec_env.py"],
+      "next_subtask": { "id": "goal12-subtask5", "title": "Changelog stub" }
+    },
+    {
+      "subtask_id": "goal12-subtask5",
+      "title": "Changelog stub",
+      "timestamp": "2026-05-27T10:50:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["CHANGELOG.md points to history.json."], "known_gaps": [] },
+      "verification": ["76 tests OK"],
+      "next_subtask": { "id": "goal13-subtask1", "title": "TBD next iteration" }
     }
   ]
 }
