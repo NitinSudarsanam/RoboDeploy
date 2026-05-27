@@ -25,11 +25,22 @@ from robodeploy.policies.learned.robomimic import RobomimicPolicy
 from robodeploy.tasks.manipulation.pick_place import PickPlaceTask
 
 
-def make_env(checkpoint: Path, use_real: bool) -> RoboEnv:
+def make_env(checkpoint: Path | None, use_real: bool, *, dry_run: bool = False) -> RoboEnv:
     if use_real and ROS2Backend is None:
         raise ImportError("ROS2 backend is unavailable in this Python environment.")
     backend = ROS2Backend() if use_real else MuJoCoBackend()
-    policy = RobomimicPolicy(checkpoint_path=checkpoint)
+    if dry_run:
+        import numpy as np
+
+        def predict_fn(obs_dict: dict[str, np.ndarray]) -> np.ndarray:
+            state = obs_dict["state"]
+            return np.concatenate([state[:7] * 0.0, np.array([0.0])])
+
+        policy = RobomimicPolicy(config={"predict_fn": predict_fn, "arm_dof": 7})
+    else:
+        if checkpoint is None:
+            raise ValueError("--checkpoint is required unless --dry-run is set.")
+        policy = RobomimicPolicy(checkpoint_path=checkpoint)
     robot = Robot(
         robot_id="franka0",
         description=FrankaDescription(),
@@ -45,11 +56,12 @@ def main() -> None:
     import argparse
 
     p = argparse.ArgumentParser()
-    p.add_argument("--checkpoint", type=Path, required=True)
+    p.add_argument("--checkpoint", type=Path, default=None)
     p.add_argument("--real", action="store_true")
+    p.add_argument("--dry-run", action="store_true", help="Use injectable predict_fn (no robomimic checkpoint).")
     args = p.parse_args()
 
-    env = make_env(args.checkpoint, use_real=args.real)
+    env = make_env(args.checkpoint, use_real=args.real, dry_run=args.dry_run)
     obs, info = env.reset()
     print("reset:", info)
     env.close()

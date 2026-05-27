@@ -591,6 +591,22 @@
           "Wire DemoSession to a mocked or minimal MuJoCo RoboEnv path with record then replay verification."
         ]
       }
+    },
+    {
+      "subtask_id": "goal5-subtask1",
+      "title": "MuJoCo demo replay E2E",
+      "timestamp": "2026-05-27T06:30:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "tests/test_demo_replay_e2e.py records actions through DemoSession on a mock RoboEnv and replays via iter_replay_actions + step(action)."
+        ],
+        "known_gaps": [
+          "Not yet wired to live MuJoCoBackend; contract E2E only."
+        ]
+      },
+      "verification": ["tests/test_demo_replay_e2e.py -> 1 test OK; full suite 50 tests OK"],
+      "next_subtask": { "id": "goal5-subtask2", "title": "Obs pipeline sensor buffers" }
     }
   ]
 }
