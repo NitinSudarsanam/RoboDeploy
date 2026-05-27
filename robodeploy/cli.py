@@ -21,6 +21,41 @@ def _print_json(payload: Any, *, pretty: bool) -> None:
         print(json.dumps(payload))
 
 
+def _import_custom_modules(custom_modules: list[str]) -> None:
+    if not custom_modules:
+        return
+    from robodeploy.core.registry import use
+
+    for mod in custom_modules:
+        use(str(mod))
+
+
+def _make_env(*, preset: str, dummy: bool):
+    from robodeploy.env import RoboEnv
+
+    if dummy:
+        from robodeploy.core.robot import Robot, RobotTask
+        from robodeploy.testing import DummyBackend, DummyPolicy, DummyRobot, DummyTask
+
+        robot = Robot(
+            robot_id="robot0",
+            description=DummyRobot(),
+            tasks={"task0": RobotTask(task=DummyTask(), policies={"p": DummyPolicy(0.0)})},
+        )
+        return RoboEnv(backend=DummyBackend(), robots=[robot])
+
+    if not str(preset).strip():
+        raise ValueError("--preset is required unless --dummy is set.")
+    return RoboEnv.from_preset(preset)
+
+
+def _close_quietly(env) -> None:  # noqa: ANN001
+    try:
+        env.close()
+    except Exception:
+        pass
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="robodeploy", add_help=True)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -184,28 +219,8 @@ def _cmd_export_episode(
     as_json: bool,
     pretty: bool,
 ) -> int:
-    from robodeploy.env import RoboEnv
-
-    if custom_modules:
-        from robodeploy.core.registry import use
-
-        for mod in custom_modules:
-            use(str(mod))
-
-    if dummy:
-        from robodeploy.core.robot import Robot, RobotTask
-        from robodeploy.testing import DummyBackend, DummyPolicy, DummyRobot, DummyTask
-
-        robot = Robot(
-            robot_id="robot0",
-            description=DummyRobot(),
-            tasks={"task0": RobotTask(task=DummyTask(), policies={"p": DummyPolicy(0.0)})},
-        )
-        env = RoboEnv(backend=DummyBackend(), robots=[robot])
-    else:
-        if not str(preset).strip():
-            raise ValueError("--preset is required unless --dummy is set.")
-        env = RoboEnv.from_preset(preset)
+    _import_custom_modules(custom_modules)
+    env = _make_env(preset=preset, dummy=dummy)
     out_path = Path(out)
     try:
         action_fn = _action_fn_for_mode(action_mode, env)
@@ -219,10 +234,7 @@ def _cmd_export_episode(
 
             export_demo_jsonl(recorder, out_path)
     finally:
-        try:
-            env.close()
-        except Exception:
-            pass
+        _close_quietly(env)
     if as_json:
         payload = {
             "out": str(out_path),
@@ -298,29 +310,10 @@ def _cmd_run_episode(
     pretty: bool,
     as_json: bool,
 ) -> int:
-    from robodeploy.env import RoboEnv
     from robodeploy.policies.remote.http_client import to_jsonable
 
-    if custom_modules:
-        from robodeploy.core.registry import use
-
-        for mod in custom_modules:
-            use(str(mod))
-
-    if dummy:
-        from robodeploy.core.robot import Robot, RobotTask
-        from robodeploy.testing import DummyBackend, DummyPolicy, DummyRobot, DummyTask
-
-        robot = Robot(
-            robot_id="robot0",
-            description=DummyRobot(),
-            tasks={"task0": RobotTask(task=DummyTask(), policies={"p": DummyPolicy(0.0)})},
-        )
-        env = RoboEnv(backend=DummyBackend(), robots=[robot])
-    else:
-        if not str(preset).strip():
-            raise ValueError("--preset is required unless --dummy is set.")
-        env = RoboEnv.from_preset(preset)
+    _import_custom_modules(custom_modules)
+    env = _make_env(preset=preset, dummy=dummy)
 
     try:
         action_fn = _action_fn_for_mode(action_mode, env)
@@ -339,10 +332,7 @@ def _cmd_run_episode(
             _print_json(info_payload, pretty=pretty)
         return 0
     finally:
-        try:
-            env.close()
-        except Exception:
-            pass
+        _close_quietly(env)
 
 
 def _cmd_serve_policy(*, policy: str, host: str, port: int, transport: str, quiet: bool) -> int:
@@ -365,11 +355,7 @@ def _cmd_serve_policy_with_modules(
     quiet: bool,
     custom_modules: list[str],
 ) -> int:
-    if custom_modules:
-        from robodeploy.core.registry import use
-
-        for mod in custom_modules:
-            use(str(mod))
+    _import_custom_modules(custom_modules)
     return _cmd_serve_policy(policy=policy, host=host, port=port, transport=transport, quiet=quiet)
 
 

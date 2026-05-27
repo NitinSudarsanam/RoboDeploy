@@ -66,11 +66,20 @@ robodeploy list-registry --custom-module examples.user_kuka_sinusoid.components
 # Load pip-installed extensions (entry points) before listing
 robodeploy list-registry --discover
 
-# Simulator-free smoke runs
-robodeploy run-episode --preset kuka_pick_mujoco --dummy --steps 10 --action sinusoid
+# Machine-parseable JSON output (all list/run/export commands)
+robodeploy list-presets --json
+robodeploy list-registry --builtins --json --pretty
+
+# Simulator-free smoke runs (no preset required)
+robodeploy run-episode --dummy --steps 10 --action sinusoid --json
+robodeploy run-episode --dummy --steps 1 --json --pretty
 
 # Simulator-free dataset export
-robodeploy export-episode --preset kuka_pick_mujoco --dummy --steps 10 --action hold --out demo.jsonl
+robodeploy export-episode --dummy --steps 10 --action hold --out demo.jsonl --json
+
+# Preset-based runs (uses YAML presets)
+robodeploy run-episode --preset kuka_pick_mujoco --steps 10 --json
+robodeploy export-episode --preset kuka_pick_mujoco --steps 10 --out demo.jsonl --json
 ```
 
 ## Basic use

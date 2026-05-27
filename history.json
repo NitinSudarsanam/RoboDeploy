@@ -1421,6 +1421,23 @@
       "repo_state": { "implemented": ["MASTER_PLAN_GOAL23.md added; history.json updated."], "known_gaps": [] },
       "verification": ["git status clean after commit/push"],
       "next_subtask": { "id": "goal24-subtask1", "title": "TBD next iteration" }
+    },
+    {
+      "subtask_id": "goal24-subtask1",
+      "title": "Repo drift cleanup: docs + CLI hygiene",
+      "timestamp": "2026-05-27T16:05:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "ARCHITECTURE.md updated to reflect Robot + RobotTask and current backends; remaining stale content moved under a Legacy section.",
+          "CONTRACTS.md added to define core type and CLI JSON output contracts.",
+          "README.md CLI examples updated to include --json/--pretty and dummy runs without requiring a preset.",
+          "robodeploy/cli.py refactored to centralize env construction and module loading without behavior changes."
+        ],
+        "known_gaps": ["None identified; continue drift audits as new public surface areas are added."]
+      },
+      "verification": ["python -m unittest discover -s tests -q (90 tests)"],
+      "next_subtask": { "id": "goal24-subtask2", "title": "Commit/push drift-cleanup iteration" }
     }
   ]
 }

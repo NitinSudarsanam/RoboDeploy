@@ -28,67 +28,41 @@ without changing user code. Primary design goal: **sim-to-real transfer**.
 
 ---
 
-## System Diagram
+## System Diagram (current)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        USER / RESEARCHER                             │
-│  # Single robot (unchanged API):                                     │
-│  env = RoboEnv.make(robot="franka", backend="mujoco",               │
-│                     task="pick_place", policy="robomimic")           │
+│  # String-based wiring (registry):                                   │
+│  env = RoboEnv.make(robot=\"franka\", backend=\"mujoco\",             │
+│                     task=\"pick_place\", policy=\"robomimic\")        │
 │                                                                      │
-│  # N robots, M tasks, K policies (any combo):                       │
-│  env = RoboEnv(robots=[r1, r2], tasks=[t1, t2], backend=sim)       │
+│  # Object-based wiring (current architecture):                       │
+│  env = RoboEnv(backend=backend, robots=[robot0, robot1])             │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          RoboEnv  (env.py)                           │
 │  reset() / step() / close()                                          │
-│  Routes obs to task policies. Routes actions back to robots.         │
+│  Owns episode state. Calls backend multi-robot methods.              │
 └──────┬─────────────────────────────────┬────────────────────────────┘
        │                                 │
        ▼                                 ▼
 ┌──────────────────────┐   ┌─────────────────────────────────────────┐
-│  IBackend (shared)   │   │  robots: list[RobotConfig]              │
+│  IBackend (shared)   │   │  robots: list[Robot]                     │
 │                      │   │  ┌───────────────────────────────────┐  │
-│  One physics world   │   │  │ RobotConfig  robot_id="franka"    │  │
-│  or hardware fleet.  │   │  │  description, pipeline, adapter,  │  │
-│  Knows only robots,  │   │  │  sensors                          │  │
-│  not tasks/policies. │   │  └───────────────────────────────────┘  │
+│  One physics world   │   │  │ Robot robot_id=\"robot0\"          │  │
+│  or hardware fleet.  │   │  │  description, obs_pipeline,        │  │
+│  Knows robots/assets │   │  │  action_adapter, sensors, tasks    │  │
+│  but not tasks/pols. │   │  └───────────────────────────────────┘  │
 │                      │   │  ┌───────────────────────────────────┐  │
-│  step(actions[]) ◄───┼───┤  │ RobotConfig  robot_id="kuka"     │  │
-│  get_obs() → []      │   │  │  description, pipeline, adapter,  │  │
-└──────────────────────┘   │  │  sensors                          │  │
-                           │  └───────────────────────────────────┘  │
-                           │                                          │
-                           │  tasks: list[TaskConfig]                 │
-                           │  ┌───────────────────────────────────┐  │
-                           │  │ TaskConfig  task_id="pick"        │  │
-                           │  │  task, robot_ids=["franka"],      │  │
-                           │  │  policy=robomimic_policy          │  │
-                           │  └───────────────────────────────────┘  │
-                           │  ┌───────────────────────────────────┐  │
-                           │  │ TaskConfig  task_id="pour"        │  │
-                           │  │  task, robot_ids=["kuka"],        │  │
-                           │  │  policy=diffusion_policy          │  │  
-                           │  └───────────────────────────────────┘  │
-                           │  shared_sensors: ISensor[]               │
-                           └─────────────────────────────────────────┘
+│  reset_multi()       │   │  │ RobotTask task_id=\"pick\"         │  │
+│  get_obs_multi()     │   │  │  task + 1..N policies + selector   │  │
+│  step_multi(actions) │   │  └───────────────────────────────────┘  │
+└──────────────────────┘   └─────────────────────────────────────────┘
 
-BACKENDS                        POLICIES
-sim/MuJoCoBackend               learned/RobomimicPolicy
-sim/IsaacLabBackend             learned/DiffusionPolicy
-sim/GenesisBackend              learned/VLAPolicy
-real/ROS2Backend          ───── scripted/WaypointPolicy
-real/LeRobotBackend       same  scripted/JointPDPolicy
-                          iface
-
-SENSORS (sim + real pairs)      TASKS
-camera/sim/MuJoCoCamera         manipulation/PickPlace
-camera/real/RealSenseCamera     manipulation/Pour
-ft_sensor/sim/MuJoCoFTSensor    manipulation/PegInsertion
-ft_sensor/real/ATIFTSensor
+Built-in components are registered lazily (see `robodeploy/builtins.py`).
 ```
 
 ---
@@ -257,10 +231,10 @@ notify_rejected(obs, action) → None   # optional; called when chunk is dropped
 ### Per-Robot Control Frequency
 
 Robots with different control requirements (e.g., 1000Hz force-controlled arm,
-20Hz mobile base) **must be assigned to different `TaskConfig`s** — never bundled
-into one `get_action_batch()` call. `TaskConfig` carries an optional
-`control_hz_override` that overrides the backend's global `control_hz` for its
-`ControlLoop` instance. Bundling incompatible frequencies destroys both.
+20Hz mobile base) **must not be forced onto the same control loop**. Model this as
+separate robots (separate `Robot` aggregates) or separate `RobotTask`s that are
+stepped independently by the backend. Bundling incompatible frequencies into one
+batched policy call destroys both.
 
 ## Episode Reset on Real Hardware
 
@@ -297,112 +271,47 @@ operator. A human entering the workspace must stop all robots, not just one.
 
 ---
 
-## Two-Axis Design: RobotConfig + TaskConfig
+## Robot-centric design: Robot + RobotTask (current)
 
-`RoboAgent` (the old 1:1:1 bundle) is replaced by two independent dataclasses.
-Separating them is what makes all N:M combinations possible without spaghetti.
+The current runtime is organized around a `Robot` aggregate and `RobotTask`
+bundles (see `robodeploy/core/robot.py`). This replaced the older env-wide
+`RobotConfig` / `TaskConfig` model to avoid cross-cutting wiring and to keep
+arbitration local to each robot.
 
 ```python
-# core/robot_config.py
-@dataclass
-class RobotConfig:
-    description:    RobotDescription
-    obs_pipeline:   ObsPipeline    = field(default_factory=ObsPipeline)
-    action_adapter: ActionAdapter  = field(default_factory=ActionAdapter)
-    sensors:        list[ISensor]  = field(default_factory=list)
-    robot_id:       str            = ""   # auto-assigned if empty
+from robodeploy import RoboEnv
+from robodeploy.core.robot import Robot, RobotTask
 
-    # Sensor hot-swap: replace a degraded sensor mid-episode without rebuilding env.
-    # Validates output shape and obs_spec match before completing swap.
-    # If shape/stats mismatch → raises SensorSwapError (does NOT silently proceed).
-    # RoboEnv calls old.close(), validates, then new.initialize(backend).
-    def swap_sensor(self, name: str, replacement: ISensor) -> None: ...
-
-# core/task_config.py
-@dataclass
-class TaskConfig:
-    task:      ITask
-    robot_ids: list[str]   # which RobotConfig.robot_ids this task controls
-    policy:    IPolicy
-    task_id:   str         = ""   # auto-assigned if empty
-    # per-domain normalization stats — sim stats ≠ real stats due to covariate shift
-    obs_stats: dict | None = None  # if set, overrides ObsPipeline's NormalizeTransform
+robot = Robot(
+    robot_id=\"robot0\",
+    description=MyRobotDescription(),
+    tasks={
+        \"task0\": RobotTask(
+            task=MyTask(),
+            policies={\"p\": MyPolicy()},
+            mode=\"sequential\",  # or \"concurrent\"
+        )
+    },
+)
+env = RoboEnv(backend=my_backend, robots=[robot])
 ```
 
-### Responsibility split
+### Responsibility split (current)
 
 | Concern | Where |
 |---|---|
-| Which robot (joints, limits, URDF) | `RobotConfig.description` |
-| Observation transforms per robot | `RobotConfig.obs_pipeline` |
-| Action transforms per robot | `RobotConfig.action_adapter` |
-| Robot-local sensors (wrist cam, FT) | `RobotConfig.sensors` |
-| What goal / reward / success | `TaskConfig.task` |
-| Which robots involved in task | `TaskConfig.robot_ids` |
-| Policy for this task | `TaskConfig.policy` |
-| Physics engine / hardware fleet | `RoboEnv.backend` (shared) |
-| Scene-level sensors (overhead cam) | `RoboEnv.shared_sensors` |
+| Robot assets/joints/limits | `Robot.description` |
+| Observation transforms | `Robot.obs_pipeline` |
+| Action transforms | `Robot.action_adapter` |
+| Robot-local sensors | `Robot.sensors` |
+| Task logic (reward/success/reset) | `RobotTask.task` |
+| Policy choice within a task | `RobotTask.policy_selector` (or weights) |
+| Backend execution | `RoboEnv.backend` |
 
-### Supported N:M combinations
+### Legacy appendix (historical)
 
-| Scenario | robots | tasks | policies |
-|---|---|---|---|
-| Classic single-agent | 1 | 1 | 1 |
-| N robots, 1 shared task, 1 policy | N | 1 (robot_ids has N entries) | 1 |
-| N robots, 1 shared task, N policies | N | N (each task_id covers 1 robot) | N |
-| 1 robot, N tasks, 1 shared policy | 1 | N (same robot_id each) | 1 (same object) |
-| 1 robot, N tasks, N policies | 1 | N | N |
-| N robots, N tasks, N policies | N | N | N |
-
-**Shared policy**: pass the same `IPolicy` object to multiple `TaskConfig`s.
-`RoboEnv` calls `policy.reset()` once per episode per `TaskConfig`, so the policy
-must handle concurrent calls if it has internal state.
-
-### 1 Robot, N Tasks constraint: sequential only
-
-Multiple `TaskConfig`s pointing to the same `robot_id` are **sequential**, never
-concurrent. Two policies cannot simultaneously issue commands to one physical robot.
-`RoboEnv` enforces this: only one `TaskConfig` per `robot_id` may be `active` at a
-time. Switching between tasks goes through an `Arbitrator` that quiesces the current
-task before activating the next.
-
-```python
-# core/arbitrator.py
-class Arbitrator:
-    """Manages which TaskConfig is active per robot_id."""
-    def switch(self, robot_id: str, to_task_id: str) -> None:
-        # 1. Drain current task's ActionTrajectory (wait for buffer to empty)
-        # 2. Plan collision-free path: current qpos → new task's home_qpos
-        #    via KinematicsSolver.plan() (OMPL/MoveIt2 wrapper, not blind spline)
-        #    — runs at human interaction timescale, not 100Hz, so cost is fine
-        # 3. Inject planned joint trajectory into ActionTrajectory
-        # 4. Wait for trajectory to complete
-        # 5. Call current_task.on_deactivate()
-        # 6. Activate new task, call new_task.on_activate()
-```
-
-**No blind splines.** A quintic spline connecting two valid joint-space poses is
-kinematically ignorant — it can drive through singularities or collide with scene
-props during a task switch. The `Arbitrator` uses the full motion planner
-(`KinematicsSolver.plan()`) for task-switch paths. This is only called at human
-interaction timescale (seconds), not 100Hz — planning overhead is acceptable.
-
-`KinematicsSolver` gains:
-```python
-plan(q_start, q_goal, scene_obstacles) → list[np.ndarray]   # joint trajectory
-```
-Backed by OMPL or MoveIt2. Default: RRT-Connect. `scene_obstacles` are the current
-`PropConfig` poses from the backend. On real hardware the planner uses the live
-prop poses from perception, not ground-truth positions.
-
-For concurrent multi-robot (different `robot_id`s in different `TaskConfig`s),
-there is no conflict — each robot has its own `ActionTrajectory`.
-
-### Backward compatibility
-
-`RoboEnv.make(robot=, backend=, task=, policy=)` still works.
-Internally: creates one `RobotConfig` + one `TaskConfig(robot_ids=[robot_id])`.
-`step()` / `reset()` return scalars when there is exactly one task. No calling code changes.
+Older notes may reference `RobotConfig` / `TaskConfig`. Those names do not exist
+in the current codebase; treat them as historical design docs.
 
 ---
 
@@ -415,11 +324,7 @@ robodeploy/
 │   ├── types.py                   # Observation, Action, SensorData, ObsSpec,
 │   │                              #   SceneSpec, EpisodeInfo  (all dataclasses)
 │   ├── spaces.py                  # ActionSpace enum, AssetFormat enum
-│   ├── robot_config.py            # RobotConfig dataclass
-│   │                              #   description, obs_pipeline, action_adapter,
-│   │                              #   sensors, robot_id
-│   ├── task_config.py             # TaskConfig dataclass
-│   │                              #   task, robot_ids, policy, task_id
+│   ├── robot.py                   # Robot + RobotTask aggregates
 │   ├── interfaces/
 │   │   ├── backend.py             # IBackend (ABC)
 │   │   ├── policy.py              # IPolicy  (ABC)
@@ -445,11 +350,11 @@ robodeploy/
 │   │                              #     _step_impl, _get_obs_impl, _close_impl
 │   ├── sim/
 │   │   ├── mujoco/backend.py      # MuJoCoBackend   @register_backend("mujoco")
-│   │   ├── isaaclab/backend.py    # IsaacLabBackend @register_backend("isaaclab")
-│   │   └── genesis/backend.py    # GenesisBackend  @register_backend("genesis")
+│   │   ├── isaacsim/backend.py    # IsaacSimBackend @register_backend("isaacsim")
+│   │   └── gazebo/backend.py      # GazeboBackend   @register_backend("ros2_gazebo")
 │   └── real/
 │       ├── ros2/backend.py        # ROS2Backend     @register_backend("ros2")
-│       └── lerobot/backend.py     # LeRobotBackend  @register_backend("lerobot")
+│       └── ...                    # real hardware adapters
 │
 ├── policies/                      # Brains — no physics, no hardware awareness
 │   ├── base.py                    # PolicyBase(IPolicy)
@@ -519,16 +424,13 @@ robodeploy/
 │                                  #     DeltaEEToJointPosTransform (IK), ActionChunkTransform
 │
 ├── env.py                         # RoboEnv: gym-compatible orchestrator
-│                                  #   RoboEnv(robots, tasks, backend,
-│                                  #           shared_sensors=[])
+│                                  #   RoboEnv(backend=..., robots=[Robot(...)], shared_sensors=[])
 │                                  #   RoboEnv.make(robot=, backend=, task=, policy=)
-│                                  #     single-robot shorthand — builds RobotConfig +
-│                                  #     TaskConfig internally
+│                                  #   RoboEnv.from_preset(name)
 │                                  #   RoboEnv.from_config(cfg)
 │                                  #   step() / reset() return scalar when 1 task,
-│                                  #     list when multiple tasks (backward-compatible)
+│                                  #     dict-like obs when multi-robot (see `core/types.py`)
 │                                  #   Handles reset_routine + HumanInterventionRequired
-│                                  #     per-task independently
 │
 └── bridge.py                      # RoboBridge: decoupled real-time hardware deployment
                                    #   ActionBuffer    — one per agent, thread-safe
@@ -541,6 +443,11 @@ robodeploy/
 ```
 
 ---
+
+## Legacy / historical notes (may be stale)
+
+The sections below are retained as historical design notes. They are not guaranteed
+to match the current codebase.
 
 ## Interface Contracts
 
