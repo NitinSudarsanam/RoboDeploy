@@ -3,8 +3,8 @@ from __future__ import annotations
 import unittest
 
 from robodeploy.env import RoboEnv
-from test_env_refactor import DummyBackend, DummyPolicy, DummyRobot, DummyTask
 from robodeploy.core.robot import Robot, RobotTask
+from robodeploy.testing import DummyBackend, DummyPolicy, DummyRobot, DummyTask
 
 
 class EnvDiagnosticsTests(unittest.TestCase):

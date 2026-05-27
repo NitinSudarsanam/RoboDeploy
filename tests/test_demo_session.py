@@ -9,8 +9,8 @@ except Exception:
 
 from robodeploy.core.types import Action
 from robodeploy.env import RoboEnv
-from test_env_refactor import DummyBackend, DummyPolicy, DummyRobot, DummyTask
 from robodeploy.core.robot import Robot, RobotTask
+from robodeploy.testing import DummyBackend, DummyPolicy, DummyRobot, DummyTask
 
 
 class DemoSessionHelperTests(unittest.TestCase):

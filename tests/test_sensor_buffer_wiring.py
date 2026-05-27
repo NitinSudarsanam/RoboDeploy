@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 from robodeploy.core.types import Observation, SensorData
-from test_env_refactor import DummyBackend, make_obs
+from robodeploy.testing import DummyBackend, make_obs
 
 
 class _FakeSensor:

@@ -1128,6 +1128,41 @@
       "repo_state": { "implemented": ["MASTER_PLAN_GOAL13.md added; history.json updated."], "known_gaps": [] },
       "verification": ["git status clean after commit/push"],
       "next_subtask": { "id": "goal14-subtask1", "title": "TBD next iteration" }
+    },
+    {
+      "subtask_id": "goal14-subtask1",
+      "title": "Ship dummy testing stubs in-package",
+      "timestamp": "2026-05-27T15:50:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "robodeploy/testing/dummies.py exports DummyBackend/DummyRobot/DummyTask/etc used across unit tests."
+        ],
+        "known_gaps": []
+      },
+      "verification": ["python -m unittest discover -s tests -q"],
+      "next_subtask": { "id": "goal14-subtask2", "title": "CLI export-episode dummy mode" }
+    },
+    {
+      "subtask_id": "goal14-subtask2",
+      "title": "CLI export-episode dummy mode",
+      "timestamp": "2026-05-27T15:51:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["robodeploy export-episode --dummy runs without simulators."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_cli.py"],
+      "next_subtask": { "id": "goal14-subtask3", "title": "Master plan + commit/push + cleanup" }
+    },
+    {
+      "subtask_id": "goal14-subtask3",
+      "title": "Master plan + commit/push + cleanup",
+      "timestamp": "2026-05-27T15:52:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["history.json updated; old test imports migrated."], "known_gaps": [] },
+      "verification": ["git status clean after commit/push"],
+      "next_subtask": { "id": "goal15-subtask1", "title": "TBD next iteration" }
     }
   ]
 }

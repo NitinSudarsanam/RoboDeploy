@@ -39,6 +39,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default="jsonl",
         help="Export format.",
     )
+    p_export.add_argument(
+        "--dummy",
+        action="store_true",
+        help="Use built-in dummy backend/robot/task instead of a preset (no simulator required).",
+    )
 
     p_serve = sub.add_parser("serve-policy", help="Serve a registered policy via ZMQ or gRPC.")
     p_serve.add_argument("--policy", required=True, help="Registered policy name (e.g. vla_stub).")
@@ -82,10 +87,21 @@ def _cmd_list_registry(*, builtins: bool, as_json: bool) -> int:
     return 0
 
 
-def _cmd_export_episode(*, preset: str, steps: int, out: str, fmt: str) -> int:
+def _cmd_export_episode(*, preset: str, steps: int, out: str, fmt: str, dummy: bool) -> int:
     from robodeploy.env import RoboEnv
 
-    env = RoboEnv.from_preset(preset)
+    if dummy:
+        from robodeploy.core.robot import Robot, RobotTask
+        from robodeploy.testing import DummyBackend, DummyPolicy, DummyRobot, DummyTask
+
+        robot = Robot(
+            robot_id="robot0",
+            description=DummyRobot(),
+            tasks={"task0": RobotTask(task=DummyTask(), policies={"p": DummyPolicy(0.0)})},
+        )
+        env = RoboEnv(backend=DummyBackend(), robots=[robot])
+    else:
+        env = RoboEnv.from_preset(preset)
     out_path = Path(out)
     try:
         recorder = env.run_episode(int(steps), record=True)
@@ -127,7 +143,13 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "list-registry":
         return _cmd_list_registry(builtins=bool(args.builtins), as_json=bool(args.json))
     if cmd == "export-episode":
-        return _cmd_export_episode(preset=str(args.preset), steps=int(args.steps), out=str(args.out), fmt=str(args.format))
+        return _cmd_export_episode(
+            preset=str(args.preset),
+            steps=int(args.steps),
+            out=str(args.out),
+            fmt=str(args.format),
+            dummy=bool(args.dummy),
+        )
     if cmd == "serve-policy":
         return _cmd_serve_policy(
             policy=str(args.policy),

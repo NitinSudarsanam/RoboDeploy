@@ -5,7 +5,7 @@ import unittest
 from robodeploy.core.robot import Robot, RobotTask
 from robodeploy.core.selectors import WeightedPolicySelector
 from robodeploy.env import RoboEnv
-from test_env_refactor import DummyBackend, DummyRobot, DummyTask, RejectAwarePolicy
+from robodeploy.testing import DummyBackend, DummyRobot, DummyTask, RejectAwarePolicy
 
 
 class MultiRobotArbitrationTests(unittest.TestCase):

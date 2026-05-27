@@ -38,6 +38,33 @@ class CliTests(unittest.TestCase):
         self.assertIn("tasks:", out)
         self.assertIn("pick_place", out)
 
+    def test_export_episode_dummy_writes_path(self):
+        from pathlib import Path
+        import tempfile
+
+        from robodeploy.cli import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = Path(tmp) / "demo.jsonl"
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = main(
+                    [
+                        "export-episode",
+                        "--preset",
+                        "kuka_pick_mujoco",
+                        "--dummy",
+                        "--steps",
+                        "2",
+                        "--out",
+                        str(out_path),
+                        "--format",
+                        "jsonl",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertTrue(out_path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

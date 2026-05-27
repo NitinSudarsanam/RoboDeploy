@@ -15,7 +15,7 @@ class GazeboIsaacContractTests(unittest.TestCase):
 
     def test_gazebo_backend_step_multi_contract_on_mock(self):
         from robodeploy.core.types import Action
-        from test_env_refactor import DummyBackend
+        from robodeploy.testing import DummyBackend
 
         class _GazeboLike(DummyBackend):
             sensor_backend_name = "gazebo"

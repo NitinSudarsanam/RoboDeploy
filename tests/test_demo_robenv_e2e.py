@@ -6,7 +6,7 @@ from robodeploy.core.robot import Robot, RobotTask
 from robodeploy.core.types import Action
 from robodeploy.demo_recording import DemoSession
 from robodeploy.env import RoboEnv
-from test_env_refactor import DummyBackend, DummyPolicy, DummyRobot, DummyTask
+from robodeploy.testing import DummyBackend, DummyPolicy, DummyRobot, DummyTask
 
 try:
     import jax.numpy as jnp
