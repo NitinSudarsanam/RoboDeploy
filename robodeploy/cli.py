@@ -76,6 +76,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default="none",
         help="Inject explicit actions instead of using policy actions.",
     )
+    p_export.add_argument("--json", action="store_true", help="Print a structured JSON result.")
+    p_export.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     p_run = sub.add_parser("run-episode", help="Run an episode and print a small EpisodeInfo summary JSON.")
     p_run.add_argument("--preset", default="", help="Preset name from robodeploy.config.")
@@ -178,6 +180,8 @@ def _cmd_export_episode(
     dummy: bool,
     custom_modules: list[str],
     action_mode: str,
+    as_json: bool,
+    pretty: bool,
 ) -> int:
     from robodeploy.env import RoboEnv
 
@@ -218,7 +222,18 @@ def _cmd_export_episode(
             env.close()
         except Exception:
             pass
-    print(str(out_path))
+    if as_json:
+        payload = {
+            "out": str(out_path),
+            "format": str(fmt),
+            "steps": int(steps),
+            "dummy": bool(dummy),
+            "preset": str(preset),
+            "action": str(action_mode),
+        }
+        _print_json(payload, pretty=pretty)
+    else:
+        print(str(out_path))
     return 0
 
 
@@ -365,6 +380,8 @@ def main(argv: list[str] | None = None) -> int:
             pretty=bool(args.pretty),
         )
     if cmd == "export-episode":
+        if bool(args.pretty) and not bool(args.json):
+            raise ValueError("--pretty requires --json.")
         return _cmd_export_episode(
             preset=str(args.preset),
             steps=int(args.steps),
@@ -373,6 +390,8 @@ def main(argv: list[str] | None = None) -> int:
             dummy=bool(args.dummy),
             custom_modules=list(args.custom_module or []),
             action_mode=str(args.action),
+            as_json=bool(args.json),
+            pretty=bool(args.pretty),
         )
     if cmd == "run-episode":
         if bool(args.pretty):

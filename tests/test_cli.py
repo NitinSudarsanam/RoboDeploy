@@ -109,6 +109,35 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertTrue(out_path.exists())
 
+    def test_export_episode_json_pretty_is_parseable(self):
+        import json as _json
+        from pathlib import Path
+        import tempfile
+
+        from robodeploy.cli import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = Path(tmp) / "demo.jsonl"
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = main(
+                    [
+                        "export-episode",
+                        "--dummy",
+                        "--steps",
+                        "2",
+                        "--out",
+                        str(out_path),
+                        "--format",
+                        "jsonl",
+                        "--json",
+                        "--pretty",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = _json.loads(buf.getvalue())
+            self.assertEqual(payload["out"], str(out_path))
+
     def test_run_episode_dummy_prints_json_summary(self):
         import json as _json
 
