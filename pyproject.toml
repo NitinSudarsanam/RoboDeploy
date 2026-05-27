@@ -26,7 +26,9 @@ real = [
 isaacsim = []
 dev = [
   "build",
-  "pytest"
+  "pytest",
+  "jax[cpu]",
+  "pyyaml"
 ]
 
 [tool.setuptools.packages.find]
@@ -44,6 +46,7 @@ robodeploy = [
   "ros2_assets/**/*.rviz",
   "ros2_assets/**/*.sdf",
   "ros2_assets/**/*.world",
+  "config/**/*.yaml",
 ]
 
 [tool.pytest.ini_options]

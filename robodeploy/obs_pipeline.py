@@ -28,10 +28,11 @@ no pipeline and get a no-op IdentityTransform pipeline by default.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from enum import Enum
 
 from robodeploy.core.transforms import ITransform, IdentityTransform
-from robodeploy.core.types      import Observation
+from robodeploy.core.types import Observation
 
 
 class ObsSyncMode(str, Enum):
@@ -73,6 +74,20 @@ class ObsPipeline:
         self.sync_mode: ObsSyncMode = sync_mode
         self.sync_window_s = float(sync_window_s)
         self._latest_sync_obs: Observation | None = None
+        self._last_processed: Observation | None = None
+
+    @staticmethod
+    def with_primary_fields(obs: Observation) -> Observation:
+        """Mirror legacy rgb/depth from named sensor dicts when unset."""
+        rgb = obs.rgb
+        depth = obs.depth
+        if rgb is None and obs.images:
+            rgb = next(iter(obs.images.values()))
+        if depth is None and obs.depths:
+            depth = next(iter(obs.depths.values()))
+        if rgb is obs.rgb and depth is obs.depth:
+            return obs
+        return replace(obs, rgb=rgb, depth=depth)
 
     def process(self, obs: Observation) -> Observation:
         """Apply all transforms in order and return the result.
@@ -85,9 +100,19 @@ class ObsPipeline:
         Returns:
             Transformed observation ready for the policy.
         """
+        if not self.sync_policy(obs):
+            if self._last_processed is not None:
+                return self._last_processed
+        obs = self.with_primary_fields(obs)
         for transform in self.transforms:
             obs = transform.forward(obs)
+        self._last_processed = obs
         return obs
+
+    def reset_sync(self) -> None:
+        """Clear sync/process buffers at episode boundaries."""
+        self._latest_sync_obs = None
+        self._last_processed = None
 
     def fit(self, dataset: list[Observation]) -> None:
         """Fit all stateful transforms (e.g. NormalizeTransform) from a dataset.

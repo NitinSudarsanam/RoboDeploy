@@ -46,9 +46,8 @@ class PickPlaceTask(TaskBase):
         return "Pick the object and place it at the target."
 
     def reset_fn(self, backend) -> None:
-        # DomainRandomizer integration (future): backend.teleport_object() calls go here.
         self._bind_backend(backend)
-        return
+        self._apply_domain_randomization(backend)
 
     def reward_fn(self, obs: Observation, action: Action) -> float:
         del action

@@ -414,6 +414,183 @@
           "Keep tests mocked and contract-focused."
         ]
       }
+    },
+    {
+      "subtask_id": "goal3-subtask1",
+      "title": "Observation pipeline sync and multi-camera schema",
+      "timestamp": "2026-05-27T05:00:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "ObsPipeline now mirrors named `images`/`depths` into legacy `rgb`/`depth` via `with_primary_fields`.",
+          "TIME_WINDOW sync reuses the last processed observation when timestamps fall outside the window; `reset_sync()` clears buffers on env reset.",
+          "Backend sensor merge already populated multi-camera dicts; pipeline completes the policy-facing contract."
+        ],
+        "known_gaps": [
+          "Per-sensor async ingestion with independent hardware clocks still relies on backend merge timestamps rather than a full multi-buffer synchronizer."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m unittest discover -s tests -p test_obs_pipeline.py -> 2 tests OK"
+      ],
+      "next_subtask": { "id": "goal3-subtask2", "title": "Domain randomization on reset" }
+    },
+    {
+      "subtask_id": "goal3-subtask2",
+      "title": "Domain randomization on reset",
+      "timestamp": "2026-05-27T05:05:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "TaskBase wires DomainRandomizer from config (`domain_randomization`, `randomize_objects`, auto object configs from scene props).",
+          "PickPlaceTask reset now applies domain randomization through the shared task helper."
+        ],
+        "known_gaps": [
+          "Physics FULL randomization still depends on backend `set_physics_params` support; real backends skip automatically."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m unittest discover -s tests -p test_domain_randomization.py -> 3 tests OK"
+      ],
+      "next_subtask": { "id": "goal3-subtask3", "title": "Robomimic BC policy adapter" }
+    },
+    {
+      "subtask_id": "goal3-subtask3",
+      "title": "Robomimic BC policy adapter",
+      "timestamp": "2026-05-27T05:10:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "RobomimicPolicy accepts config dict plus injectable `predict_fn` for tests and lightweight deployments without importing robomimic.",
+          "Checkpoint loading remains available when `checkpoint_path` is provided."
+        ],
+        "known_gaps": [
+          "No bundled checkpoint in-repo; live robomimic inference still requires an external install and weights file."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m unittest discover -s tests -p test_robomimic_policy.py -> 1 test OK"
+      ],
+      "next_subtask": { "id": "goal3-subtask4", "title": "CI extras and doc trim" }
+    },
+    {
+      "subtask_id": "goal3-subtask4",
+      "title": "CI extras and doc trim",
+      "timestamp": "2026-05-27T05:15:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "Added GitHub Actions unittest workflow and jax cpu dev extra in pyproject.toml.",
+          "Removed superseded audit/defect markdown catalogs; canonical decisions remain in history.json."
+        ],
+        "known_gaps": [
+          "CI does not yet matrix optional sim/ros2 extras; local conda env remains the reference for ROS2 tests."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m unittest discover -s tests -> full suite OK",
+        ".github/workflows/test.yml added"
+      ],
+      "next_subtask": {
+        "id": "goal4-subtask1",
+        "title": "Demonstration record/replay on the env contract",
+        "instructions": [
+          "Add trajectory capture from RoboEnv steps and replay through action injection without a parallel control API.",
+          "Keep format JSON or npz with Observation/Action serialization helpers."
+        ]
+      }
+    },
+    {
+      "subtask_id": "goal4-subtask1",
+      "title": "Demonstration record/replay on the env contract",
+      "timestamp": "2026-05-27T06:00:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "DemoRecorder and DemoSession record Observation/Action frames as JSON via robodeploy/demo_recording.py.",
+          "Replay yields Action objects for env.step(action) without a parallel control API."
+        ],
+        "known_gaps": [
+          "No bundled MuJoCo E2E record/replay example yet; frames are contract-tested only."
+        ]
+      },
+      "verification": ["tests/test_demo_recording.py -> 2 tests OK"],
+      "next_subtask": { "id": "goal4-subtask2", "title": "VecEnv batching contract" }
+    },
+    {
+      "subtask_id": "goal4-subtask2",
+      "title": "VecEnv batching contract",
+      "timestamp": "2026-05-27T06:05:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "SequentialVecEnv in robodeploy/vec_env.py batches reset/step across multiple RoboEnv instances honestly (sequential, not parallel physics)."
+        ],
+        "known_gaps": [
+          "No native parallel VecEnv or batched backend step yet."
+        ]
+      },
+      "verification": ["tests/test_vec_env.py -> 1 test OK"],
+      "next_subtask": { "id": "goal4-subtask3", "title": "Hydra preset wiring" }
+    },
+    {
+      "subtask_id": "goal4-subtask3",
+      "title": "Hydra preset wiring",
+      "timestamp": "2026-05-27T06:10:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "Lightweight YAML presets in robodeploy/config/presets.yaml with load_preset() helper (no Hydra dependency).",
+          "Presets included in package-data for wheel installs."
+        ],
+        "known_gaps": [
+          "Full Hydra structured configs deferred; presets are static named bundles only."
+        ]
+      },
+      "verification": ["tests/test_presets.py -> 2 tests OK"],
+      "next_subtask": { "id": "goal4-subtask4", "title": "Policy composition chains" }
+    },
+    {
+      "subtask_id": "goal4-subtask4",
+      "title": "Policy composition chains",
+      "timestamp": "2026-05-27T06:15:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "PolicyChain registered as policy_chain; runs child policies in refine or last mode on the normalized IPolicy contract."
+        ],
+        "known_gaps": [
+          "No registry-based child policy resolution by name yet; children are passed explicitly or via config list."
+        ]
+      },
+      "verification": ["tests/test_policy_chain.py -> 2 tests OK"],
+      "next_subtask": { "id": "goal4-subtask5", "title": "Hardware-marked integration tests" }
+    },
+    {
+      "subtask_id": "goal4-subtask5",
+      "title": "Hardware-marked integration tests",
+      "timestamp": "2026-05-27T06:20:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "pytest.mark.hardware on SO101 smoke test; tests/HARDWARE_TESTS.md documents local vs CI behavior.",
+          "CI unittest discover continues to skip pytest-only hardware files by design."
+        ],
+        "known_gaps": [
+          "No hardware runner in GitHub Actions; SO101 smoke remains manual."
+        ]
+      },
+      "verification": [
+        "python -m unittest discover -s tests -> full suite OK",
+        "Hardware tests documented, not run in default CI"
+      ],
+      "next_subtask": {
+        "id": "goal5-subtask1",
+        "title": "MuJoCo demo replay E2E",
+        "instructions": [
+          "Wire DemoSession to a mocked or minimal MuJoCo RoboEnv path with record then replay verification."
+        ]
+      }
     }
   ]
 }

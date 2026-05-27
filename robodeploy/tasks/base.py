@@ -27,7 +27,13 @@ from typing import TYPE_CHECKING
 
 from robodeploy.backends.capabilities import SupportsSceneEdit
 from robodeploy.core.interfaces.task import ITask
-from robodeploy.core.types           import Action, ObsSpec, Observation, SceneSpec
+from robodeploy.core.types import Action, ObsSpec, Observation, SceneSpec
+from robodeploy.tasks.randomization import (
+    DomainRandomizer,
+    DomainRandomizerConfig,
+    ObjectRandomConfig,
+    RandomLevel,
+)
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.backend import IBackend
@@ -173,3 +179,56 @@ class TaskBase(ITask):
             except Exception:
                 return None
         return None
+
+    def _domain_randomizer(self) -> DomainRandomizer | None:
+        """Build a randomizer from task config, if enabled."""
+        dr_cfg = self.config.get("domain_randomization")
+        if dr_cfg is False:
+            return None
+        if isinstance(dr_cfg, DomainRandomizer):
+            return dr_cfg
+        if isinstance(dr_cfg, DomainRandomizerConfig):
+            return DomainRandomizer(dr_cfg)
+        if isinstance(dr_cfg, dict):
+            level_name = str(dr_cfg.get("level", "light")).upper()
+            level = RandomLevel[level_name] if level_name in RandomLevel.__members__ else RandomLevel.LIGHT
+            objects = [
+                ObjectRandomConfig(**item) if isinstance(item, dict) else item
+                for item in dr_cfg.get("objects", self._default_object_random_configs())
+            ]
+            return DomainRandomizer(
+                DomainRandomizerConfig(
+                    level=level,
+                    seed=dr_cfg.get("seed"),
+                    objects=objects,
+                )
+            )
+        if self.config.get("randomize_objects"):
+            return DomainRandomizer(
+                DomainRandomizerConfig(
+                    level=RandomLevel.LIGHT,
+                    seed=self.config.get("random_seed"),
+                    objects=self._default_object_random_configs(),
+                )
+            )
+        return None
+
+    def _default_object_random_configs(self) -> list[ObjectRandomConfig]:
+        jitter = float(self.config.get("pose_jitter_m", 0.03))
+        configs: list[ObjectRandomConfig] = []
+        for prop in self.scene_spec().to_world().props:
+            if prop.is_fixed:
+                continue
+            configs.append(
+                ObjectRandomConfig(
+                    object_name=prop.name,
+                    position_center=prop.position,
+                    position_range=(jitter, jitter, 0.0),
+                )
+            )
+        return configs
+
+    def _apply_domain_randomization(self, backend: "IBackend") -> None:
+        randomizer = self._domain_randomizer()
+        if randomizer is not None:
+            randomizer.randomize(backend)

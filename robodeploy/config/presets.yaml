@@ -1,0 +1,12 @@
+# RoboDeploy named presets (loaded by robodeploy.config.load_preset).
+kuka_pick_mujoco:
+  robot: kuka
+  backend: mujoco
+  task: pick_place
+  policy: joint_pd
+
+franka_pick_mujoco:
+  robot: franka
+  backend: mujoco
+  task: pick_place
+  policy: waypoint

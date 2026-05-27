@@ -38,6 +38,7 @@ _BUILTIN_MODULES: tuple[str, ...] = (
     "robodeploy.policies.learned.vla",
     "robodeploy.policies.scripted.waypoint",
     "robodeploy.policies.scripted.joint_pd",
+    "robodeploy.policies.composition",
 )
 
 

@@ -1,4 +1,7 @@
-"""SO-101 real hardware path: calibration, safety helpers, ROS2 auto-config, slew clamp."""
+"""SO-101 real hardware path: calibration, safety helpers, ROS2 auto-config, slew clamp.
+
+Pytest-only — not collected by `python -m unittest discover`. See tests/HARDWARE_TESTS.md.
+"""
 
 from __future__ import annotations
 
@@ -173,6 +176,7 @@ def test_ros2_auto_config_skips_fake_sim_for_hardware_path() -> None:
     assert "dev_fake_sim" not in cfg
 
 
+@pytest.mark.hardware
 def test_hardware_smoke_so101_port() -> None:
     port = os.environ.get("ROBODEPLOY_SO101_PORT", "").strip()
     if not port:

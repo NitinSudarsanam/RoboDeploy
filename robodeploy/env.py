@@ -444,6 +444,7 @@ class RoboEnv:
 
         for robot in self._robots:
             robot.reset()
+            robot.obs_pipeline.reset_sync()
             for robot_task in robot.tasks.values():
                 self._run_task_reset_routine(robot, robot_task)
 
