@@ -28,7 +28,8 @@ dev = [
   "build",
   "pytest",
   "jax[cpu]",
-  "pyyaml"
+  "pyyaml",
+  "h5py"
 ]
 
 [tool.setuptools.packages.find]

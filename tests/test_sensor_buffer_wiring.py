@@ -26,6 +26,18 @@ class SensorBufferWiringTests(unittest.TestCase):
         self.assertEqual(drained[0][0], "cam")
         self.assertEqual(backend.drain_sensor_reads(), [])
 
+    def test_depth_buffered_into_obs_pipeline(self):
+        from robodeploy.obs_pipeline import ObsPipeline
+
+        pipeline = ObsPipeline(sync_window_s=0.1)
+        pipeline.buffer_sensor(
+            "wrist",
+            SensorData(depth=np.ones((4, 4), dtype=np.float32), timestamp_hw=0.0),
+        )
+        merged = pipeline.process(make_obs(0.0))
+        self.assertIn("wrist", merged.depths)
+        self.assertIsNotNone(merged.depth)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,9 +19,16 @@ def _load_all_presets() -> dict[str, dict[str, Any]]:
     return {str(name): dict(values) for name, values in data.items()}
 
 
+_REQUIRED_PRESET_KEYS = ("robot", "backend", "task", "policy")
+
+
 def load_preset(name: str) -> dict[str, Any]:
     presets = _load_all_presets()
     if name not in presets:
         known = ", ".join(sorted(presets)) or "(none)"
         raise KeyError(f"Unknown preset '{name}'. Known presets: {known}")
-    return dict(presets[name])
+    preset = dict(presets[name])
+    missing = [key for key in _REQUIRED_PRESET_KEYS if key not in preset]
+    if missing:
+        raise ValueError(f"Preset '{name}' missing required keys: {missing}")
+    return preset

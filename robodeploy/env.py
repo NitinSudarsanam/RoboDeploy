@@ -455,6 +455,29 @@ class RoboEnv:
 
         return DemoSession(self)
 
+    def run_episode(
+        self,
+        steps: int,
+        *,
+        action_fn=None,
+        record: bool = True,
+    ):
+        """Run reset + N steps; optionally record explicit actions into a DemoRecorder."""
+        from robodeploy.demo_recording import DemoRecorder, DemoSession
+
+        recorder = DemoRecorder()
+        session = DemoSession(self, recorder=recorder) if record else None
+        obs, info = (session.reset() if session else self.reset())
+        for _ in range(int(steps)):
+            action = action_fn(obs) if action_fn is not None else None
+            if session is not None:
+                obs, _, _, info = session.step(action)
+            else:
+                obs, _, _, info = self.step(action)
+        if record:
+            return recorder
+        return obs, info
+
     @classmethod
     def from_preset(cls, preset_name: str, **overrides) -> "RoboEnv":
         """Build RoboEnv via RoboEnv.make using a named YAML preset."""

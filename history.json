@@ -923,6 +923,66 @@
       },
       "verification": ["67 tests OK"],
       "next_subtask": { "id": "goal10-subtask1", "title": "Parallel VecEnv design spike" }
+    },
+    {
+      "subtask_id": "goal10-subtask1",
+      "title": "run_episode demo export",
+      "timestamp": "2026-05-27T09:30:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["RoboEnv.run_episode() records explicit actions via DemoSession."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_run_episode.py"],
+      "next_subtask": { "id": "goal10-subtask2", "title": "preset validation" }
+    },
+    {
+      "subtask_id": "goal10-subtask2",
+      "title": "preset validation",
+      "timestamp": "2026-05-27T09:35:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["load_preset validates robot/backend/task/policy keys."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_run_episode.py PresetValidationTests"],
+      "next_subtask": { "id": "goal10-subtask3", "title": "buffered camera depth test" }
+    },
+    {
+      "subtask_id": "goal10-subtask3",
+      "title": "buffered camera depth test",
+      "timestamp": "2026-05-27T09:40:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["Depth SensorData merges through ObsPipeline buffer into obs.depths."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_sensor_buffer_wiring.py"],
+      "next_subtask": { "id": "goal10-subtask4", "title": "ros2_gazebo contract step" }
+    },
+    {
+      "subtask_id": "goal10-subtask4",
+      "title": "ros2_gazebo contract step",
+      "timestamp": "2026-05-27T09:45:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["Gazebo contract test covers sensor_backend_name and step_multi on mock backend."],
+        "known_gaps": ["No live Gazebo process in CI."]
+      },
+      "verification": ["tests/test_gazebo_isaac_contract.py"],
+      "next_subtask": { "id": "goal10-subtask5", "title": "h5py dev extra" }
+    },
+    {
+      "subtask_id": "goal10-subtask5",
+      "title": "h5py dev extra",
+      "timestamp": "2026-05-27T09:50:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["h5py added to pyproject dev optional dependencies."],
+        "known_gaps": []
+      },
+      "verification": ["71 tests OK"],
+      "next_subtask": { "id": "goal11-subtask1", "title": "export_demo_jsonl integration with run_episode" }
     }
   ]
 }
