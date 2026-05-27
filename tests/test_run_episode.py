@@ -31,6 +31,33 @@ class RunEpisodeTests(unittest.TestCase):
         self.assertEqual(len(recorder.frames), 2)
 
 
+class ExportRecordedEpisodeTests(unittest.TestCase):
+    def test_export_recorded_episode_writes_jsonl(self):
+        import tempfile
+        from pathlib import Path
+
+        from robodeploy.dataset_export import export_recorded_episode
+
+        robot = Robot(
+            robot_id="robot0",
+            description=DummyRobot(),
+            tasks={"task0": RobotTask(task=DummyTask(), policies={"p": DummyPolicy(0.0)})},
+        )
+        env = RoboEnv(backend=DummyBackend(), robots=[robot])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "out.jsonl"
+            recorder = export_recorded_episode(
+                env,
+                1,
+                path,
+                action_fn=lambda obs: Action(
+                    joint_positions=jnp.asarray([0.5, 0.5], dtype=jnp.float32)
+                ),
+            )
+            self.assertEqual(len(recorder.frames), 1)
+            self.assertTrue(path.exists())
+
+
 class PresetValidationTests(unittest.TestCase):
     def test_load_preset_requires_keys(self):
         from robodeploy.config import load_preset

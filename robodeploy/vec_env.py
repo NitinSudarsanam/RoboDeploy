@@ -15,6 +15,17 @@ class SequentialVecEnv:
             raise ValueError("SequentialVecEnv requires at least one environment.")
         self._envs = list(envs)
 
+    @classmethod
+    def from_presets(cls, preset_names: list[str], **overrides) -> "SequentialVecEnv":
+        """Build one RoboEnv per preset name and wrap in a SequentialVecEnv."""
+        from robodeploy.env import RoboEnv
+
+        envs = [
+            RoboEnv.from_preset(name, robot_id=f"robot{i}", **overrides)
+            for i, name in enumerate(preset_names)
+        ]
+        return cls(envs)
+
     @property
     def num_envs(self) -> int:
         return len(self._envs)

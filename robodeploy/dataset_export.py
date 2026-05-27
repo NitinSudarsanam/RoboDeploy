@@ -17,6 +17,13 @@ def export_demo_jsonl(recorder: DemoRecorder, path: str | Path) -> None:
             handle.write(json.dumps(asdict(frame)) + "\n")
 
 
+def export_recorded_episode(env, steps: int, path: str | Path, *, action_fn=None) -> DemoRecorder:  # noqa: ANN001
+    """Run an episode with recording and write JSONL in one call."""
+    recorder = env.run_episode(steps, action_fn=action_fn, record=True)
+    export_demo_jsonl(recorder, path)
+    return recorder
+
+
 def export_demo_hdf5(recorder: DemoRecorder, path: str | Path) -> None:
     """Write demo frames to HDF5 when h5py is installed."""
     try:

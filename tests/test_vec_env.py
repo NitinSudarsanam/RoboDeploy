@@ -43,5 +43,18 @@ class VecEnvTests(unittest.TestCase):
         self.assertEqual(dones, [False, False])
 
 
+class VecEnvFromPresetsTests(unittest.TestCase):
+    def test_from_presets_builds_env_list(self):
+        from unittest.mock import patch
+
+        from robodeploy.vec_env import SequentialVecEnv
+
+        with patch("robodeploy.env.RoboEnv") as mock_env:
+            mock_env.from_preset.side_effect = lambda name, **kw: object()
+            vec = SequentialVecEnv.from_presets(["a", "b"])
+            self.assertEqual(vec.num_envs, 2)
+            self.assertEqual(mock_env.from_preset.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

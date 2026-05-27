@@ -1,5 +1,7 @@
 # RoboDeploy — Sensor & 3D Environment Capability Plan
 
+> **Superseded for execution tracking** — see `history.json` for completed subtasks. Kept as design reference only.
+
 **Date**: 2026-05-12
 **Scope**: Audit of repo flaws relevant to (a) adding robot sensors, and (b) adding 3D environments / scene composition through the library structure. Concrete plan follows the audit.
 **Companion**: read alongside `AUDIT_REPORT.md` (2026-04-22) for general architecture compliance findings. This document does not repeat those; it focuses on the specific layers that block sensor + environment work and the contract changes those features will need.

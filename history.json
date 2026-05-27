@@ -983,6 +983,66 @@
       },
       "verification": ["71 tests OK"],
       "next_subtask": { "id": "goal11-subtask1", "title": "export_demo_jsonl integration with run_episode" }
+    },
+    {
+      "subtask_id": "goal11-subtask1",
+      "title": "run_episode export helper",
+      "timestamp": "2026-05-27T10:00:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["export_recorded_episode() runs episode and writes JSONL."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_run_episode.py ExportRecordedEpisodeTests"],
+      "next_subtask": { "id": "goal11-subtask2", "title": "VecEnv from_presets" }
+    },
+    {
+      "subtask_id": "goal11-subtask2",
+      "title": "VecEnv from_presets",
+      "timestamp": "2026-05-27T10:05:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["SequentialVecEnv.from_presets() builds env list via RoboEnv.from_preset."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_vec_env.py VecEnvFromPresetsTests"],
+      "next_subtask": { "id": "goal11-subtask3", "title": "diffusion reject test" }
+    },
+    {
+      "subtask_id": "goal11-subtask3",
+      "title": "diffusion reject test",
+      "timestamp": "2026-05-27T10:10:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["Existing tests/test_diffusion_policy.py covers notify_rejected replanning."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_diffusion_policy.py"],
+      "next_subtask": { "id": "goal11-subtask4", "title": "bridge inference_hz test" }
+    },
+    {
+      "subtask_id": "goal11-subtask4",
+      "title": "bridge inference_hz test",
+      "timestamp": "2026-05-27T10:15:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["tests/test_env_refactor.py bridge action_hz contract."],
+        "known_gaps": []
+      },
+      "verification": ["test_bridge_uses_policy_action_hz_when_lower_than_control_loop"],
+      "next_subtask": { "id": "goal11-subtask5", "title": "sensor plan doc pointer" }
+    },
+    {
+      "subtask_id": "goal11-subtask5",
+      "title": "sensor plan doc pointer",
+      "timestamp": "2026-05-27T10:20:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["SENSORS_AND_ENV_PLAN.md marked superseded; history.json canonical."],
+        "known_gaps": []
+      },
+      "verification": ["73 tests OK"],
+      "next_subtask": { "id": "goal12-subtask1", "title": "Registry list_presets API" }
     }
   ]
 }
