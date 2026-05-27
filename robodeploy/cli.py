@@ -14,12 +14,20 @@ from pathlib import Path
 from typing import Any
 
 
+def _print_json(payload: Any, *, pretty: bool) -> None:
+    if pretty:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(json.dumps(payload))
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="robodeploy", add_help=True)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_presets = sub.add_parser("list-presets", help="List YAML preset names.")
     p_presets.add_argument("--json", action="store_true", help="Print as JSON array.")
+    p_presets.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     p_reg = sub.add_parser("list-registry", help="List registered component names.")
     p_reg.add_argument(
@@ -39,6 +47,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Import builtin modules before listing (populates robots/tasks/policies).",
     )
     p_reg.add_argument("--json", action="store_true", help="Print as JSON object.")
+    p_reg.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     p_export = sub.add_parser("export-episode", help="Run a preset and export a recorded episode.")
     p_export.add_argument("--preset", default="", help="Preset name from robodeploy.config.")
@@ -88,6 +97,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default="none",
         help="Inject explicit actions instead of using policy actions.",
     )
+    p_run.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     p_serve = sub.add_parser("serve-policy", help="Serve a registered policy via ZMQ or gRPC.")
     p_serve.add_argument(
@@ -105,19 +115,19 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _cmd_list_presets(*, as_json: bool) -> int:
+def _cmd_list_presets(*, as_json: bool, pretty: bool) -> int:
     from robodeploy.config import list_presets
 
     names = list_presets()
     if as_json:
-        print(json.dumps(names))
+        _print_json(names, pretty=pretty)
     else:
         for name in names:
             print(name)
     return 0
 
 
-def _cmd_list_registry(*, discover: bool, custom_modules: list[str], builtins: bool, as_json: bool) -> int:
+def _cmd_list_registry(*, discover: bool, custom_modules: list[str], builtins: bool, as_json: bool, pretty: bool) -> int:
     if discover:
         from robodeploy import discover as _discover
 
@@ -135,7 +145,7 @@ def _cmd_list_registry(*, discover: bool, custom_modules: list[str], builtins: b
 
     payload = list_registered()
     if as_json:
-        print(json.dumps(payload))
+        _print_json(payload, pretty=pretty)
         return 0
 
     for group in ("backends", "robots", "tasks", "policies", "sensors", "sensor_pairs"):
@@ -262,7 +272,15 @@ def _action_fn_for_mode(mode: str, env):  # noqa: ANN001
     raise ValueError(f"Unknown --action mode: {mode}")
 
 
-def _cmd_run_episode(*, preset: str, steps: int, dummy: bool, custom_modules: list[str], action_mode: str) -> int:
+def _cmd_run_episode(
+    *,
+    preset: str,
+    steps: int,
+    dummy: bool,
+    custom_modules: list[str],
+    action_mode: str,
+    pretty: bool,
+) -> int:
     from robodeploy.env import RoboEnv
     from robodeploy.policies.remote.http_client import to_jsonable
 
@@ -290,7 +308,7 @@ def _cmd_run_episode(*, preset: str, steps: int, dummy: bool, custom_modules: li
     try:
         action_fn = _action_fn_for_mode(action_mode, env)
         _, info = env.run_episode(int(steps), record=False, action_fn=action_fn)
-        print(json.dumps(to_jsonable(_episode_info_summary(info))))
+        _print_json(to_jsonable(_episode_info_summary(info)), pretty=pretty)
         return 0
     finally:
         try:
@@ -333,13 +351,18 @@ def main(argv: list[str] | None = None) -> int:
     cmd = str(args.cmd)
 
     if cmd == "list-presets":
-        return _cmd_list_presets(as_json=bool(args.json))
+        if bool(args.pretty) and not bool(args.json):
+            raise ValueError("--pretty requires --json.")
+        return _cmd_list_presets(as_json=bool(args.json), pretty=bool(args.pretty))
     if cmd == "list-registry":
+        if bool(args.pretty) and not bool(args.json):
+            raise ValueError("--pretty requires --json.")
         return _cmd_list_registry(
             discover=bool(args.discover),
             custom_modules=list(args.custom_module or []),
             builtins=bool(args.builtins),
             as_json=bool(args.json),
+            pretty=bool(args.pretty),
         )
     if cmd == "export-episode":
         return _cmd_export_episode(
@@ -352,12 +375,16 @@ def main(argv: list[str] | None = None) -> int:
             action_mode=str(args.action),
         )
     if cmd == "run-episode":
+        if bool(args.pretty):
+            # run-episode always prints JSON.
+            pass
         return _cmd_run_episode(
             preset=str(args.preset),
             steps=int(args.steps),
             dummy=bool(args.dummy),
             custom_modules=list(args.custom_module or []),
             action_mode=str(args.action),
+            pretty=bool(args.pretty),
         )
     if cmd == "serve-policy":
         return _cmd_serve_policy_with_modules(

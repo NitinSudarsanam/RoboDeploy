@@ -16,6 +16,18 @@ class CliTests(unittest.TestCase):
         out = buf.getvalue()
         self.assertIn("kuka_pick_mujoco", out)
 
+    def test_list_presets_json_pretty_is_parseable(self):
+        import json as _json
+
+        from robodeploy.cli import main
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["list-presets", "--json", "--pretty"])
+        self.assertEqual(code, 0)
+        payload = _json.loads(buf.getvalue())
+        self.assertIsInstance(payload, list)
+
     def test_list_registry_without_builtins_is_sparse(self):
         from robodeploy.cli import main
 
@@ -58,6 +70,18 @@ class CliTests(unittest.TestCase):
         self.assertIn("user_kuka_sinusoid", out)
         self.assertIn("user_sinusoid", out)
 
+    def test_list_registry_json_pretty_is_parseable(self):
+        import json as _json
+
+        from robodeploy.cli import main
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["list-registry", "--json", "--pretty"])
+        self.assertEqual(code, 0)
+        payload = _json.loads(buf.getvalue())
+        self.assertIsInstance(payload, dict)
+
     def test_export_episode_dummy_writes_path(self):
         from pathlib import Path
         import tempfile
@@ -97,6 +121,18 @@ class CliTests(unittest.TestCase):
         payload = _json.loads(buf.getvalue().strip())
         self.assertIn("episode_id", payload)
         self.assertIn("reward", payload)
+
+    def test_run_episode_pretty_is_parseable(self):
+        import json as _json
+
+        from robodeploy.cli import main
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["run-episode", "--dummy", "--steps", "1", "--pretty"])
+        self.assertEqual(code, 0)
+        payload = _json.loads(buf.getvalue())
+        self.assertIn("episode_id", payload)
 
     def test_run_episode_dummy_action_mode_sinusoid_is_ok(self):
         import json as _json

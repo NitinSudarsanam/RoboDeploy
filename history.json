@@ -1340,6 +1340,33 @@
       "repo_state": { "implemented": ["MASTER_PLAN_GOAL20.md added; history.json updated."], "known_gaps": [] },
       "verification": ["git status clean after commit/push"],
       "next_subtask": { "id": "goal21-subtask1", "title": "TBD next iteration" }
+    },
+    {
+      "subtask_id": "goal21-subtask1",
+      "title": "CLI pretty JSON outputs",
+      "timestamp": "2026-05-27T17:40:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["--pretty supported for list-presets/list-registry (with --json) and run-episode."], "known_gaps": [] },
+      "verification": ["tests/test_cli.py"],
+      "next_subtask": { "id": "goal21-subtask2", "title": "Add tests for JSON output parseability" }
+    },
+    {
+      "subtask_id": "goal21-subtask2",
+      "title": "Add tests for JSON output parseability",
+      "timestamp": "2026-05-27T17:41:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["tests/test_cli.py parses pretty JSON outputs for presets/registry/run-episode."], "known_gaps": [] },
+      "verification": ["python -m unittest discover -s tests -q"],
+      "next_subtask": { "id": "goal21-subtask3", "title": "Update history + commit/push + cleanup" }
+    },
+    {
+      "subtask_id": "goal21-subtask3",
+      "title": "Update history + commit/push + cleanup",
+      "timestamp": "2026-05-27T17:42:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["MASTER_PLAN_GOAL21.md added; history.json updated."], "known_gaps": [] },
+      "verification": ["git status clean after commit/push"],
+      "next_subtask": { "id": "goal22-subtask1", "title": "TBD next iteration" }
     }
   ]
 }
