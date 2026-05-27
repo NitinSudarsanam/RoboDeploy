@@ -98,6 +98,29 @@ class CliTests(unittest.TestCase):
         self.assertIn("episode_id", payload)
         self.assertIn("reward", payload)
 
+    def test_run_episode_dummy_action_mode_sinusoid_is_ok(self):
+        import json as _json
+
+        from robodeploy.cli import main
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(
+                [
+                    "run-episode",
+                    "--preset",
+                    "kuka_pick_mujoco",
+                    "--dummy",
+                    "--steps",
+                    "3",
+                    "--action",
+                    "sinusoid",
+                ]
+            )
+        self.assertEqual(code, 0)
+        payload = _json.loads(buf.getvalue().strip())
+        self.assertIn("episode_id", payload)
+
 
 if __name__ == "__main__":
     unittest.main()

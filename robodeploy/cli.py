@@ -61,6 +61,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use built-in dummy backend/robot/task instead of a preset (no simulator required).",
     )
+    p_export.add_argument(
+        "--action",
+        choices=("none", "zero", "hold", "sinusoid"),
+        default="none",
+        help="Inject explicit actions instead of using policy actions.",
+    )
 
     p_run = sub.add_parser("run-episode", help="Run an episode and print a small EpisodeInfo summary JSON.")
     p_run.add_argument("--preset", required=True, help="Preset name from robodeploy.config.")
@@ -75,6 +81,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dummy",
         action="store_true",
         help="Use built-in dummy backend/robot/task instead of a preset (no simulator required).",
+    )
+    p_run.add_argument(
+        "--action",
+        choices=("none", "zero", "hold", "sinusoid"),
+        default="none",
+        help="Inject explicit actions instead of using policy actions.",
     )
 
     p_serve = sub.add_parser("serve-policy", help="Serve a registered policy via ZMQ or gRPC.")
@@ -155,6 +167,7 @@ def _cmd_export_episode(
     fmt: str,
     dummy: bool,
     custom_modules: list[str],
+    action_mode: str,
 ) -> int:
     from robodeploy.env import RoboEnv
 
@@ -178,7 +191,8 @@ def _cmd_export_episode(
         env = RoboEnv.from_preset(preset)
     out_path = Path(out)
     try:
-        recorder = env.run_episode(int(steps), record=True)
+        action_fn = _action_fn_for_mode(action_mode, env)
+        recorder = env.run_episode(int(steps), record=True, action_fn=action_fn)
         if fmt == "hdf5":
             from robodeploy.dataset_export import export_demo_hdf5
 
@@ -196,7 +210,57 @@ def _cmd_export_episode(
     return 0
 
 
-def _cmd_run_episode(*, preset: str, steps: int, dummy: bool, custom_modules: list[str]) -> int:
+def _action_fn_for_mode(mode: str, env):  # noqa: ANN001
+    if mode == "none":
+        return None
+
+    try:
+        import jax.numpy as jnp
+    except Exception:
+        import numpy as jnp  # type: ignore[assignment]
+
+    from robodeploy.core.types import Action
+
+    dof = int(getattr(env.primary_robot.description, "dof", 0) or 0)
+    home = getattr(env.primary_robot.description, "home_qpos", None)
+    if home is not None:
+        home_arr = jnp.asarray(home, dtype=jnp.float32)
+        dof = int(home_arr.shape[0])
+    else:
+        home_arr = jnp.zeros((dof,), dtype=jnp.float32)
+
+    if mode == "zero":
+        zeros = jnp.zeros((dof,), dtype=jnp.float32)
+
+        def _fn(_obs):  # noqa: ANN001
+            return Action(joint_positions=zeros)
+
+        return _fn
+
+    if mode == "hold":
+
+        def _fn(_obs):  # noqa: ANN001
+            return Action(joint_positions=home_arr)
+
+        return _fn
+
+    if mode == "sinusoid":
+        t = {"i": 0}
+        amp = 0.1
+        omega = 0.2
+
+        def _fn(_obs):  # noqa: ANN001
+            t["i"] += 1
+            phase = float(t["i"]) * omega
+            delta = amp * jnp.sin(phase) * jnp.ones((dof,), dtype=jnp.float32)
+            return Action(joint_positions=home_arr + delta)
+
+        return _fn
+
+    raise ValueError(f"Unknown --action mode: {mode}")
+
+
+def _cmd_run_episode(*, preset: str, steps: int, dummy: bool, custom_modules: list[str], action_mode: str) -> int:
     from robodeploy.env import RoboEnv
     from robodeploy.policies.remote.http_client import to_jsonable
 
@@ -220,7 +284,8 @@ def _cmd_run_episode(*, preset: str, steps: int, dummy: bool, custom_modules: li
         env = RoboEnv.from_preset(preset)
 
     try:
-        _, info = env.run_episode(int(steps), record=False)
+        action_fn = _action_fn_for_mode(action_mode, env)
+        _, info = env.run_episode(int(steps), record=False, action_fn=action_fn)
         print(json.dumps(to_jsonable(_episode_info_summary(info))))
         return 0
     finally:
@@ -280,6 +345,7 @@ def main(argv: list[str] | None = None) -> int:
             fmt=str(args.format),
             dummy=bool(args.dummy),
             custom_modules=list(args.custom_module or []),
+            action_mode=str(args.action),
         )
     if cmd == "run-episode":
         return _cmd_run_episode(
@@ -287,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
             steps=int(args.steps),
             dummy=bool(args.dummy),
             custom_modules=list(args.custom_module or []),
+            action_mode=str(args.action),
         )
     if cmd == "serve-policy":
         return _cmd_serve_policy_with_modules(

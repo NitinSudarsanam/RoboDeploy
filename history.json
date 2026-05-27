@@ -1256,6 +1256,36 @@
       "repo_state": { "implemented": ["MASTER_PLAN_GOAL17.md added; history.json updated."], "known_gaps": [] },
       "verification": ["git status clean after commit/push"],
       "next_subtask": { "id": "goal18-subtask1", "title": "TBD next iteration" }
+    },
+    {
+      "subtask_id": "goal18-subtask1",
+      "title": "CLI action injection modes",
+      "timestamp": "2026-05-27T16:55:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["CLI supports --action {none,zero,hold,sinusoid} for run-episode and export-episode."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_cli.py"],
+      "next_subtask": { "id": "goal18-subtask2", "title": "Unit tests for action mode" }
+    },
+    {
+      "subtask_id": "goal18-subtask2",
+      "title": "Unit tests for action mode",
+      "timestamp": "2026-05-27T16:56:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["tests/test_cli.py covers run-episode --action sinusoid."], "known_gaps": [] },
+      "verification": ["python -m unittest discover -s tests -q"],
+      "next_subtask": { "id": "goal18-subtask3", "title": "Update history + commit/push + cleanup" }
+    },
+    {
+      "subtask_id": "goal18-subtask3",
+      "title": "Update history + commit/push + cleanup",
+      "timestamp": "2026-05-27T16:57:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["MASTER_PLAN_GOAL18.md added; history.json updated."], "known_gaps": [] },
+      "verification": ["git status clean after commit/push"],
+      "next_subtask": { "id": "goal19-subtask1", "title": "TBD next iteration" }
     }
   ]
 }
