@@ -7,6 +7,7 @@ import numpy as np
 from robodeploy.core.spaces import ActionSpace
 from robodeploy.core.types import Action, Observation
 from robodeploy.policies.base import PolicyBase
+from robodeploy.core.registry import register_policy
 from robodeploy.policies.composition import PolicyChain
 
 
@@ -36,6 +37,18 @@ class _ConstPolicy(PolicyBase):
         return Action(joint_positions=jnp.asarray(self._values, dtype=jnp.float32))
 
 
+@register_policy("chain_test_low")
+class _ChainLow(_ConstPolicy):
+    def __init__(self) -> None:
+        super().__init__([0.1, 0.1])
+
+
+@register_policy("chain_test_high")
+class _ChainHigh(_ConstPolicy):
+    def __init__(self) -> None:
+        super().__init__([9.0, 9.0])
+
+
 class PolicyChainTests(unittest.TestCase):
     def test_refine_mode_keeps_last_non_none_fields(self):
         chain = PolicyChain(
@@ -59,6 +72,16 @@ class PolicyChainTests(unittest.TestCase):
         )
         action = chain.get_action(make_obs())
         self.assertAlmostEqual(float(action.joint_positions[0]), 4.0)
+
+    def test_policy_names_resolve_from_registry(self):
+        chain = PolicyChain(
+            config={
+                "policy_names": ["chain_test_low", "chain_test_high"],
+                "mode": "last",
+            }
+        )
+        action = chain.get_action(make_obs())
+        self.assertAlmostEqual(float(action.joint_positions[0]), 9.0)
 
 
 if __name__ == "__main__":

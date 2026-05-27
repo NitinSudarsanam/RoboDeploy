@@ -678,6 +678,66 @@
         "title": "MuJoCo RoboEnv demo record/replay",
         "instructions": ["Record/replay through real RoboEnv.make wiring with MuJoCo when available."]
       }
+    },
+    {
+      "subtask_id": "goal6-subtask1",
+      "title": "MuJoCo RoboEnv demo record/replay",
+      "timestamp": "2026-05-27T07:30:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["tests/test_demo_robenv_e2e.py records and replays explicit actions through RoboEnv + DemoSession (DummyBackend contract E2E)."],
+        "known_gaps": ["Live MuJoCoBackend path not required in default CI."]
+      },
+      "verification": ["tests/test_demo_robenv_e2e.py -> 1 test OK"],
+      "next_subtask": { "id": "goal6-subtask2", "title": "PolicyChain registry children" }
+    },
+    {
+      "subtask_id": "goal6-subtask2",
+      "title": "PolicyChain registry children",
+      "timestamp": "2026-05-27T07:35:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["PolicyChain resolves config policy_names via registry with per-policy policy_kwargs."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_policy_chain.py registry test OK"],
+      "next_subtask": { "id": "goal6-subtask3", "title": "CI mujoco optional job" }
+    },
+    {
+      "subtask_id": "goal6-subtask3",
+      "title": "CI mujoco optional job",
+      "timestamp": "2026-05-27T07:40:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["GitHub Actions mujoco-smoke job installs sim extra and imports MuJoCoBackend (continue-on-error)."],
+        "known_gaps": ["No full MuJoCo sim step in CI yet."]
+      },
+      "verification": [".github/workflows/test.yml updated"],
+      "next_subtask": { "id": "goal6-subtask4", "title": "Dataset export stub" }
+    },
+    {
+      "subtask_id": "goal6-subtask4",
+      "title": "Dataset export stub",
+      "timestamp": "2026-05-27T07:45:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["robodeploy/dataset_export.py exports DemoRecorder frames to JSONL."],
+        "known_gaps": ["HDF5/Zarr not implemented."]
+      },
+      "verification": ["tests/test_dataset_export.py -> 1 test OK"],
+      "next_subtask": { "id": "goal6-subtask5", "title": "Multi-robot arbitration tests" }
+    },
+    {
+      "subtask_id": "goal6-subtask5",
+      "title": "Multi-robot arbitration tests",
+      "timestamp": "2026-05-27T07:50:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["tests/test_multi_robot_arbitration.py verifies WeightedPolicySelector picks higher-weight policy."],
+        "known_gaps": []
+      },
+      "verification": ["python -m unittest discover -s tests -> 58 tests OK"],
+      "next_subtask": { "id": "goal7-subtask1", "title": "Live MuJoCo step smoke in CI or local script" }
     }
   ]
 }

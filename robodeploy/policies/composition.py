@@ -15,7 +15,7 @@ class PolicyChain(PolicyBase):
 
     def __init__(self, config: dict | None = None, *, policies: list[IPolicy] | None = None) -> None:
         cfg = dict(config or {})
-        children = list(policies or cfg.get("policies") or [])
+        children = self._resolve_children(cfg, policies)
         if not children:
             raise ValueError("PolicyChain requires at least one child policy.")
         spaces = {child.action_space for child in children}
@@ -24,6 +24,31 @@ class PolicyChain(PolicyBase):
         super().__init__(action_space=next(iter(spaces)), config=cfg)
         self._children = children
         self._mode = str(cfg.get("mode", "refine"))
+
+    @staticmethod
+    def _resolve_children(cfg: dict, policies: list[IPolicy] | None) -> list[IPolicy]:
+        if policies:
+            return list(policies)
+        explicit = list(cfg.get("policies") or [])
+        if explicit:
+            return explicit
+        names = list(cfg.get("policy_names") or [])
+        if not names:
+            return []
+        from robodeploy.builtins import import_builtins
+        from robodeploy.core.registry import get_policy
+
+        import_builtins()
+        kwargs_map = dict(cfg.get("policy_kwargs") or {})
+        resolved: list[IPolicy] = []
+        for name in names:
+            policy_cls = get_policy(str(name))
+            policy_cfg = dict(kwargs_map.get(name, {}) or {})
+            try:
+                resolved.append(policy_cls(config=policy_cfg))
+            except TypeError:
+                resolved.append(policy_cls(**policy_cfg))
+        return resolved
 
     def _reset_impl(self) -> None:
         for child in self._children:
