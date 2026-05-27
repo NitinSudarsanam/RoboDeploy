@@ -179,6 +179,14 @@ class BackendBase(IBackend):
             f"{type(self).__name__} does not implement step_multi()."
         )
 
+    def step_multi_batch(self, action_batches: list[list[Action]]) -> list[list[Observation]]:
+        """Step multiple independent multi-robot action lists.
+
+        Default implementation is sequential (honest fallback). Backends with true
+        parallel batching can override for performance.
+        """
+        return [self.step_multi(actions) for actions in action_batches]
+
     def get_obs(self) -> Observation:
         """Guard + call _get_obs_impl()."""
         self._require_initialized("get_obs")

@@ -32,12 +32,60 @@ from dataclasses import replace
 from enum import Enum
 
 from robodeploy.core.transforms import ITransform, IdentityTransform
-from robodeploy.core.types import Observation
+from robodeploy.core.types import Observation, SensorData
 
 
 class ObsSyncMode(str, Enum):
     DROP_LATEST = "drop_latest"
     TIME_WINDOW = "time_window"
+
+
+class SensorSampleBuffer:
+    """Per-sensor latest samples merged when timestamps align within a window."""
+
+    def __init__(self, window_s: float = 0.05) -> None:
+        self.window_s = float(window_s)
+        self._latest: dict[str, SensorData] = {}
+
+    def push(self, name: str, data: SensorData) -> None:
+        self._latest[str(name)] = data
+
+    def merge(self, obs: Observation) -> Observation:
+        if not self._latest:
+            return obs
+        anchor = float(obs.timestamp_hw or obs.timestamp)
+        images = dict(obs.images)
+        depths = dict(obs.depths)
+        rgb = obs.rgb
+        depth = obs.depth
+        ft_force = obs.ft_force
+        ft_torque = obs.ft_torque
+        for name, sample in self._latest.items():
+            ts = float(sample.timestamp_hw or sample.timestamp)
+            if abs(ts - anchor) > self.window_s:
+                continue
+            if sample.rgb is not None:
+                images[name] = sample.rgb
+                if rgb is None:
+                    rgb = sample.rgb
+            if sample.depth is not None:
+                depths[name] = sample.depth
+                if depth is None:
+                    depth = sample.depth
+            ft_force = sample.ft_force if sample.ft_force is not None else ft_force
+            ft_torque = sample.ft_torque if sample.ft_torque is not None else ft_torque
+        return replace(
+            obs,
+            rgb=rgb,
+            depth=depth,
+            images=images,
+            depths=depths,
+            ft_force=ft_force,
+            ft_torque=ft_torque,
+        )
+
+    def reset(self) -> None:
+        self._latest.clear()
 
 
 class ObsPipeline:
@@ -75,6 +123,11 @@ class ObsPipeline:
         self.sync_window_s = float(sync_window_s)
         self._latest_sync_obs: Observation | None = None
         self._last_processed: Observation | None = None
+        self._sensor_buffer = SensorSampleBuffer(sync_window_s)
+
+    def buffer_sensor(self, name: str, data: SensorData) -> None:
+        """Store an out-of-band sensor read for timestamp-aligned merge in process()."""
+        self._sensor_buffer.push(name, data)
 
     @staticmethod
     def with_primary_fields(obs: Observation) -> Observation:
@@ -103,6 +156,7 @@ class ObsPipeline:
         if not self.sync_policy(obs):
             if self._last_processed is not None:
                 return self._last_processed
+        obs = self._sensor_buffer.merge(obs)
         obs = self.with_primary_fields(obs)
         for transform in self.transforms:
             obs = transform.forward(obs)
@@ -113,6 +167,7 @@ class ObsPipeline:
         """Clear sync/process buffers at episode boundaries."""
         self._latest_sync_obs = None
         self._last_processed = None
+        self._sensor_buffer.reset()
 
     def fit(self, dataset: list[Observation]) -> None:
         """Fit all stateful transforms (e.g. NormalizeTransform) from a dataset.

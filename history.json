@@ -607,6 +607,77 @@
       },
       "verification": ["tests/test_demo_replay_e2e.py -> 1 test OK; full suite 50 tests OK"],
       "next_subtask": { "id": "goal5-subtask2", "title": "Obs pipeline sensor buffers" }
+    },
+    {
+      "subtask_id": "goal5-subtask2",
+      "title": "Obs pipeline sensor buffers",
+      "timestamp": "2026-05-27T07:00:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "SensorSampleBuffer stores per-sensor reads; ObsPipeline.buffer_sensor merges within sync_window_s before transforms."
+        ],
+        "known_gaps": [
+          "Env does not auto-call buffer_sensor yet; callers push async reads explicitly."
+        ]
+      },
+      "verification": ["tests/test_obs_pipeline.py sensor buffer test OK"],
+      "next_subtask": { "id": "goal5-subtask3", "title": "Batched backend contract" }
+    },
+    {
+      "subtask_id": "goal5-subtask3",
+      "title": "Batched backend contract",
+      "timestamp": "2026-05-27T07:05:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "SupportsBatchedStep protocol and BackendBase.step_multi_batch sequential fallback."
+        ],
+        "known_gaps": [
+          "No backend overrides with true parallel physics batching yet."
+        ]
+      },
+      "verification": ["tests/test_batched_step.py -> 1 test OK"],
+      "next_subtask": { "id": "goal5-subtask4", "title": "Robomimic example path" }
+    },
+    {
+      "subtask_id": "goal5-subtask4",
+      "title": "Robomimic example path",
+      "timestamp": "2026-05-27T07:10:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "examples/franka_robomimic_demo.py supports --dry-run with injectable predict_fn (no checkpoint)."
+        ],
+        "known_gaps": [
+          "Full checkpoint path still requires robomimic install and weights on disk."
+        ]
+      },
+      "verification": ["RobomimicPolicy predict_fn tests; example argparse updated"],
+      "next_subtask": { "id": "goal5-subtask5", "title": "Builtin optional-dep guards" }
+    },
+    {
+      "subtask_id": "goal5-subtask5",
+      "title": "Builtin optional-dep guards",
+      "timestamp": "2026-05-27T07:15:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "failed_builtin_imports() reports optional ImportError strings; import_builtins() delegates to it."
+        ],
+        "known_gaps": [
+          "No user-facing diagnostics UI for failed imports yet."
+        ]
+      },
+      "verification": [
+        "tests/test_builtins_import.py -> 2 tests OK",
+        "python -m unittest discover -s tests -> 54 tests OK"
+      ],
+      "next_subtask": {
+        "id": "goal6-subtask1",
+        "title": "MuJoCo RoboEnv demo record/replay",
+        "instructions": ["Record/replay through real RoboEnv.make wiring with MuJoCo when available."]
+      }
     }
   ]
 }

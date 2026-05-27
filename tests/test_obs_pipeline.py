@@ -4,8 +4,8 @@ import unittest
 
 import numpy as np
 
-from robodeploy.core.types import Observation
-from robodeploy.obs_pipeline import ObsPipeline, ObsSyncMode
+from robodeploy.core.types import Observation, SensorData
+from robodeploy.obs_pipeline import ObsPipeline, ObsSyncMode, SensorSampleBuffer
 
 
 def make_obs(*, hw: float = 0.0) -> Observation:
@@ -44,6 +44,17 @@ class ObsPipelineTests(unittest.TestCase):
         first = pipeline.process(make_obs(hw=0.0))
         second = pipeline.process(make_obs(hw=1.0))
         self.assertIs(first, second)
+
+    def test_sensor_buffer_merges_within_window(self):
+        pipeline = ObsPipeline(sync_window_s=0.1)
+        rgb = np.zeros((2, 2, 3), dtype=np.uint8)
+        pipeline.buffer_sensor(
+            "wrist",
+            SensorData(rgb=rgb, timestamp_hw=0.0, timestamp=0.0),
+        )
+        merged = pipeline.process(make_obs(hw=0.05))
+        self.assertIn("wrist", merged.images)
+        self.assertIsNotNone(merged.rgb)
 
 
 if __name__ == "__main__":

@@ -34,6 +34,13 @@ class SupportsMultiRobot(Protocol):
 
 
 @runtime_checkable
+class SupportsBatchedStep(Protocol):
+    """Backend can step multiple independent action batches (sequential or parallel)."""
+
+    def step_multi_batch(self, action_batches: list[list]) -> list[list]: ...
+
+
+@runtime_checkable
 class SupportsSceneEdit(Protocol):
     """Backend supports editing/querying scene props at runtime."""
 

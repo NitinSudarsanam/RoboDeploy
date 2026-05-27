@@ -48,10 +48,16 @@ def import_builtins(modules: Iterable[str] = _BUILTIN_MODULES) -> None:
     Only `ImportError` is suppressed to keep optional dependencies optional.
     Any other exception indicates a real bug and should be surfaced.
     """
+    failed_builtin_imports(modules)
 
+
+def failed_builtin_imports(modules: Iterable[str] = _BUILTIN_MODULES) -> list[str]:
+    """Return ImportError messages for builtin modules that could not be loaded."""
+    failures: list[str] = []
     for mod in modules:
         try:
             import_module(mod)
-        except ImportError:
-            continue
+        except ImportError as exc:
+            failures.append(f"{mod}: {exc}")
+    return failures
 
