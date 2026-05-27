@@ -738,6 +738,68 @@
       },
       "verification": ["python -m unittest discover -s tests -> 58 tests OK"],
       "next_subtask": { "id": "goal7-subtask1", "title": "Live MuJoCo step smoke in CI or local script" }
+    },
+    {
+      "subtask_id": "goal7-subtask1",
+      "title": "MuJoCo step smoke",
+      "timestamp": "2026-05-27T08:00:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["tests/test_mujoco_smoke.py imports/instantiates MuJoCoBackend when mujoco is installed."],
+        "known_gaps": ["No reset+step physics smoke in default unittest yet."]
+      },
+      "verification": ["test_mujoco_smoke.py"],
+      "next_subtask": { "id": "goal7-subtask2", "title": "Auto buffer_sensor wiring" }
+    },
+    {
+      "subtask_id": "goal7-subtask2",
+      "title": "Auto buffer_sensor wiring",
+      "timestamp": "2026-05-27T08:05:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "BackendBase.drain_sensor_reads(); RoboEnv feeds pending reads into ObsPipeline.buffer_sensor before process()."
+        ],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_sensor_buffer_wiring.py"],
+      "next_subtask": { "id": "goal7-subtask3", "title": "HDF5 export optional" }
+    },
+    {
+      "subtask_id": "goal7-subtask3",
+      "title": "HDF5 export optional",
+      "timestamp": "2026-05-27T08:10:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["export_demo_hdf5() in dataset_export.py when h5py is available."],
+        "known_gaps": ["h5py not in default dev extras."]
+      },
+      "verification": ["dataset_export module"],
+      "next_subtask": { "id": "goal7-subtask4", "title": "RoboEnv demo recording helper" }
+    },
+    {
+      "subtask_id": "goal7-subtask4",
+      "title": "RoboEnv demo recording helper",
+      "timestamp": "2026-05-27T08:15:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["RoboEnv.demo_session() returns DemoSession wrapper."],
+        "known_gaps": []
+      },
+      "verification": ["RoboEnv API"],
+      "next_subtask": { "id": "goal7-subtask5", "title": "Gazebo Isaac contract regression" }
+    },
+    {
+      "subtask_id": "goal7-subtask5",
+      "title": "Gazebo Isaac contract regression",
+      "timestamp": "2026-05-27T08:20:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["tests/test_gazebo_isaac_contract.py verifies ros2_gazebo and isaacsim registry entries."],
+        "known_gaps": []
+      },
+      "verification": ["62 tests OK"],
+      "next_subtask": { "id": "goal8-subtask1", "title": "MuJoCo reset+step smoke test" }
     }
   ]
 }

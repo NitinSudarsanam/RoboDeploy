@@ -430,10 +430,30 @@ class RoboEnv:
     def get_processed_obs_by_robot(self) -> dict[str, Observation]:
         raw_obs_list = self._backend.get_obs_multi()
         self._require_obs_count(raw_obs_list, "get_obs_multi")
+        pending = self._drain_backend_sensor_reads()
         return {
-            robot.robot_id: robot.obs_pipeline.process(raw_obs_list[idx])
+            robot.robot_id: self._process_robot_obs(
+                robot, raw_obs_list[idx], pending_reads=pending
+            )
             for idx, robot in enumerate(self._robots[: len(raw_obs_list)])
         }
+
+    def _drain_backend_sensor_reads(self) -> list:
+        drain = getattr(self._backend, "drain_sensor_reads", None)
+        if callable(drain):
+            return list(drain())
+        return []
+
+    def _process_robot_obs(self, robot: Robot, obs: Observation, *, pending_reads: list) -> Observation:
+        for name, sensor_data in pending_reads:
+            robot.obs_pipeline.buffer_sensor(name, sensor_data)
+        return robot.obs_pipeline.process(obs)
+
+    def demo_session(self):
+        """Return a DemoSession wrapper that records explicit env.step actions."""
+        from robodeploy.demo_recording import DemoSession
+
+        return DemoSession(self)
 
     def reset(self) -> tuple[Observation, EpisodeInfo]:
         if not self._initialized:
@@ -448,8 +468,11 @@ class RoboEnv:
             for robot_task in robot.tasks.values():
                 self._run_task_reset_routine(robot, robot_task)
 
+        pending = self._drain_backend_sensor_reads()
         obs_by_robot = {
-            robot.robot_id: robot.obs_pipeline.process(raw_obs_list[idx])
+            robot.robot_id: self._process_robot_obs(
+                robot, raw_obs_list[idx], pending_reads=pending
+            )
             for idx, robot in enumerate(self._robots[: len(raw_obs_list)])
         }
         self._episode_info = EpisodeInfo(episode_id=self._episode_info.episode_id + 1)
@@ -522,8 +545,11 @@ class RoboEnv:
         ]
         raw_obs_list = self._backend.step_multi(ordered_actions)
         self._require_obs_count(raw_obs_list, "step_multi")
+        pending = self._drain_backend_sensor_reads()
         next_obs_by_robot = {
-            robot.robot_id: robot.obs_pipeline.process(raw_obs_list[idx])
+            robot.robot_id: self._process_robot_obs(
+                robot, raw_obs_list[idx], pending_reads=pending
+            )
             for idx, robot in enumerate(self._robots[: len(raw_obs_list)])
         }
 

@@ -32,7 +32,7 @@ import warnings
 
 from robodeploy.core.interfaces.backend import IBackend
 from robodeploy.core.spaces import AssetFormat
-from robodeploy.core.types import Action, AssetSelection, Observation, SceneSpec
+from robodeploy.core.types import Action, AssetSelection, Observation, SceneSpec, SensorData
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.sensor import ISensor
@@ -68,6 +68,7 @@ class BackendBase(IBackend):
         self._asset_selections: dict[str, AssetSelection] = {}
         self._sensor_errors: dict[str, str] = {}
         self._sensor_error_warned: set[str] = set()
+        self._pending_sensor_reads: list[tuple[str, "SensorData"]] = []
 
         # Set by initialize() — subclasses access these freely
         self._description:    RobotDescription | None = None
@@ -203,6 +204,7 @@ class BackendBase(IBackend):
         if not sensors:
             return obs
 
+        self._pending_sensor_reads.clear()
         images = dict(getattr(obs, "images", {}) or {})
         depths = dict(getattr(obs, "depths", {}) or {})
         rgb = obs.rgb
@@ -224,6 +226,7 @@ class BackendBase(IBackend):
                     raise RuntimeError(f"Sensor '{name}' read failed.") from exc
                 continue
             self._sensor_errors.pop(name, None)
+            self._pending_sensor_reads.append((name, sd))
             if sd.rgb is not None:
                 images[name] = sd.rgb
                 if rgb is None:
@@ -252,6 +255,12 @@ class BackendBase(IBackend):
             timestamp_hw=timestamp_hw,
             timestamp_recv=timestamp_recv,
         )
+
+    def drain_sensor_reads(self) -> list[tuple[str, SensorData]]:
+        """Return and clear sensor reads from the latest merge for ObsPipeline buffering."""
+        items = list(self._pending_sensor_reads)
+        self._pending_sensor_reads.clear()
+        return items
 
     def _record_sensor_error(self, sensor_name: str, exc: Exception) -> None:
         msg = f"{type(exc).__name__}: {exc}"
