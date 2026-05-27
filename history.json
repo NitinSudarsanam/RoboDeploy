@@ -1286,6 +1286,33 @@
       "repo_state": { "implemented": ["MASTER_PLAN_GOAL18.md added; history.json updated."], "known_gaps": [] },
       "verification": ["git status clean after commit/push"],
       "next_subtask": { "id": "goal19-subtask1", "title": "TBD next iteration" }
+    },
+    {
+      "subtask_id": "goal19-subtask1",
+      "title": "README CLI docs",
+      "timestamp": "2026-05-27T17:10:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["README documents CLI registry/presets and simulator-free smoke commands."], "known_gaps": [] },
+      "verification": [],
+      "next_subtask": { "id": "goal19-subtask2", "title": "Add simulator-free CLI smoke example" }
+    },
+    {
+      "subtask_id": "goal19-subtask2",
+      "title": "Add simulator-free CLI smoke example",
+      "timestamp": "2026-05-27T17:11:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["examples/cli_smoke_no_sim.py runs CLI smoke paths using --dummy."], "known_gaps": [] },
+      "verification": ["python -m unittest discover -s tests -q"],
+      "next_subtask": { "id": "goal19-subtask3", "title": "Update history + commit/push + cleanup" }
+    },
+    {
+      "subtask_id": "goal19-subtask3",
+      "title": "Update history + commit/push + cleanup",
+      "timestamp": "2026-05-27T17:12:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["MASTER_PLAN_GOAL19.md added; history.json updated."], "known_gaps": [] },
+      "verification": ["git status clean after commit/push"],
+      "next_subtask": { "id": "goal20-subtask1", "title": "TBD next iteration" }
     }
   ]
 }
