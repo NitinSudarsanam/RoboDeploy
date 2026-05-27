@@ -38,6 +38,14 @@ class CliTests(unittest.TestCase):
         self.assertIn("tasks:", out)
         self.assertIn("pick_place", out)
 
+    def test_list_registry_discover_flag_is_safe(self):
+        from robodeploy.cli import main
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["list-registry", "--discover"])
+        self.assertEqual(code, 0)
+
     def test_export_episode_dummy_writes_path(self):
         from pathlib import Path
         import tempfile

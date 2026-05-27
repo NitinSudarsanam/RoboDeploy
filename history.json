@@ -1163,6 +1163,39 @@
       "repo_state": { "implemented": ["history.json updated; old test imports migrated."], "known_gaps": [] },
       "verification": ["git status clean after commit/push"],
       "next_subtask": { "id": "goal15-subtask1", "title": "TBD next iteration" }
+    },
+    {
+      "subtask_id": "goal15-subtask1",
+      "title": "CLI extension loading flags",
+      "timestamp": "2026-05-27T16:05:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "robodeploy list-registry --discover loads entry point extensions",
+          "robodeploy serve-policy/export-episode --custom-module imports modules before lookup/run"
+        ],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_cli.py"],
+      "next_subtask": { "id": "goal15-subtask2", "title": "Unit tests for extension flags" }
+    },
+    {
+      "subtask_id": "goal15-subtask2",
+      "title": "Unit tests for extension flags",
+      "timestamp": "2026-05-27T16:06:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["tests/test_cli.py covers --discover path."], "known_gaps": [] },
+      "verification": ["python -m unittest discover -s tests -q"],
+      "next_subtask": { "id": "goal15-subtask3", "title": "Update history + commit/push + cleanup" }
+    },
+    {
+      "subtask_id": "goal15-subtask3",
+      "title": "Update history + commit/push + cleanup",
+      "timestamp": "2026-05-27T16:07:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["MASTER_PLAN_GOAL15.md added; history.json updated."], "known_gaps": [] },
+      "verification": ["git status clean after commit/push"],
+      "next_subtask": { "id": "goal16-subtask1", "title": "TBD next iteration" }
     }
   ]
 }
