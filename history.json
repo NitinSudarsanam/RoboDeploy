@@ -1088,6 +1088,46 @@
       "repo_state": { "implemented": ["CHANGELOG.md points to history.json."], "known_gaps": [] },
       "verification": ["76 tests OK"],
       "next_subtask": { "id": "goal13-subtask1", "title": "TBD next iteration" }
+    },
+    {
+      "subtask_id": "goal13-subtask1",
+      "title": "CLI commands: list-presets, list-registry, export-episode, serve-policy",
+      "timestamp": "2026-05-27T15:30:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "robodeploy/cli.py with list-presets, list-registry (--builtins), export-episode (jsonl/hdf5), serve-policy."
+        ],
+        "known_gaps": [
+          "export-episode runs real backends; for ROS2/Gazebo/Isaac paths this remains environment-dependent."
+        ]
+      },
+      "verification": ["tests/test_cli.py"],
+      "next_subtask": { "id": "goal13-subtask2", "title": "Wire CLI entry point + tests" }
+    },
+    {
+      "subtask_id": "goal13-subtask2",
+      "title": "Wire CLI entry point + tests",
+      "timestamp": "2026-05-27T15:31:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "pyproject.toml [project.scripts] robodeploy=robodeploy.cli:main",
+          "README CLI quickstart"
+        ],
+        "known_gaps": []
+      },
+      "verification": ["python -m unittest discover -s tests -q"],
+      "next_subtask": { "id": "goal13-subtask3", "title": "Update history + commit/push + doc trim" }
+    },
+    {
+      "subtask_id": "goal13-subtask3",
+      "title": "Update history + commit/push + doc trim",
+      "timestamp": "2026-05-27T15:32:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["MASTER_PLAN_GOAL13.md added; history.json updated."], "known_gaps": [] },
+      "verification": ["git status clean after commit/push"],
+      "next_subtask": { "id": "goal14-subtask1", "title": "TBD next iteration" }
     }
   ]
 }

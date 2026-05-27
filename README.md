@@ -48,6 +48,15 @@ session = env.demo_session()  # record explicit actions for replay
 
 Register a composed policy with `policy_names` in config (see `robodeploy.policies.composition.PolicyChain`).
 
+## CLI
+
+After install (`python -m pip install -e .`), the `robodeploy` CLI is available:
+
+```bash
+robodeploy list-presets
+robodeploy list-registry --builtins
+```
+
 ## Basic use
 
 ```python
