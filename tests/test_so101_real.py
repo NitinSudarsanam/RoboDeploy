@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -123,31 +124,35 @@ def test_joint_limit_guard_velocity() -> None:
 
 def test_watchdog_fires_once() -> None:
     fired: list[str] = []
+    fired_event = threading.Event()
 
     def on_timeout() -> None:
         fired.append("x")
+        fired_event.set()
 
     w = Watchdog(0.15, on_timeout)
     w.arm()
-    import time as _t
-
-    _t.sleep(0.35)
-    w.disarm()
+    try:
+        assert fired_event.wait(timeout=1.0)
+    finally:
+        w.disarm()
     assert len(fired) == 1
 
 
 def test_temperature_guard_calls_violation() -> None:
     calls: list[str] = []
+    violation = threading.Event()
 
     def on_v(r: str) -> None:
         calls.append(r)
+        violation.set()
 
     g = TemperatureGuard(lambda: {"1": 99.0}, max_c=70.0, period_s=0.05, on_violation=on_v)
     g.start()
-    import time as _t
-
-    _t.sleep(0.25)
-    g.stop()
+    try:
+        assert violation.wait(timeout=1.0)
+    finally:
+        g.stop()
     assert len(calls) >= 1
 
 
@@ -181,5 +186,7 @@ def test_hardware_smoke_so101_port() -> None:
     motors = _build_motors_dict(Motor, MotorNormMode)
     bus = FeetechMotorsBus(port, motors)
     bus.connect(handshake=True)
-    bus.disable_torque()
-    bus.disconnect(disable_torque=True)
+    try:
+        bus.disable_torque()
+    finally:
+        bus.disconnect(disable_torque=True)

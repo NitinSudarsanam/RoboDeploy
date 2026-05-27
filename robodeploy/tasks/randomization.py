@@ -31,6 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import TYPE_CHECKING
+import warnings
 
 import numpy as np
 
@@ -133,8 +134,12 @@ class DomainRandomizer:
 
             try:
                 backend.teleport_object(obj_cfg.object_name, (x, y, z))
-            except NotImplementedError:
-                pass   # backend does not support teleportation
+            except NotImplementedError as exc:
+                warnings.warn(
+                    f"DomainRandomizer skipped pose randomization for '{obj_cfg.object_name}': {exc}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
     def _randomize_physics(self, backend: IBackend) -> None:
         """Vary gravity, friction, and mass for physics robustness (sim only).
@@ -154,8 +159,12 @@ class DomainRandomizer:
                 gravity=[0.0, 0.0, gravity_z],
                 friction=friction,
             )
-        except NotImplementedError:
-            pass
+        except NotImplementedError as exc:
+            warnings.warn(
+                f"DomainRandomizer skipped physics randomization: {exc}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
     def reset_seed(self, seed: int | None = None) -> None:
         """Re-seed the random number generator.

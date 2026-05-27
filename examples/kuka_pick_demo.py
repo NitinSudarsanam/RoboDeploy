@@ -1,18 +1,12 @@
-"""Kuka pick demo (structure-only).
+"""Kuka demo pointer.
 
-Migrated from `robodeploy.demos` into `examples/` during the backend architecture
-migration. The old `MujocoEngine` and `robots/` package are removed; the new
-architecture uses `RobotDescription` + `BackendBase` backends instead.
-
-This placeholder will become a `RoboEnv.make(robot="kuka", backend="mujoco", task="pick_place")`
-example once `MuJoCoBackend` is implemented.
+The maintained Kuka examples live under `examples/user_kuka_sinusoid/`.
 """
 
 
 def main() -> None:
-    raise NotImplementedError(
-        "MuJoCoBackend is currently a stub. Implement it, then use RoboEnv.make(...) here."
-    )
+    print("This legacy demo has been retired. Try:")
+    print("  python -m examples.user_kuka_sinusoid.run_mujoco")
 
 
 if __name__ == "__main__":

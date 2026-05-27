@@ -14,13 +14,6 @@ import sys
 import time
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Only edit this block (and optionally LOCAL_ROS_GRAPH for ros2_rviz).
-# ---------------------------------------------------------------------------
-BACKEND: SimulatorName = "ros2_rviz"
-LOCAL_ROS_GRAPH = True  # True for ros2_rviz: embedded joint-position devtool
-# ---------------------------------------------------------------------------
-
 def _ensure_repo_on_path() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     if str(repo_root) not in sys.path:
@@ -38,6 +31,13 @@ from examples.user_kuka_sinusoid.components import (  # noqa: E402
     UserKukaSinusoidTask,
     UserSinusoidPolicy,
 )
+
+# ---------------------------------------------------------------------------
+# Only edit this block (and optionally LOCAL_ROS_GRAPH for ros2_rviz).
+# ---------------------------------------------------------------------------
+BACKEND: SimulatorName = "ros2_rviz"
+LOCAL_ROS_GRAPH = True  # True for ros2_rviz: embedded joint-position devtool
+# ---------------------------------------------------------------------------
 
 
 def main() -> None:

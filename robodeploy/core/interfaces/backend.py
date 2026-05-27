@@ -184,8 +184,32 @@ class IBackend(ABC):
         ...
 
     # ------------------------------------------------------------------
-    # Optional override: teleportation, physics tuning, multi-robot
+    # Optional override: scene editing, physics tuning, multi-robot
     # ------------------------------------------------------------------
+
+    def get_prop_names(self) -> list[str]:
+        """Return names of scene props loaded by the backend."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support get_prop_names()."
+        )
+
+    def get_prop_pose(self, name: str):
+        """Return a scene prop pose as (position, orientation)."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support get_prop_pose()."
+        )
+
+    def set_prop_pose(self, name: str, position, orientation) -> None:  # noqa: ANN001
+        """Set a scene prop pose."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support set_prop_pose()."
+        )
+
+    def set_prop_mass(self, name: str, mass: float) -> None:
+        """Set scene prop mass where the backend allows runtime mass edits."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support set_prop_mass()."
+        )
 
     def teleport_object(self, name: str, position: tuple[float, float, float]) -> None:
         """Move a scene object instantly (no physics). Used by DomainRandomizer.

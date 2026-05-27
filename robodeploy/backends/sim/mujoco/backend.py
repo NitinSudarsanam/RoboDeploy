@@ -8,14 +8,14 @@ and keep tasks/policies backend-agnostic.
 from __future__ import annotations
 
 from pathlib import Path
-import tempfile
-import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Optional
 
 from robodeploy.backends.base import BackendBase
 from robodeploy.core.registry import register_backend
 from robodeploy.core.spaces import ActionSpace, AssetFormat
 from robodeploy.core.types import Action, Observation, SceneSpec
+
+from .scene_builder import MjcfSceneBuilder
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.sensor import ISensor
@@ -27,17 +27,28 @@ class MuJoCoBackend(BackendBase):
     """MuJoCo simulation backend (minimal)."""
 
     is_real = False
+    sensor_backend_name = "mujoco"
     control_hz = 100.0
     supported_action_spaces = [ActionSpace.JOINT_POS, ActionSpace.JOINT_TORQUE]
 
     def initialize_multi(self, robots, scene: SceneSpec, shared_sensors) -> None:  # type: ignore[override]
         if len(robots) != 1:
             raise NotImplementedError("MuJoCoBackend currently supports a single robot per backend instance.")
-        if shared_sensors:
-            raise NotImplementedError("MuJoCoBackend does not support shared sensors yet.")
         robot = robots[0]
         self._robot_id = str(robot.robot_id or "robot0")
-        super().initialize(robot.description, scene, robot.sensors)
+        super().initialize(robot.description, scene, [*robot.sensors, *shared_sensors])
+
+    def reset_multi(self, robot_ids: list[str] | None = None) -> list[Observation]:
+        del robot_ids
+        return [self.reset()]
+
+    def step_multi(self, actions: list[Action]) -> list[Observation]:
+        if len(actions) != 1:
+            raise ValueError(f"MuJoCoBackend.step_multi expected 1 action, got {len(actions)}.")
+        return [self.step(actions[0])]
+
+    def get_obs_multi(self) -> list[Observation]:
+        return [self.get_obs()]
 
     def _load(
         self,
@@ -45,8 +56,6 @@ class MuJoCoBackend(BackendBase):
         scene: SceneSpec,
         sensors: list[ISensor],
     ) -> None:
-        del scene
-        del sensors
         try:
             import mujoco
         except Exception as exc:
@@ -64,8 +73,15 @@ class MuJoCoBackend(BackendBase):
         except FileNotFoundError:
             mjcf_path = None
 
+        world = scene.to_world()
+        has_sensor_camera = any("camera" in type(sensor).__name__.lower() or "camera" in str(getattr(sensor, "name", "")).lower() for sensor in sensors)
         if mjcf_path is not None:
-            self._model = mujoco.MjModel.from_xml_path(str(mjcf_path))
+            builder = MjcfSceneBuilder(Path(mjcf_path).read_text(encoding="utf-8"), config=self.config)
+            builder.ensure_compiler_meshdir(str(Path(mjcf_path).resolve().parent))
+            builder.ensure_world_defaults(add_camera=not bool(world.cameras or has_sensor_camera))
+            builder.attach_world(world)
+            builder.attach_sensors(sensors)
+            self._model = mujoco.MjModel.from_xml_string(builder.emit())
         else:
             # Auto-path: load the URDF directly using MuJoCo's compiler.
             # This keeps robot definitions URDF-first while letting MuJoCo run without a hand-written MJCF.
@@ -91,6 +107,7 @@ class MuJoCoBackend(BackendBase):
                 urdf_model,
                 joint_names=list(description.joint_names),
                 meshdir=str(Path(urdf_path).resolve().parent),
+                scene=scene,
             )
 
             # Step 3: recompile the augmented MJCF into the actual runtime model.
@@ -108,6 +125,16 @@ class MuJoCoBackend(BackendBase):
                 except Exception:
                     pass
         self._data = mujoco.MjData(self._model)
+
+        self._prop_body_ids: dict[str, int] = {}
+        self._prop_qpos_addr: dict[str, int] = {}
+        for prop in world.props:
+            bid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_BODY, prop.name)
+            if bid >= 0:
+                self._prop_body_ids[prop.name] = int(bid)
+            jid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, f"{prop.name}_freejoint")
+            if jid >= 0:
+                self._prop_qpos_addr[prop.name] = int(self._model.jnt_qposadr[jid])
 
         self._joint_ids: list[int] = []
         self._qpos_addr: list[int] = []
@@ -168,6 +195,7 @@ class MuJoCoBackend(BackendBase):
                 fixed_frame=str(rviz_cfg.get("fixed_frame", "world")),
                 publish_hz=float(rviz_cfg.get("publish_hz", 10.0)),
                 namespace="/robodeploy",
+                base_frame=description.ros_base_frame_id(),
             ))
             self._rviz_bridge.start()
             try:
@@ -182,155 +210,32 @@ class MuJoCoBackend(BackendBase):
         *,
         joint_names: list[str],
         meshdir: str | None = None,
+        scene: SceneSpec | None = None,
     ) -> str:
         """Return MJCF XML with `<actuator><position joint=.../></actuator>` for each joint.
 
         MuJoCo can compile URDF directly, but the resulting model typically has zero actuators.
         RoboDeploy's MuJoCo backend expects actuators for JOINT_POS control, so we inject them.
         """
-        # Get last compiled XML by writing to a temp file (MuJoCo API is file-based here).
-        fd, tmp_path = tempfile.mkstemp(prefix="robodeploy_mj_", suffix=".xml")
-        try:
-            Path(tmp_path).unlink(missing_ok=True)
-        except Exception:
-            pass
-        try:
-            mujoco.mj_saveLastXML(str(tmp_path), model)
-            xml_text = Path(tmp_path).read_text(encoding="utf-8")
-        finally:
-            try:
-                Path(tmp_path).unlink(missing_ok=True)
-            except Exception:
-                pass
-
-        root = ET.fromstring(xml_text)
-        if root.tag != "mujoco":
-            # Unexpected, but keep it safe.
-            return xml_text
-
-        # Ensure meshes resolve when recompiling from XML string.
-        # When we call `MjModel.from_xml_string(xml_text)`, MuJoCo has no base directory,
-        # so relative mesh filenames may fail. Point the MJCF compiler at the URDF directory.
-        if meshdir:
-            compiler = root.find("compiler")
-            if compiler is None:
-                compiler = ET.SubElement(root, "compiler")
-            compiler.attrib.setdefault("meshdir", str(meshdir).replace("\\", "/"))
-
-        # Stability: set conservative option defaults for URDF-imported robots.
-        opt = root.find("option")
-        if opt is None:
-            opt = ET.SubElement(root, "option")
-        opt.attrib.setdefault("timestep", str(self.config.get("urdf_timestep", 0.001)))
-        opt.attrib.setdefault("integrator", str(self.config.get("urdf_integrator", "RK4")))
-
-        # Clamp tiny inertials (common for dummy frames) to avoid numeric issues.
-        min_mass = float(self.config.get("urdf_min_mass", 0.01))
-        min_inertia_diag = float(self.config.get("urdf_min_inertia_diag", 1e-4))
-        for body in root.iter("body"):
-            inertial = body.find("inertial")
-            if inertial is None:
-                continue
-            if "mass" in inertial.attrib:
-                try:
-                    m = float(inertial.attrib["mass"])
-                except Exception:
-                    m = min_mass
-                if m < min_mass:
-                    inertial.attrib["mass"] = str(min_mass)
-            if "diaginertia" in inertial.attrib:
-                parts = str(inertial.attrib.get("diaginertia", "")).split()
-                if len(parts) == 3:
-                    new = []
-                    for s in parts:
-                        try:
-                            v = float(s)
-                        except Exception:
-                            v = min_inertia_diag
-                        new.append(str(max(v, min_inertia_diag)))
-                    inertial.attrib["diaginertia"] = " ".join(new)
-
-        # Add joint damping / armature defaults (URDF imports often omit these).
-        damping = float(self.config.get("urdf_joint_damping", 1.0))
-        armature = float(self.config.get("urdf_joint_armature", 0.01))
-        for joint in root.iter("joint"):
-            joint.attrib.setdefault("damping", str(damping))
-            joint.attrib.setdefault("armature", str(armature))
-
-        # Ensure a minimal visible world exists (light + ground + camera).
-        # URDF imports may omit these, leading to a black viewer.
-        worldbody = root.find("worldbody")
-        if worldbody is None:
-            worldbody = ET.SubElement(root, "worldbody")
-
-        has_light = any(child.tag == "light" for child in list(worldbody))
-        if not has_light:
-            ET.SubElement(
-                worldbody,
-                "light",
-                {"pos": "0 0 2.0", "dir": "0 0 -1", "diffuse": "0.8 0.8 0.8", "specular": "0.2 0.2 0.2"},
-            )
-
-        has_floor = any(child.tag == "geom" and child.attrib.get("type") == "plane" for child in list(worldbody))
-        if not has_floor:
-            ET.SubElement(
-                worldbody,
-                "geom",
-                {
-                    "name": "floor",
-                    "type": "plane",
-                    "size": "2 2 0.1",
-                    "rgba": "0.85 0.85 0.85 1",
-                    "pos": "0 0 0",
-                },
-            )
-
-        has_camera = any(child.tag == "camera" for child in list(worldbody))
-        if not has_camera:
-            ET.SubElement(
-                worldbody,
-                "camera",
-                {
-                    "name": "main",
-                    "pos": "0 -1.2 0.6",
-                    "xyaxes": "1 0 0 0 0 1",
-                },
-            )
-
-        # Ensure there is an <actuator> section.
-        actuator = root.find("actuator")
-        if actuator is None:
-            actuator = ET.SubElement(root, "actuator")
-
-        # Collect existing joints that already have an actuator entry.
-        existing: set[str] = set()
-        for elem in list(actuator):
-            j = elem.attrib.get("joint")
-            n = elem.attrib.get("name")
-            if j:
-                existing.add(str(j))
-            if n:
-                existing.add(str(n))
-
-        # Add missing position actuators.
-        # Choose modest gains to avoid instability with placeholder inertials.
-        kp = float(self.config.get("urdf_position_kp", 50.0))
-        for jn in joint_names:
-            if jn in existing:
-                continue
-            # Name the actuator the same as the joint so `mj_name2id(..., ACTUATOR, jname)` works.
-            ET.SubElement(actuator, "position", {"name": str(jn), "joint": str(jn), "kp": str(kp)})
-
-        return ET.tostring(root, encoding="unicode")
+        builder = MjcfSceneBuilder.from_compiled_model(mujoco, model, config=self.config)
+        builder.ensure_compiler_meshdir(meshdir)
+        builder.stabilize_urdf_import()
+        world = scene.to_world() if scene is not None else SceneSpec().to_world()
+        builder.ensure_world_defaults(add_camera=not bool(world.cameras or getattr(self, "_sensors", [])))
+        builder.attach_actuators(joint_names)
+        builder.attach_world(world)
+        builder.attach_sensors(list(getattr(self, "_sensors", [])))
+        return builder.emit()
 
     def _reset_impl(self) -> Observation:
         mujoco = self._mujoco
         mujoco.mj_resetData(self._model, self._data)
         self._set_home_qpos()
         mujoco.mj_forward(self._model, self._data)
-        obs = self._build_obs()
+        obs = self._merge_sensor_data(self._build_obs(), self._sensors)
         if self._rviz_bridge is not None:
-            self._rviz_bridge.publish_robot_state("robot0", obs)
+            self._rviz_bridge.reset()
+            self._rviz_bridge.publish_robot_state(self._robot_id, obs)
             if self._latest_viz_payload is not None:
                 self._rviz_bridge.publish_task_viz(self._latest_viz_payload)
         return obs
@@ -355,15 +260,15 @@ class MuJoCoBackend(BackendBase):
             except Exception:
                 pass
 
-        obs = self._build_obs()
+        obs = self._merge_sensor_data(self._build_obs(), self._sensors)
         if self._rviz_bridge is not None:
-            self._rviz_bridge.publish_robot_state("robot0", obs)
+            self._rviz_bridge.publish_robot_state(self._robot_id, obs)
             if self._latest_viz_payload is not None:
                 self._rviz_bridge.publish_task_viz(self._latest_viz_payload)
         return obs
 
     def _get_obs_impl(self) -> Observation:
-        return self._build_obs()
+        return self._merge_sensor_data(self._build_obs(), self._sensors)
 
     def _close_impl(self) -> None:
         if getattr(self, "_rviz_bridge", None) is not None:
@@ -388,6 +293,49 @@ class MuJoCoBackend(BackendBase):
                 self._viewer.sync()
             except Exception:
                 return
+
+    def get_prop_names(self) -> list[str]:
+        return sorted(self._prop_body_ids)
+
+    def get_prop_pose(self, name: str):
+        if name not in self._prop_body_ids:
+            raise KeyError(f"Unknown MuJoCo prop '{name}'.")
+        bid = self._prop_body_ids[name]
+        return (
+            tuple(float(v) for v in self._data.xpos[bid].copy()),
+            tuple(float(v) for v in self._data.xquat[bid].copy()),
+        )
+
+    def set_prop_pose(self, name: str, position, orientation) -> None:  # noqa: ANN001
+        if name not in self._prop_body_ids:
+            raise KeyError(f"Unknown MuJoCo prop '{name}'.")
+        pos = [float(v) for v in position]
+        quat = [float(v) for v in orientation]
+        if name in self._prop_qpos_addr:
+            addr = self._prop_qpos_addr[name]
+            self._data.qpos[addr : addr + 3] = pos
+            self._data.qpos[addr + 3 : addr + 7] = quat
+        else:
+            bid = self._prop_body_ids[name]
+            self._model.body_pos[bid] = pos
+            self._model.body_quat[bid] = quat
+        self._mujoco.mj_forward(self._model, self._data)
+
+    def teleport_object(self, name: str, position: tuple[float, float, float]) -> None:
+        _, quat = self.get_prop_pose(name)
+        self.set_prop_pose(name, position, quat)
+
+    def set_prop_mass(self, name: str, mass: float) -> None:
+        if name not in self._prop_body_ids:
+            raise KeyError(f"Unknown MuJoCo prop '{name}'.")
+        self._model.body_mass[self._prop_body_ids[name]] = float(mass)
+
+    def set_physics_params(self, **kwargs) -> None:
+        if "gravity" in kwargs:
+            self._model.opt.gravity[:] = [float(v) for v in kwargs["gravity"]]
+        if "friction" in kwargs:
+            scale = float(kwargs["friction"])
+            self._model.geom_friction[:, 0] *= scale
 
     def _set_home_qpos(self) -> None:
         # Set joint qpos for named joints

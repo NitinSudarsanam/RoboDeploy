@@ -29,13 +29,11 @@ def main() -> None:
         task="user_dummy_task",
         policy="user_hold_policy",
         backend_kwargs={
-            "config": {
-                "enable_viewer": False,
-                "allow_actuator_name_fallback": True,
-                "asset_overrides": {
-                    "robot0": {"mjcf": str(mjcf_path)},
-                },
-            }
+            "enable_viewer": False,
+            "allow_actuator_name_fallback": True,
+            "asset_overrides": {
+                "robot0": {"mjcf": str(mjcf_path)},
+            },
         },
     )
 

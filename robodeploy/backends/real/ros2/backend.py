@@ -46,6 +46,7 @@ class ROS2RealBackend(BackendBase):
     """ROS 2 transport backend (multi-robot capable)."""
 
     is_real = True
+    sensor_backend_name = "ros2"
     control_hz = 100.0
     supported_action_spaces = [ActionSpace.JOINT_POS]
 
@@ -131,9 +132,13 @@ class ROS2RealBackend(BackendBase):
         cfg = self._parse_backend_config(self.config)
         self._backend_cfg = cfg
         self._scene = scene
+        self._scene_prop_names = [prop.name for prop in scene.to_world().props]
         self._sim_launcher = None
         self._drivers = {}
         self._sensors_by_robot: dict[str, list[object]] = {}
+        self._robot_sensors_by_robot: dict[str, list["ISensor"]] = {r.robot_id: list(r.sensors) for r in robots}
+        self._shared_sensors = list(shared_sensors)
+        self._sensors = [sensor for sensors in self._robot_sensors_by_robot.values() for sensor in sensors] + self._shared_sensors
         self._latest_obs: dict[str, Observation] = {}
         self._latest_viz_payload: Optional[dict] = None
         self._diagnostics: dict = {"backend": "ros2", "robots": {}, "warnings": []}
@@ -293,6 +298,7 @@ class ROS2RealBackend(BackendBase):
                 fixed_frame=cfg.rviz_fixed_frame,
                 publish_hz=cfg.rviz_publish_hz,
                 namespace="/robodeploy",
+                base_frame=robots[0].description.ros_base_frame_id(),
             )
             self._rviz.start()
             self._rviz.publish_scene(scene)
@@ -305,17 +311,15 @@ class ROS2RealBackend(BackendBase):
 
         # Real reset is “synchronize”; optional homing can be added per driver later.
         out: list[Observation] = []
+        if self._rviz is not None:
+            self._rviz.reset()
         for rid in ids:
             obs = self._drivers[rid].get_obs()
-            for s in self._sensors_by_robot.get(rid, []):
-                try:
-                    sd = s.read()
-                    if getattr(sd, "rgb", None) is not None:
-                        obs.rgb = sd.rgb  # type: ignore[attr-defined]
-                    if getattr(sd, "depth", None) is not None:
-                        obs.depth = sd.depth  # type: ignore[attr-defined]
-                except Exception:
-                    continue
+            obs = self._merge_sensor_data(obs, [
+                *self._robot_sensors_by_robot.get(rid, []),
+                *self._sensors_by_robot.get(rid, []),
+                *self._shared_sensors,
+            ])
             self._latest_obs[rid] = obs
             out.append(obs)
             self._capture_driver_diagnostics(rid)
@@ -343,15 +347,11 @@ class ROS2RealBackend(BackendBase):
         out: list[Observation] = []
         for rid in robot_ids:
             obs = self._drivers[rid].get_obs()
-            for s in self._sensors_by_robot.get(rid, []):
-                try:
-                    sd = s.read()
-                    if getattr(sd, "rgb", None) is not None:
-                        obs.rgb = sd.rgb  # type: ignore[attr-defined]
-                    if getattr(sd, "depth", None) is not None:
-                        obs.depth = sd.depth  # type: ignore[attr-defined]
-                except Exception:
-                    continue
+            obs = self._merge_sensor_data(obs, [
+                *self._robot_sensors_by_robot.get(rid, []),
+                *self._sensors_by_robot.get(rid, []),
+                *self._shared_sensors,
+            ])
             self._latest_obs[rid] = obs
             out.append(obs)
             self._capture_driver_diagnostics(rid)
@@ -365,6 +365,22 @@ class ROS2RealBackend(BackendBase):
         self._require_initialized("get_obs_multi")
         return [self._latest_obs[rid] for rid in self._drivers.keys()]
 
+    def get_prop_names(self) -> list[str]:
+        return list(getattr(self, "_scene_prop_names", []))
+
+    def get_prop_pose(self, name: str):
+        raise NotImplementedError(
+            f"ROS2RealBackend cannot infer pose for physical prop '{name}' without a configured perception source."
+        )
+
+    def set_prop_pose(self, name: str, position, orientation) -> None:  # noqa: ANN001
+        del position, orientation
+        raise NotImplementedError(f"ROS2RealBackend cannot teleport physical prop '{name}'.")
+
+    def teleport_object(self, name: str, position: tuple[float, float, float]) -> None:
+        del position
+        raise NotImplementedError(f"ROS2RealBackend cannot teleport physical prop '{name}'.")
+
     # ------------------------------------------------------------------
     # Optional hook for RoboEnv to provide task-goal visualization payload
     # ------------------------------------------------------------------
@@ -376,7 +392,30 @@ class ROS2RealBackend(BackendBase):
         result = dict(self._diagnostics)
         result["control_hz"] = self.control_hz
         result["robot_count"] = len(getattr(self, "_drivers", {}))
+        result["sensors"] = self._collect_sensor_diagnostics()
+        result.update(self._sensor_diagnostics())
         return result
+
+    def _collect_sensor_diagnostics(self) -> dict:
+        sensor_diag: dict[str, dict] = {}
+        for rid, sensors in getattr(self, "_sensors_by_robot", {}).items():
+            for sensor in sensors:
+                getter = getattr(sensor, "get_diagnostics", None)
+                name = str(getattr(sensor, "name", type(sensor).__name__))
+                if callable(getter):
+                    sensor_diag[f"{rid}/{name}"] = getter()
+        for rid, sensors in getattr(self, "_robot_sensors_by_robot", {}).items():
+            for sensor in sensors:
+                getter = getattr(sensor, "get_diagnostics", None)
+                name = str(getattr(sensor, "name", type(sensor).__name__))
+                if callable(getter):
+                    sensor_diag[f"{rid}/{name}"] = getter()
+        for sensor in getattr(self, "_shared_sensors", []):
+            getter = getattr(sensor, "get_diagnostics", None)
+            name = str(getattr(sensor, "name", type(sensor).__name__))
+            if callable(getter):
+                sensor_diag[f"shared/{name}"] = getter()
+        return sensor_diag
 
     def _capture_driver_diagnostics(self, robot_id: str) -> None:
         driver = self._drivers[robot_id]
@@ -435,4 +474,12 @@ class ROS2RealBackend(BackendBase):
             command_hz=float(config.get("command_hz", 0.0) or 0.0),
             command_hz_by_robot_id=dict(config.get("command_hz_by_robot_id", {}) or {}),
         )
+
+
+@register_backend("ros2_rviz")
+class ROS2RvizBackend(ROS2RealBackend):
+    """ROS2/RViz transport backed by fake or external simulated joint state."""
+
+    is_real = False
+    sensor_backend_name = "ros2_rviz"
 

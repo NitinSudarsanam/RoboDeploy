@@ -40,6 +40,7 @@ class SupportsSceneEdit(Protocol):
     def set_prop_pose(self, name: str, position, orientation) -> None: ...  # noqa: ANN001
     def get_prop_pose(self, name: str): ...  # noqa: ANN001
     def get_prop_names(self) -> list[str]: ...
+    def set_prop_mass(self, name: str, mass: float) -> None: ...
 
 
 @runtime_checkable

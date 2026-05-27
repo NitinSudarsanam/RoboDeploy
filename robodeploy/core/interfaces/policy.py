@@ -130,7 +130,3 @@ class IPolicy(ABC):
     def action_hz(self) -> float:
         """Nominal action production rate used by real-time bridges."""
         return 0.0
-
-    def notify_rejected(self, obs: Observation, action: Action) -> None:
-        """Called when an action is rejected before reaching the backend."""
-        return

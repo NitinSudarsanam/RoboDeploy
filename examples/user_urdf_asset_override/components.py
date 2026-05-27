@@ -58,7 +58,8 @@ class UserDummyTask(TaskBase):
 class UserHoldPolicy(PolicyBase):
     def __init__(self) -> None:
         super().__init__(action_space=ActionSpace.JOINT_POS)
+        self._home_qpos = np.array([0.0, -0.6, 0.0, -1.8, 0.0, 1.2, 0.0], dtype=np.float64)
 
     def get_action(self, obs: Observation) -> Action:
-        return Action(joint_positions=obs.joint_positions)
+        return Action(joint_positions=self._home_qpos.copy(), action_space=ActionSpace.JOINT_POS)
 

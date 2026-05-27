@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from typing import Any
 import numpy as np
 
 _MODULE_DIR = Path(__file__).resolve().parent
+_CALIBRATION_FORMAT = "robodeploy-so101-linear-v1"
 
 
 class MissingCalibrationError(RuntimeError):
@@ -45,6 +47,16 @@ class SO101Calibration:
     def from_dict(cls, data: dict[str, Any]) -> SO101Calibration:
         data = dict(data)
         data.pop("is_template", None)
+        fmt = data.pop("format", None)
+        if fmt is not None and fmt != _CALIBRATION_FORMAT:
+            if str(fmt).lower().startswith("lerobot"):
+                warnings.warn(
+                    "Loading a LeRobot-style SO-101 calibration. Re-save it with RoboDeploy to record the explicit format.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                return cls._from_lerobot_style(data)
+            raise ValueError(f"unsupported SO-101 calibration format: {fmt!r}")
         # Compatibility: accept LeRobot-style MotorCalibration dict:
         # {
         #   "shoulder_pan": {"id": 1, "homing_offset": ..., "range_min": ..., "range_max": ...},
@@ -54,7 +66,19 @@ class SO101Calibration:
         # `zero_ticks` as (half_turn + homing_offset). This keeps the file usable without
         # rewriting existing calibration exports.
         if "joints" not in data and _looks_like_lerobot_calibration(data):
+            warnings.warn(
+                "SO-101 calibration file has no explicit format and looks like LeRobot MotorCalibration; "
+                "loading with compatibility conversion.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
             return cls._from_lerobot_style(data)
+        if fmt is None:
+            warnings.warn(
+                "SO-101 calibration file has no explicit format; assuming RoboDeploy linear calibration v1.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         joints_in = data.get("joints") or []
         if not isinstance(joints_in, list) or len(joints_in) != 6:
             raise ValueError("calibration JSON must contain a 'joints' list of length 6")
@@ -126,6 +150,7 @@ class SO101Calibration:
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
+            "format": _CALIBRATION_FORMAT,
             "joints": [
                 {
                     "name": j.name,

@@ -99,7 +99,10 @@ _CONTROLLERS: dict[str, Callable[[ControllerConfig, dict], IControllerAdapter]] 
 
 def register_controller(controller_type: str):
     def decorator(factory: Callable[[ControllerConfig, dict], IControllerAdapter]):
-        if controller_type in _CONTROLLERS:
+        existing = _CONTROLLERS.get(controller_type)
+        if existing is factory:
+            return factory
+        if existing is not None:
             raise KeyError(f"ROS2 controller '{controller_type}' already registered.")
         _CONTROLLERS[controller_type] = factory
         return factory
@@ -111,4 +114,8 @@ def make_controller(controller_type: str, cfg: ControllerConfig, backend_config_
     if controller_type not in _CONTROLLERS:
         raise KeyError(f"ROS2 controller '{controller_type}' not found. Registered: {list(_CONTROLLERS)}")
     return _CONTROLLERS[controller_type](cfg, backend_config_dict)
+
+
+def unregister_controller(controller_type: str) -> None:
+    _CONTROLLERS.pop(controller_type, None)
 

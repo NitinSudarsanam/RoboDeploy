@@ -29,7 +29,7 @@ class UrdfSpawner:
             raise FileNotFoundError(f"URDF not found: {p}")
         x, y, z = self._cfg.xyz
         rr, rp, ry = self._cfg.rpy
-        subprocess.run(
+        result = subprocess.run(
             [
                 ros2,
                 "run",
@@ -57,4 +57,9 @@ class UrdfSpawner:
             stderr=subprocess.STDOUT,
             text=True,
         )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"ros_gz_sim create failed for '{self._cfg.name}' with code {result.returncode}:\n"
+                f"{result.stdout}"
+            )
 

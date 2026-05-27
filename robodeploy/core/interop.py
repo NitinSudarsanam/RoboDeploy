@@ -1,10 +1,10 @@
 """
-Interoperability module: Zero-copy conversions between JAX, PyTorch, and NumPy.
+Interoperability module: conversions between JAX, PyTorch, and NumPy.
 
-The Zero-Copy flow:
+The conversion flow:
 1. Fetch: Observation starts as JAX (Sim) or NumPy (Real)
 2. Convert: Real-world NumPy is moved to JAX via jnp.array(data)
-3. Bridge: JAX is handed to PyTorch Policy via to_torch() (Zero-copy)
+3. Bridge: JAX is copied to NumPy, then NumPy may share memory with PyTorch
 4. Command: Policy output (Torch) is moved to JAX for safety, then to NumPy for motors
 """
 
@@ -19,13 +19,13 @@ import numpy as np
 
 def to_torch(data) -> "torch.Tensor":
     """
-    Convert JAX or NumPy array to PyTorch tensor (zero-copy when possible).
+    Convert JAX or NumPy array to PyTorch tensor.
     
     Args:
         data: JAX array or NumPy array
         
     Returns:
-        PyTorch tensor with shared memory (zero-copy on GPU)
+        PyTorch tensor. NumPy inputs may share memory; JAX inputs are copied.
     """
     try:
         import torch

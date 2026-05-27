@@ -7,6 +7,8 @@ Edit ``BACKEND`` below (``"mujoco"`` | ``"isaacsim"`` | ``"ros2_rviz"`` | ``"gaz
 Optional: ``--profile default|smooth|fast|demo`` or ``ROBODEPLOY_PROFILE`` — merged with the
 robot description's ``default_behavior_profile()`` and translated per backend so motion
 and control rate stay consistent across simulators.
+Optional: ``--camera`` on MuJoCo adds a generated overhead camera and populates
+``obs.images["overhead_camera"]`` / ``obs.depths["overhead_camera"]``.
 
 Robot model comes from the bundled URDF in ``robodeploy.description.so101``.
 
@@ -193,8 +195,6 @@ def main() -> None:
     BACKEND = _parse_backend_override(str(BACKEND))  # type: ignore[assignment]
 
     local_graph = LOCAL_ROS_GRAPH or ("--fake-sim" in sys.argv) or (BACKEND == "ros2_rviz")
-    if BACKEND == "ros2_rviz" and local_graph:
-        time.sleep(0.2)
 
     desc = SO101Description()
     pr = _parse_profile_override()
@@ -215,10 +215,15 @@ def main() -> None:
         action_hz=float(resolved.control_hz),
         home_qpos=desc.home_qpos,
     )
+    sensors = []
+    if "--camera" in sys.argv and str(BACKEND) == "mujoco":
+        from robodeploy.sensors.camera.sim.mujoco_camera import MuJoCoOverheadCameraRenderer
+
+        sensors.append(MuJoCoOverheadCameraRenderer({"width": 320, "height": 240, "depth": True}))
     robot = Robot(
         robot_id="robot0",
         description=desc,
-        sensors=[],
+        sensors=sensors,
         tasks={
             "demo": RobotTask(
                 task=task,
@@ -309,6 +314,8 @@ def main() -> None:
         raise
 
     print("BACKEND =", BACKEND, "| reset:", info)
+    if "--camera" in sys.argv:
+        print("images:", sorted(obs.images.keys()), "| depths:", sorted(obs.depths.keys()))
 
     if "--print-home" in sys.argv:
         if obs.joint_positions is not None:

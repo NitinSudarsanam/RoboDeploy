@@ -9,7 +9,9 @@ except Exception:
 
 from robodeploy import RoboEnv
 from robodeploy.backends.base import BackendBase
+from robodeploy.bridge import RoboBridge
 from robodeploy.core.robot import Robot, RobotTask
+from robodeploy.core.selectors import WeightedPolicySelector
 from robodeploy.core.spaces import ActionSpace
 from robodeploy.core.types import Action, MultiAgentInfo, ObsSpec, Observation, SceneSpec
 from robodeploy.description.base import RobotDescription
@@ -56,6 +58,7 @@ class DummyBackend(BackendBase):
         super().__init__(config)
         self._latest = {"robot0": make_obs(0.0), "robot1": make_obs(1.0)}
         self._latest_viz_payload = None
+        self.last_actions: dict[str, Action] = {}
 
     def _load(self, description, scene, sensors) -> None:
         del description, scene, sensors
@@ -84,6 +87,7 @@ class DummyBackend(BackendBase):
 
     def step_multi(self, actions: list[Action]) -> list[Observation]:
         for rid, action in zip(self._robot_ids, actions):
+            self.last_actions[rid] = action
             if action.joint_positions is not None:
                 val = float(action.joint_positions[0])
                 self._latest[rid] = make_obs(val)
@@ -99,6 +103,10 @@ class DummyBackend(BackendBase):
         return {"backend": "dummy", "ok": True}
 
 
+class DummyRealBackend(DummyBackend):
+    is_real = True
+
+
 class DummyPolicy(PolicyBase):
     def __init__(self, value: float):
         super().__init__(action_space=ActionSpace.JOINT_POS)
@@ -110,6 +118,37 @@ class DummyPolicy(PolicyBase):
     def get_action(self, obs: Observation) -> Action:
         del obs
         return Action(joint_positions=jnp.asarray([self._value, self._value], dtype=jnp.float32))
+
+
+class BatchPolicy(PolicyBase):
+    def __init__(self):
+        super().__init__(action_space=ActionSpace.JOINT_POS)
+        self.single_calls = 0
+        self.batch_calls = 0
+
+    def get_action(self, obs: Observation) -> Action:
+        self.single_calls += 1
+        value = float(obs.joint_positions[0]) + 1.0
+        return Action(joint_positions=jnp.asarray([value, value], dtype=jnp.float32))
+
+    def get_action_batch(self, obs_batch: list[Observation]) -> list[Action]:
+        self.batch_calls += 1
+        return [self.get_action(obs) for obs in obs_batch]
+
+
+class RejectAwarePolicy(PolicyBase):
+    def __init__(self, value: float, *, action_hz: float = 0.0):
+        super().__init__(action_space=ActionSpace.JOINT_POS, config={"action_hz": action_hz})
+        self._value = value
+        self.rejected = 0
+
+    def get_action(self, obs: Observation) -> Action:
+        del obs
+        return Action(joint_positions=jnp.asarray([self._value, self._value], dtype=jnp.float32))
+
+    def notify_rejected(self, obs: Observation, action: Action) -> None:
+        del obs, action
+        self.rejected += 1
 
 
 class DummyTask(TaskBase):
@@ -177,6 +216,76 @@ class EnvRefactorTests(unittest.TestCase):
         del obs, done
         self.assertEqual(reward, 2.0)
         self.assertIn("task0", info.extra["viz"]["tasks"])
+        self.assertEqual(float(backend.last_actions["robot0"].joint_positions[0]), 2.0)
+        self.assertEqual(float(backend.last_actions["robot1"].joint_positions[0]), 3.0)
+
+    def test_shared_policy_uses_batch_hook_across_robots(self):
+        backend = DummyBackend()
+        shared = BatchPolicy()
+        r0 = Robot(
+            robot_id="robot0",
+            description=DummyRobot(),
+            tasks={"task0": RobotTask(task=DummyTask(), policies={"p": shared}, mode="sequential")},
+        )
+        r1 = Robot(
+            robot_id="robot1",
+            description=DummyRobot(),
+            tasks={"task1": RobotTask(task=DummyTask(), policies={"p": shared}, mode="sequential")},
+        )
+        env = RoboEnv(backend=backend, robots=[r0, r1])
+
+        env.reset()
+        shared.single_calls = 0
+        shared.batch_calls = 0
+        env.step()
+
+        self.assertEqual(shared.batch_calls, 1)
+        self.assertEqual(shared.single_calls, 2)
+        self.assertEqual(float(backend.last_actions["robot0"].joint_positions[0]), 1.0)
+        self.assertEqual(float(backend.last_actions["robot1"].joint_positions[0]), 2.0)
+
+    def test_policy_selector_notifies_rejected_policies(self):
+        backend = DummyBackend()
+        winner = RejectAwarePolicy(2.0)
+        loser = RejectAwarePolicy(1.0)
+        robot = Robot(
+            robot_id="robot0",
+            description=DummyRobot(),
+            tasks={
+                "task0": RobotTask(
+                    task=DummyTask(),
+                    policies={"winner": winner, "loser": loser},
+                    policy_selector=WeightedPolicySelector({"winner": 2.0, "loser": 1.0}),
+                    mode="sequential",
+                )
+            },
+        )
+        env = RoboEnv(backend=backend, robots=[robot])
+
+        env.reset()
+        env.step()
+
+        self.assertEqual(winner.rejected, 0)
+        self.assertEqual(loser.rejected, 1)
+
+    def test_bridge_uses_policy_action_hz_when_lower_than_control_loop(self):
+        backend = DummyRealBackend()
+        robot = Robot(
+            robot_id="robot0",
+            description=DummyRobot(),
+            tasks={
+                "task0": RobotTask(
+                    task=DummyTask(),
+                    policies={"p": RejectAwarePolicy(1.0, action_hz=5.0)},
+                    mode="sequential",
+                )
+            },
+        )
+        env = RoboEnv(backend=backend, robots=[robot])
+        env.reset()
+
+        bridge = RoboBridge(env, env_factory=lambda: env)
+        self.assertEqual(bridge._inference_hz(), 5.0)
 
 
 class BackendConfigMergeTests(unittest.TestCase):

@@ -1,5 +1,7 @@
 # RoboDeploy Architecture
 
+> Status: partially current. The active code now uses `RoboEnv(backend=..., robots=[Robot(...)])`, `RobotTask`, per-robot selectors, explicit multi-backend methods, `WorldSpec`, process-owned `RoboBridge`, and sensor pairing. Older sections that mention `RobotConfig`, `TaskConfig`, `MujocoEngine`, env-wide task lists, or planned bridge internals should be read as historical design notes until this document is fully rewritten.
+
 A modular bridge library for robot learning — swap simulators, robots, and policies
 without changing user code. Primary design goal: **sim-to-real transfer**.
 

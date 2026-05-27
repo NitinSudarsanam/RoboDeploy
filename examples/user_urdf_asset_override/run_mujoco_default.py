@@ -25,7 +25,7 @@ def main() -> None:
         backend="mujoco",
         task="user_dummy_task",
         policy="user_hold_policy",
-        backend_kwargs={"config": {"enable_viewer": False}},
+        backend_kwargs={"enable_viewer": False},
     )
     try:
         _, info = env.reset()

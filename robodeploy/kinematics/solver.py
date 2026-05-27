@@ -23,6 +23,8 @@ supports analytic Jacobians for velocity IK. Install with:
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 
 from robodeploy.core.spaces import AssetFormat
@@ -198,6 +200,7 @@ class KinematicsSolver:
         *,
         steps: int = 50,
         obstacles=None,  # reserved for future OMPL/MoveIt2 integration
+        unsafe_straight_line: bool = False,
     ) -> list[np.ndarray]:
         """Plan a joint-space path from q_start to q_goal.
 
@@ -206,7 +209,19 @@ class KinematicsSolver:
         Arbitrator switch sequencing. Real deployments should replace this with a
         collision-aware planner.
         """
-        del obstacles
+        if obstacles is not None:
+            raise NotImplementedError("Collision-aware planning with obstacles is not implemented.")
+        if not unsafe_straight_line:
+            raise RuntimeError(
+                "KinematicsSolver.plan() only has a straight-line joint-space fallback. "
+                "Pass unsafe_straight_line=True to acknowledge it is not collision-aware."
+            )
+        warnings.warn(
+            "KinematicsSolver.plan() is using a straight-line joint-space fallback; "
+            "it is not collision-aware.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         qs = np.asarray(q_start, dtype=np.float64).reshape(-1)
         qg = np.asarray(q_goal, dtype=np.float64).reshape(-1)
         if qs.shape != qg.shape:

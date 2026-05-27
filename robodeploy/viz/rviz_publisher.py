@@ -9,6 +9,7 @@ RViz publishing without cross-layer imports.
 from __future__ import annotations
 
 import threading
+import warnings
 from typing import Optional
 
 from robodeploy.core.types import Observation, SceneSpec
@@ -17,10 +18,18 @@ from robodeploy.backends.real.ros2.runtime import Ros2Runtime
 
 
 class RvizPublisher:
-    def __init__(self, *, fixed_frame: str, publish_hz: float = 10.0, namespace: str = "/robodeploy") -> None:
+    def __init__(
+        self,
+        *,
+        fixed_frame: str,
+        publish_hz: float = 10.0,
+        namespace: str = "/robodeploy",
+        base_frame: str = "base_link",
+    ) -> None:
         self._fixed_frame = fixed_frame
         self._publish_hz = float(publish_hz)
         self._ns = namespace.rstrip("/")
+        self._base_frame = base_frame
         self._node = None
         self._spin_thread: Optional[threading.Thread] = None
         self._running = False
@@ -55,7 +64,7 @@ class RvizPublisher:
                 t = TransformStamped()
                 t.header.stamp = self._node.get_clock().now().to_msg()
                 t.header.frame_id = "world"
-                t.child_frame_id = "base_link"
+                t.child_frame_id = self._base_frame
                 t.transform.translation.x = 0.0
                 t.transform.translation.y = 0.0
                 t.transform.translation.z = 0.0
@@ -64,8 +73,8 @@ class RvizPublisher:
                 t.transform.rotation.y = 0.0
                 t.transform.rotation.z = 0.0
                 br.sendTransform(t)
-            except Exception:
-                pass
+            except Exception as exc:
+                warnings.warn(f"Failed to publish static RViz transform: {exc}", RuntimeWarning, stacklevel=2)
 
         self._scene_pub = self._node.create_publisher(MarkerArray, self._scene_topic, 10)
         self._task_pub = self._node.create_publisher(MarkerArray, self._task_topic, 10)
@@ -83,6 +92,9 @@ class RvizPublisher:
                 pass
             self._node = None
 
+    def reset(self) -> None:
+        self._trace_by_robot.clear()
+
     def publish_scene(self, scene: SceneSpec) -> None:
         if self._node is None:
             return
@@ -92,8 +104,10 @@ class RvizPublisher:
         ma = MarkerArray()
         stamp = self._node.get_clock().now().to_msg()
 
+        world = scene.to_world() if hasattr(scene, "to_world") else scene
+
         idx = 0
-        for prop in getattr(scene, "props", []) or []:
+        for prop in getattr(world, "props", []) or []:
             m = Marker()
             m.header.frame_id = self._fixed_frame
             m.header.stamp = stamp
@@ -108,17 +122,29 @@ class RvizPublisher:
             m.pose.orientation.x = qx
             m.pose.orientation.y = qy
             m.pose.orientation.z = qz
-            m.scale.x = 0.05
-            m.scale.y = 0.05
-            m.scale.z = 0.05
-            m.color.r = 0.2
-            m.color.g = 0.8
-            m.color.b = 0.2
-            m.color.a = 0.8
+            geom = getattr(prop, "geom", None)
+            size = tuple(getattr(geom, "size", ()) or ())
+            if getattr(geom, "kind", "") == "sphere":
+                m.type = Marker.SPHERE
+            elif getattr(geom, "kind", "") == "cylinder":
+                m.type = Marker.CYLINDER
+            if len(size) >= 3:
+                m.scale.x = float(size[0]) * 2.0
+                m.scale.y = float(size[1]) * 2.0
+                m.scale.z = float(size[2]) * 2.0
+            elif len(size) >= 1:
+                m.scale.x = m.scale.y = m.scale.z = float(size[0]) * 2.0
+            else:
+                m.scale.x = m.scale.y = m.scale.z = 0.05
+            rgba = tuple(getattr(getattr(prop, "material", None), "rgba", (0.2, 0.8, 0.2, 0.8)))
+            m.color.r = float(rgba[0])
+            m.color.g = float(rgba[1])
+            m.color.b = float(rgba[2])
+            m.color.a = float(rgba[3])
             ma.markers.append(m)
 
         # Back-compat: objects
-        for obj in scene.objects:
+        for obj in getattr(scene, "objects", []) or []:
             m = Marker()
             m.header.frame_id = self._fixed_frame
             m.header.stamp = stamp

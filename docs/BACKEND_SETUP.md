@@ -19,21 +19,20 @@ Use whichever Python actually has `mujoco` for MuJoCo-only demos and whichever i
 
 ## Shared: how backend configuration works
 
-Backends receive a single `config: dict` on construction (`BackendClass(**backend_kwargs)`).
+Backends receive keyword arguments and normalize them into a single `config` mapping.
+Prefer flat keyword args:
 
-For convenience, you may pass nested settings:
+```python
+backend_kwargs={"enable_viewer": True}
+```
+
+One-level nesting is still supported for compatibility:
 
 ```python
 backend_kwargs={"config": {"enable_viewer": True}}
 ```
 
-`BackendBase` merges an *additional* inner `"config"` mapping into the top-level backend config (nested keys win on collisions). This supports both common shapes:
-
-```python
-backend_kwargs={"config": {"enable_viewer": True}}
-```
-
-and (less common, but seen in some wrappers):
+Avoid double-nested config. `BackendBase` still flattens it for older examples, but new code should not generate this shape:
 
 ```python
 backend_kwargs={"config": {"config": {"enable_viewer": True}}}
@@ -46,7 +45,7 @@ backend_kwargs={"config": {"config": {"enable_viewer": True}}}
 Use [`backend_for_simulator`](../robodeploy/backends/simulator.py) so the library derives per-robot ROS topics, joint names for `JointState`, RViz defaults, and (for Gazebo) the `sim` launch fragment from each [`RobotDescription`](../robodeploy/description/base.py) (`ros_transport_joint_names`, optional `gazebo_sim_launch_config`, etc.):
 
 - **`"mujoco"`** — `MuJoCoBackend` with viewer + actuator fallback defaults (single robot).
-- **`"ros2_rviz"`** — `ROS2RealBackend` with RViz + joint-position drivers under `/<robot_id>/`.
+- **`"ros2_rviz"`** — `ROS2RvizBackend`, a simulated ROS2/RViz transport with joint-position drivers under `/<robot_id>/`.
 - **`"gazebo"`** — `ROS2GazeboBackend`; requires `RobotDescription.gazebo_sim_launch_config()` and/or `config_overrides["sim"]`.
 
 Optional **`local_ros_graph=True`** (ROS2+RViz only) starts the built-in `dev_fake_sim` joint-position devtool.
@@ -120,11 +119,16 @@ backend_kwargs={"config": {
 }}
 ```
 
-### Assets (MJCF)
+### Assets (MJCF or URDF)
 
-MuJoCo requires an MJCF model path from the robot description (or an override). If you only have URDF, you must supply MJCF (or a conversion pipeline). See error text in `MuJoCoBackend` for override format:
+MuJoCo first looks for an MJCF model path from the robot description or an override. If only a URDF is available, `MuJoCoBackend` can ask MuJoCo to compile it once, inject position actuators, and run the augmented model. This auto path is convenient for bring-up but less explicit than a hand-authored MJCF.
 
-- `asset_overrides` in backend config (documented in backend error messages)
+Useful config keys:
+
+- `asset_overrides`: choose a specific MJCF or URDF per robot.
+- `cache_compiled_mjcf`: cache the generated MJCF text for inspection when MuJoCo exposes it.
+- `compiled_cache_dir`: directory for generated MJCF cache files.
+- `urdf_position_kp`, `urdf_joint_damping`, `urdf_joint_armature`: tuning for the generated actuator and joint defaults.
 
 ### Multi-robot MuJoCo
 
@@ -240,6 +244,10 @@ Under `/robodeploy` (default):
 
 Implementation: [robodeploy/backends/real/ros2/rviz.py](../robodeploy/backends/real/ros2/rviz.py).
 
+TF lookup failures are reported in controller diagnostics instead of silently substituting an identity pose. When TF is unavailable, controllers report `ee_pose_valid=False` and the pose fields contain `NaN` unless you explicitly opt into identity fallback for a local demo.
+
+Scene marker scale follows the same convention as MuJoCo geometry: `GeomSpec.size` is treated as half-extents for boxes and radius/half-height style values for primitive geometry, so RViz marker dimensions are doubled where needed.
+
 ### RViz display recipe
 
 1. Set **Fixed Frame** to your configured `rviz.fixed_frame` (default `world`).
@@ -293,6 +301,8 @@ backend_kwargs={"config": {
   ],
 }}
 ```
+
+RGBD diagnostics include configured topics, hardware/wall timestamps, RGB-depth skew, and the last callback error if one occurred.
 
 ---
 

@@ -25,8 +25,10 @@ Extension point for batching:
 from __future__ import annotations
 
 from abc import abstractmethod
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
+import warnings
 
 from robodeploy.core.interfaces.backend import IBackend
 from robodeploy.core.spaces import AssetFormat
@@ -64,6 +66,8 @@ class BackendBase(IBackend):
         self._episode_count:  int  = 0
         self._step_count:     int  = 0
         self._asset_selections: dict[str, AssetSelection] = {}
+        self._sensor_errors: dict[str, str] = {}
+        self._sensor_error_warned: set[str] = set()
 
         # Set by initialize() — subclasses access these freely
         self._description:    RobotDescription | None = None
@@ -156,9 +160,11 @@ class BackendBase(IBackend):
         self._step_count = 0
         return obs
 
-    # Multi-robot shim: default maps to single-robot reset
     def reset_multi(self, robot_ids: list[str] | None = None) -> list[Observation]:
-        return [self.reset()]
+        del robot_ids
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement reset_multi()."
+        )
 
     def step(self, action: Action) -> Observation:
         """Guard + call _step_impl()."""
@@ -167,24 +173,103 @@ class BackendBase(IBackend):
         self._step_count += 1
         return obs
 
-    # Multi-robot shim: default maps first action to single-robot step
     def step_multi(self, actions: list[Action]) -> list[Observation]:
-        if not actions:
-            raise ValueError("step_multi() requires at least one Action.")
-        return [self.step(actions[0])]
+        del actions
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement step_multi()."
+        )
 
     def get_obs(self) -> Observation:
         """Guard + call _get_obs_impl()."""
         self._require_initialized("get_obs")
         return self._get_obs_impl()
 
-    # Multi-robot shim: default maps to single-robot get_obs
     def get_obs_multi(self) -> list[Observation]:
-        return [self.get_obs()]
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement get_obs_multi()."
+        )
+
+    def _merge_sensor_data(self, obs: Observation, sensors: list["ISensor"]) -> Observation:
+        """Merge sensor reads into a new Observation instance."""
+
+        if not sensors:
+            return obs
+
+        images = dict(getattr(obs, "images", {}) or {})
+        depths = dict(getattr(obs, "depths", {}) or {})
+        rgb = obs.rgb
+        depth = obs.depth
+        ft_force = obs.ft_force
+        ft_torque = obs.ft_torque
+        imu_acceleration = obs.imu_acceleration
+        imu_angular_velocity = obs.imu_angular_velocity
+        timestamp_hw = obs.timestamp_hw
+        timestamp_recv = obs.timestamp_recv
+
+        for sensor in sensors:
+            name = str(getattr(sensor, "name", type(sensor).__name__))
+            try:
+                sd = sensor.read()
+            except Exception as exc:
+                self._record_sensor_error(name, exc)
+                if str(self.config.get("sensor_read_policy", "warn")).lower() == "raise":
+                    raise RuntimeError(f"Sensor '{name}' read failed.") from exc
+                continue
+            self._sensor_errors.pop(name, None)
+            if sd.rgb is not None:
+                images[name] = sd.rgb
+                if rgb is None:
+                    rgb = sd.rgb
+            if sd.depth is not None:
+                depths[name] = sd.depth
+                if depth is None:
+                    depth = sd.depth
+            ft_force = sd.ft_force if sd.ft_force is not None else ft_force
+            ft_torque = sd.ft_torque if sd.ft_torque is not None else ft_torque
+            imu_acceleration = sd.imu_acceleration if sd.imu_acceleration is not None else imu_acceleration
+            imu_angular_velocity = sd.imu_angular_velocity if sd.imu_angular_velocity is not None else imu_angular_velocity
+            timestamp_hw = max(float(timestamp_hw), float(sd.timestamp_hw or 0.0))
+            timestamp_recv = max(float(timestamp_recv), float(sd.timestamp_recv or 0.0))
+
+        return replace(
+            obs,
+            rgb=rgb,
+            depth=depth,
+            images=images,
+            depths=depths,
+            ft_force=ft_force,
+            ft_torque=ft_torque,
+            imu_acceleration=imu_acceleration,
+            imu_angular_velocity=imu_angular_velocity,
+            timestamp_hw=timestamp_hw,
+            timestamp_recv=timestamp_recv,
+        )
+
+    def _record_sensor_error(self, sensor_name: str, exc: Exception) -> None:
+        msg = f"{type(exc).__name__}: {exc}"
+        self._sensor_errors[sensor_name] = msg
+        if sensor_name not in self._sensor_error_warned:
+            warnings.warn(
+                f"{type(self).__name__} skipped sensor '{sensor_name}' after read failure: {msg}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            self._sensor_error_warned.add(sensor_name)
+
+    def _sensor_diagnostics(self) -> dict:
+        return {
+            "sensor_errors": dict(self._sensor_errors),
+            "sensor_count": len(self._sensors),
+        }
 
     def close(self) -> None:
         """Guard + call _close_impl()."""
         if self._initialized:
+            for sensor in list(self._sensors):
+                try:
+                    sensor.close()
+                except Exception:
+                    pass
             self._close_impl()
             self._initialized = False
 

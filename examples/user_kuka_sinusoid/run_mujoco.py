@@ -6,17 +6,6 @@ import sys
 import time
 from pathlib import Path
 
-from robodeploy.backends.simulator import backend_for_simulator
-from robodeploy.core.robot import Robot, RobotTask
-from robodeploy.env import RoboEnv
-
-from examples.user_kuka_sinusoid.components import (  # noqa: E402
-    UserKukaDescription,
-    UserKukaSinusoidTask,
-    UserSinusoidPolicy,
-)
-
-
 def _ensure_repo_on_path() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     if str(repo_root) not in sys.path:
@@ -24,6 +13,16 @@ def _ensure_repo_on_path() -> None:
 
 
 _ensure_repo_on_path()
+
+from robodeploy.backends.simulator import backend_for_simulator  # noqa: E402
+from robodeploy.core.robot import Robot, RobotTask  # noqa: E402
+from robodeploy.env import RoboEnv  # noqa: E402
+
+from examples.user_kuka_sinusoid.components import (  # noqa: E402
+    UserKukaDescription,
+    UserKukaSinusoidTask,
+    UserSinusoidPolicy,
+)
 
 
 def main() -> None:

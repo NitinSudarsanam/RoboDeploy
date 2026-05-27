@@ -44,6 +44,9 @@ def infer_action_space(action) -> ActionSpace:
     This keeps RoboEnv open/closed: new ActionSpace inference logic can be
     updated here without changing the env/router code.
     """
+    explicit = getattr(action, "action_space", None)
+    if explicit is not None:
+        return explicit
     if getattr(action, "joint_positions", None) is not None:
         return ActionSpace.JOINT_POS
     if getattr(action, "joint_velocities", None) is not None:
@@ -51,5 +54,7 @@ def infer_action_space(action) -> ActionSpace:
     if getattr(action, "joint_torques", None) is not None:
         return ActionSpace.JOINT_TORQUE
     if getattr(action, "ee_position", None) is not None:
+        if bool(getattr(action, "is_delta_ee", False)):
+            return ActionSpace.DELTA_EE
         return ActionSpace.CARTESIAN_POSE
     return ActionSpace.JOINT_POS

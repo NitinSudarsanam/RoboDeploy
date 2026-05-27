@@ -25,6 +25,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import TYPE_CHECKING
 
+from robodeploy.backends.capabilities import SupportsSceneEdit
 from robodeploy.core.interfaces.task import ITask
 from robodeploy.core.types           import Action, ObsSpec, Observation, SceneSpec
 
@@ -44,6 +45,7 @@ class TaskBase(ITask):
         self.config:       dict = config or {}
         self._step_count:  int  = 0
         self._episode:     int  = 0
+        self._backend = None
 
     # ------------------------------------------------------------------
     # ITask abstract methods — subclasses must implement
@@ -142,3 +144,32 @@ class TaskBase(ITask):
             f"episode={self._episode}, "
             f"step={self._step_count})"
         )
+
+    # ------------------------------------------------------------------
+    # Backend-aware helpers for object-centric tasks
+    # ------------------------------------------------------------------
+
+    def _bind_backend(self, backend: "IBackend") -> None:
+        self._backend = backend
+
+    @property
+    def backend(self):
+        return self._backend
+
+    def scene_prop(self, name: str):
+        for prop in self.scene_spec().to_world().props:
+            if prop.name == name:
+                return prop
+        return None
+
+    def prop_pose(self, name: str):
+        backend = self._backend
+        getter = getattr(backend, "get_prop_pose", None)
+        if backend is None:
+            return None
+        if isinstance(backend, SupportsSceneEdit) or callable(getter):
+            try:
+                return getter(name)
+            except Exception:
+                return None
+        return None

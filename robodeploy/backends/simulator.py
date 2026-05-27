@@ -199,13 +199,13 @@ def backend_for_simulator(
         return backend
 
     if simulator == "ros2_rviz":
-        from robodeploy.backends.real.ros2.backend import ROS2RealBackend
+        from robodeploy.backends.real.ros2.backend import ROS2RvizBackend
 
         cfg = merge_simulator_config(
             _ros2_auto_config(robots, local_ros_graph=local_ros_graph, resolved=resolved, use_hardware_feetech=False),
             overrides,
         )
-        backend = ROS2RealBackend(config=cfg)
+        backend = ROS2RvizBackend(config=cfg)
         _apply_control_hz(backend, cfg, resolved)
         return backend
 

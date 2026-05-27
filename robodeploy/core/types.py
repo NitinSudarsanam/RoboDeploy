@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
-from robodeploy.core.spaces import AssetFormat
+from robodeploy.core.spaces import ActionSpace, AssetFormat
 
 try:
     import jax.numpy as jnp
@@ -54,6 +54,8 @@ class Observation:
     # --- Vision (populated when ObsSpec.rgb / .depth is True) ---------------
     rgb:                  Optional[jnp.ndarray] = None   # [H, W, 3]  uint8
     depth:                Optional[jnp.ndarray] = None   # [H, W]     float32 metres
+    images:               dict[str, jnp.ndarray] = field(default_factory=dict)
+    depths:               dict[str, jnp.ndarray] = field(default_factory=dict)
 
     # --- Force / torque sensor (populated when hardware present) -----------
     ft_force:             Optional[jnp.ndarray] = None   # [3]  Newtons
@@ -77,6 +79,7 @@ class Observation:
     timestamp:            float = 0.0
     timestamp_hw:         float = 0.0
     timestamp_recv:       float = 0.0
+    language_instruction: Optional[str] = None
 
 
 @dataclass
@@ -103,6 +106,8 @@ class Action:
 
     # Metadata
     timestamp:        float = 0.0                     # seconds
+    action_space:     Optional[ActionSpace] = None
+    is_delta_ee:      bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +144,25 @@ class SensorData:
 # Task specification types
 # ---------------------------------------------------------------------------
 
+@dataclass(frozen=True)
+class SensorMount:
+    """Pose of a sensor relative to a robot link or the world frame."""
+
+    parent_link: Optional[str] = None
+    position: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    orientation: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+
+
+@dataclass(frozen=True)
+class CameraRequest:
+    """Named camera fields requested by a task or policy."""
+
+    name: str
+    width: int = 640
+    height: int = 480
+    fields: tuple[Literal["rgb", "depth"], ...] = ("rgb",)
+
+
 @dataclass
 class ObsSpec:
     """Declares which observation fields a task requires.
@@ -153,6 +177,7 @@ class ObsSpec:
     imu:          bool = False
     image_width:  int  = 128
     image_height: int  = 128
+    cameras:      list[CameraRequest] = field(default_factory=list)
 
 
 @dataclass
@@ -165,6 +190,24 @@ class ObjectSpec:
 
 
 @dataclass
+class GeomSpec:
+    """Procedural or mesh-backed geometry declaration for a scene prop."""
+
+    kind: Literal["box", "cylinder", "sphere", "capsule", "mesh"]
+    size: tuple[float, ...]
+    mesh_path: Optional[str] = None
+
+
+@dataclass
+class MaterialSpec:
+    """Visual and contact material parameters shared across backends."""
+
+    rgba: tuple[float, float, float, float] = (0.8, 0.2, 0.2, 1.0)
+    friction: tuple[float, float, float] = (1.0, 0.005, 0.0001)
+    texture: Optional[str] = None
+
+
+@dataclass
 class PropConfig:
     """A scene prop (object) declaration.
 
@@ -173,11 +216,58 @@ class PropConfig:
     """
 
     name: str
-    asset_path: str
+    asset_path: str = ""
     position: tuple[float, float, float] = (0.0, 0.0, 0.0)
     orientation: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
     mass: float = 0.1
     is_fixed: bool = False
+    geom: Optional[GeomSpec] = None
+    material: MaterialSpec = field(default_factory=MaterialSpec)
+    asset: Optional[dict[AssetFormat, str]] = None
+    parent_link: Optional[str] = None
+    inertia_diag: Optional[tuple[float, float, float]] = None
+
+
+@dataclass
+class LightSpec:
+    """Scene light declaration."""
+
+    position: tuple[float, float, float] = (0.0, 0.0, 2.0)
+    direction: tuple[float, float, float] = (0.0, 0.0, -1.0)
+    diffuse: tuple[float, float, float] = (0.8, 0.8, 0.8)
+    kind: Literal["directional", "point", "spot"] = "directional"
+
+
+@dataclass
+class CameraSpec:
+    """World or link-mounted camera declaration."""
+
+    name: str
+    position: tuple[float, float, float]
+    orientation: tuple[float, float, float, float]
+    fov_deg: float = 60.0
+    resolution: tuple[int, int] = (640, 480)
+    parent_link: Optional[str] = None
+
+
+@dataclass
+class TerrainSpec:
+    """Terrain declaration for simulation backends."""
+
+    kind: Literal["flat", "heightfield"] = "flat"
+    size: tuple[float, float] = (4.0, 4.0)
+    heightfield_path: Optional[str] = None
+
+
+@dataclass
+class WorldSpec:
+    """Backend-loadable world description."""
+
+    props: list[PropConfig] = field(default_factory=list)
+    lights: list[LightSpec] = field(default_factory=list)
+    cameras: list[CameraSpec] = field(default_factory=list)
+    terrain: TerrainSpec = field(default_factory=TerrainSpec)
+    gravity: tuple[float, float, float] = (0.0, 0.0, -9.81)
 
 
 @dataclass
@@ -193,6 +283,38 @@ class SceneSpec:
     objects:      list[ObjectSpec] = field(default_factory=list)
     table_height: float = 0.0       # metres above world origin
     lighting:     str   = "default" # "default" | "random" | "dark"
+    world:        WorldSpec = field(default_factory=WorldSpec)
+
+    def to_world(self) -> WorldSpec:
+        """Return a normalized world view, preserving legacy props/objects."""
+
+        props: list[PropConfig] = []
+        seen: set[str] = set()
+        for prop in [*self.world.props, *self.props]:
+            if prop.name in seen:
+                continue
+            props.append(prop)
+            seen.add(prop.name)
+        for obj in self.objects:
+            if obj.name in seen:
+                continue
+            props.append(
+                PropConfig(
+                    name=obj.name,
+                    asset_path=obj.asset_path,
+                    position=obj.position,
+                    orientation=obj.orientation,
+                )
+            )
+            seen.add(obj.name)
+
+        return WorldSpec(
+            props=props,
+            lights=list(self.world.lights),
+            cameras=list(self.world.cameras),
+            terrain=self.world.terrain,
+            gravity=self.world.gravity,
+        )
 
 
 @dataclass

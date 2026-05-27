@@ -1,76 +1,100 @@
-# 🤖 robodeploy: The Unified Robot Bridge
+# RoboDeploy
 
-**robodeploy** is a high-performance, research-first library designed for the next generation of Embodied AI. It provides a seamless, zero-copy bridge between JAX-accelerated simulations (MuJoCo MJX) and real-world hardware backends.
+RoboDeploy is a small runtime for running the same robot task and policy code against MuJoCo, ROS2/RViz, Gazebo, Isaac Sim, or a real ROS2 hardware adapter. User code usually talks to `RoboEnv`, `Robot`, `RobotTask`, backend factories, and the shared `Observation` / `Action` dataclasses.
 
-## 🌟 Key Features
-- **Robot-Agnostic Sim:** A universal MuJoCo MJX engine. Load any robot by name from the `robots/` library.
-- **Multi-Robot Batching:** Native support for controlling fleets of heterogeneous robots in a single JAX world.
-- **Unified Robot Policy API:** Support for VLAs, Diffusion Policies, and World Models via a single interface.
-- **Zero-Copy Interop:** DLPack-based memory sharing between JAX (Sim/Perception) and PyTorch (Inference).
-- **Hardware Agnostic:** Seamlessly toggle between `sim` and `real` backends using the same high-level code.
+## Install
 
-## 📂 Project Structure
+Editable install from the repo root:
+
+```bash
+python -m pip install -e .
+```
+
+Optional extras are split by use case:
+
+```bash
+python -m pip install -e ".[sim]"
+python -m pip install -e ".[real]"
+python -m pip install -e ".[dev]"
+```
+
+Isaac Sim is handled by NVIDIA's own Python environment, so the `isaacsim` extra is only a marker for now.
+
+## Project layout
+
 ```text
 robodeploy/
-├── core/               # The "Contract": Types, Base Classes, & Interop
-│   ├── types.py        # Shared Observation/Action/Task dataclasses
-│   ├── bridge.py       # Base classes for Robot Backends (Sim/Real)
-│   ├── robot.py        # Universal Robot Policy (Brain) interface
-│   └── interop.py      # JAX <-> Torch zero-copy utilities
-├── robots/             # 🛠️ ADD NEW ROBOTS HERE
-│   ├── franka/         
-│   │   ├── sim/        # panda.xml, meshes, and MJX configs
-│   │   ├── real/       # ROS 2 Jazzy hardware drivers
-│   │   └── config.yaml # Joint limits, home positions, and metadata
-│   └── ur5/            
-│       ├── sim/        
-│       └── real/
-├── backends/           # The "Muscles": Execution layers
-│   ├── sim/            # MujocoEngine (The Robot-Agnostic Physics Runner)
-│   └── real/           # ROS 2 Jazzy hardware glue
-├── sensors/            # The "Eyes": Modular perception
-│   ├── camera/         # MJX-rendered vs. RealSense/ZED
-│   └── tactile/        # Force/Torque abstractions
-├── policies/           # The "Brains": Robot Policy implementations
-│   ├── vla/            # Reactive models (OpenVLA, Pi-0)
-│   ├── world_models/   # Predictive models (Cosmos, Genie)
-│   └── diffusion/      # Generative trajectories
-├── kinematics/         # The "Math": Pinocchio IK & Safety filters
-└── tests/              # CI/CD: Physics sanity & benchmark suite
+  backends/       Simulator and ROS2 hardware adapters
+  core/           Shared types, registries, robot/task arbitration
+  description/    Robot descriptions and bundled URDF/MJCF/mesh assets
+  policies/       Policy interfaces plus placeholder examples
+  sensors/        Camera, RGBD, force/torque, and sensor pairing code
+  tasks/          Task interfaces and manipulation task stubs
+  viz/            RViz marker and trace publishing
+examples/         Runnable demos and structure-only examples
+tests/            Unit, smoke, and hardware-gated tests
 ```
 
-## 🚀 Quick Start
-Install the environment in 60 seconds using `uv`:
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync --extra sim --extra real
-```
+`robodeploy/core/interop.py` copies JAX arrays through NumPy before PyTorch conversion. NumPy-to-PyTorch may share memory through `torch.from_numpy`; the project does not currently provide a DLPack zero-copy path.
 
-## Backend setup (MuJoCo, ROS 2 + RViz, Isaac Sim)
+## Basic use
 
-See [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md) and the curated example index in [examples/README.md](examples/README.md).
-
-## 🛠️ Usage Example: Multi-Robot, Multi-Task
 ```python
-from robodeploy.backends.sim import MujocoEngine
-from robodeploy.tasks import DepthAlignmentTask, RGBSortingTask
+from robodeploy import RoboEnv, Robot, RobotTask
+from robodeploy.backends.simulator import backend_for_simulator
+from robodeploy.description.franka import FrankaDescription
+from robodeploy.tasks.manipulation.pick_place import PickPlaceTask
+from my_project.policies import MyPolicy
 
-# 1. Spawn robots
-sim_engine = MujocoEngine(robots=["franka", "ur5"])
+robot = Robot(
+    robot_id="robot0",
+    description=FrankaDescription(),
+    tasks={
+        "pick": RobotTask(
+            task=PickPlaceTask(),
+            policies={"main": MyPolicy()},
+        )
+    },
+)
 
-# 2. Assign heterogeneous tasks
-tasks = [
-    DepthAlignmentTask(robot_id=0, instruction="Align to the recessed hole"),
-    RGBSortingTask(robot_id=1, instruction="Put red blocks in the blue bin")
-]
+backend = backend_for_simulator("mujoco", robots=[robot])
+env = RoboEnv(backend=backend, robots=[robot])
 
-# 3. The Engine uses the Task list to gather observations
-# It returns a BatchedObservation where fields are padded or masked
-obs = sim_engine.get_obs(tasks=tasks)
-
-# 4. Your Policy (VLA) processes the heterogeneous batch
-actions = brain.plan(obs) 
-
-sim_engine.apply_action(actions)
+obs, info = env.reset()
+obs, reward, done, info = env.step()
+env.close()
 ```
+
+The same `Robot` can be passed to `backend_for_simulator("ros2_rviz", ...)`, `"gazebo"`, `"isaacsim"`, or `"real_world"` when the required optional dependencies and robot-specific configuration are available.
+
+## Configuration and registration
+
+For string-based construction, register project components first:
+
+```python
+from robodeploy import RoboEnv, use
+
+use("my_project.components")
+env = RoboEnv.make(
+    robot="franka",
+    backend="mujoco",
+    task="pick_place",
+    policy="my_policy",
+    backend_kwargs={"enable_viewer": False},
+)
+```
+
+`RoboEnv.from_config()` supports the same registry names and, on this branch, can also accept already constructed robot/backend/task/policy objects for lightweight programmatic setup.
+
+## Backends and examples
+
+Backend setup notes live in [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md). The example index in [examples/README.md](examples/README.md) lists the maintained smoke paths. Useful starting points:
+
+```bash
+python -m examples.user_kuka_sinusoid.run_mujoco
+python -m examples.user_kuka_sinusoid.run_ros2_rviz --fake-sim
+python -m examples.user_kuka_sinusoid.run_switch_simulator
+```
+
+Real SO-101 setup and calibration are documented in [docs/SO101_REAL.md](docs/SO101_REAL.md).
 

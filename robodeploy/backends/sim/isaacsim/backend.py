@@ -6,6 +6,7 @@ machines that do not have Isaac Sim installed.
 
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Optional, Protocol
 from robodeploy.backends.base import BackendBase
 from robodeploy.core.registry import register_backend
 from robodeploy.core.spaces import ActionSpace, AssetFormat
-from robodeploy.core.types import Action, Observation, SceneSpec
+from robodeploy.core.types import Action, Observation, SceneSpec, WorldSpec
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.sensor import ISensor
@@ -47,29 +48,67 @@ class _IsaacHandles:
     omni_kit_commands: Any
 
 
+def _clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value))
+
+
+def _quat_to_xyz_degrees(quat: tuple[float, float, float, float]) -> tuple[float, float, float]:
+    w, x, y, z = (float(v) for v in quat)
+    sinr_cosp = 2.0 * (w * x + y * z)
+    cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+    roll = math.atan2(sinr_cosp, cosr_cosp)
+
+    sinp = 2.0 * (w * y - z * x)
+    pitch = math.asin(_clamp(sinp, -1.0, 1.0))
+
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    yaw = math.atan2(siny_cosp, cosy_cosp)
+    return tuple(math.degrees(v) for v in (roll, pitch, yaw))
+
+
 @register_backend("isaacsim")
 class IsaacSimBackend(BackendBase):
     """Isaac Sim backend (optional; runtime-guarded)."""
 
     is_real = False
+    sensor_backend_name = "isaacsim"
     control_hz = 100.0
     supported_action_spaces = [ActionSpace.JOINT_POS]
 
     def initialize_multi(self, robots, scene: SceneSpec, shared_sensors) -> None:  # type: ignore[override]
         if len(robots) != 1:
             raise NotImplementedError("IsaacSimBackend currently supports a single robot per backend instance.")
-        if shared_sensors:
-            raise NotImplementedError("IsaacSimBackend does not support shared sensors yet.")
         robot = robots[0]
         self._robot_id = str(robot.robot_id or "robot0")
-        super().initialize(robot.description, scene, robot.sensors)
+        super().initialize(robot.description, scene, [*robot.sensors, *shared_sensors])
+
+    def reset_multi(self, robot_ids: list[str] | None = None) -> list[Observation]:
+        del robot_ids
+        return [self.reset()]
+
+    def step_multi(self, actions: list[Action]) -> list[Observation]:
+        if len(actions) != 1:
+            raise ValueError(f"IsaacSimBackend.step_multi expected 1 action, got {len(actions)}.")
+        return [self.step(actions[0])]
+
+    def get_obs_multi(self) -> list[Observation]:
+        return [self.get_obs()]
 
     def _load(self, description: RobotDescription, scene: SceneSpec, sensors: list[ISensor]) -> None:
         self._sensors = list(sensors)
         self._warnings: list[str] = []
+        world = scene.to_world()
+        self._world_spec = world
+        self._scene_prop_poses = {
+            prop.name: (tuple(prop.position), tuple(prop.orientation))
+            for prop in world.props
+        }
+        self._scene_prop_paths: dict[str, str] = {}
         launch = self._parse_launch_config()
         self._simulation_app, self._isaac = self._launch_kit(launch)
         self._world = self._create_world(self._isaac)
+        self._load_world_spec_into_stage(world)
 
         # Prefer USD when available (USD-first), but keep a safe URDF fallback.
         usd_prefer = bool(self.config.get("usd_prefer", True))
@@ -81,7 +120,7 @@ class IsaacSimBackend(BackendBase):
                     if not usd_fallback:
                         raise NotImplementedError("USD import path is not implemented yet in IsaacSimBackend.")
                     self._warnings.append(f"USD asset present ({usd_path}), falling back to URDF import for now.")
-            except Exception:
+            except FileNotFoundError:
                 pass
 
         urdf_path = self._resolve_asset_path(self._robot_id, description, AssetFormat.URDF, variant="sim")
@@ -105,12 +144,53 @@ class IsaacSimBackend(BackendBase):
                 fixed_frame=str(rviz_cfg.get("fixed_frame", "world")),
                 publish_hz=float(rviz_cfg.get("publish_hz", 10.0)),
                 namespace="/robodeploy",
+                base_frame=description.ros_base_frame_id(),
             )
             self._rviz.start()
             try:
                 self._rviz.publish_scene(scene)
             except Exception:
                 self._warnings.append("RViz scene publish failed (non-fatal).")
+
+    def get_prop_names(self) -> list[str]:
+        return sorted(getattr(self, "_scene_prop_poses", {}))
+
+    def get_prop_pose(self, name: str):
+        poses = getattr(self, "_scene_prop_poses", {})
+        if name not in poses:
+            raise KeyError(f"Unknown IsaacSim prop '{name}'.")
+        live = self._read_usd_prop_pose(name)
+        return live if live is not None else poses[name]
+
+    def set_prop_pose(self, name: str, position, orientation) -> None:  # noqa: ANN001
+        poses = getattr(self, "_scene_prop_poses", {})
+        if name not in poses:
+            raise KeyError(f"Unknown IsaacSim prop '{name}'.")
+        poses[name] = (tuple(float(v) for v in position), tuple(float(v) for v in orientation))
+        if not self._write_usd_prop_pose(name, position, orientation):
+            self._warnings.append(
+                f"Prop pose for '{name}' updated in RoboDeploy metadata; Isaac USD prim editing was unavailable."
+            )
+
+    def teleport_object(self, name: str, position: tuple[float, float, float]) -> None:
+        _, quat = self.get_prop_pose(name)
+        self.set_prop_pose(name, position, quat)
+
+    def set_physics_params(self, **kwargs) -> None:
+        if "gravity" in kwargs:
+            gravity = kwargs["gravity"]
+            try:
+                self._world.set_gravity([float(v) for v in gravity])
+            except Exception as exc:
+                raise NotImplementedError(f"IsaacSimBackend could not set gravity: {exc}") from exc
+
+    def get_diagnostics(self) -> dict:
+        return {
+            "backend": "isaacsim",
+            "warnings": list(getattr(self, "_warnings", [])),
+            "props_loaded": sorted(getattr(self, "_scene_prop_paths", {})),
+            **self._sensor_diagnostics(),
+        }
 
     # ------------------------------------------------------------------
     # Launch / world / asset loading (kept modular for future USD path)
@@ -204,6 +284,120 @@ class IsaacSimBackend(BackendBase):
             pass
         return world
 
+    def _load_world_spec_into_stage(self, world: WorldSpec) -> None:
+        try:
+            import omni.usd  # type: ignore[import-not-found]
+            from pxr import Gf, UsdGeom, UsdLux  # type: ignore[import-not-found]
+        except Exception as exc:
+            if world.props or world.cameras or world.lights:
+                self._warnings.append(f"Isaac USD scene loading unavailable: {exc}")
+            return
+
+        stage = omni.usd.get_context().get_stage()
+        if stage is None:
+            self._warnings.append("Isaac USD scene loading skipped: no active stage.")
+            return
+
+        props_scope = "/World/RoboDeployProps"
+        UsdGeom.Xform.Define(stage, props_scope)
+
+        for prop in world.props:
+            path = f"{props_scope}/{prop.name}"
+            geom = prop.geom
+            try:
+                if geom is not None and geom.kind == "sphere":
+                    prim_api = UsdGeom.Sphere.Define(stage, path)
+                    if geom.size:
+                        prim_api.GetRadiusAttr().Set(float(geom.size[0]))
+                elif geom is not None and geom.kind == "cylinder":
+                    prim_api = UsdGeom.Cylinder.Define(stage, path)
+                    if geom.size:
+                        prim_api.GetRadiusAttr().Set(float(geom.size[0]))
+                    if len(geom.size) > 1:
+                        prim_api.GetHeightAttr().Set(float(geom.size[1]) * 2.0)
+                elif geom is not None and geom.kind == "mesh" and geom.mesh_path:
+                    prim = stage.DefinePrim(path, "Xform")
+                    prim.GetReferences().AddReference(str(geom.mesh_path).replace("\\", "/"))
+                    prim_api = UsdGeom.Xformable(prim)
+                else:
+                    prim_api = UsdGeom.Cube.Define(stage, path)
+                    size = tuple(getattr(geom, "size", ()) or (0.05, 0.05, 0.05))
+                    UsdGeom.XformCommonAPI(prim_api).SetScale(Gf.Vec3d(*(float(v) * 2.0 for v in size[:3])))
+                self._set_usd_pose(UsdGeom.XformCommonAPI(prim_api), Gf, prop.position, prop.orientation)
+                self._scene_prop_paths[prop.name] = path
+            except Exception as exc:
+                self._warnings.append(f"Isaac prop '{prop.name}' was not loaded into USD: {exc}")
+
+        for idx, light in enumerate(world.lights):
+            try:
+                path = f"/World/RoboDeployLight_{idx}"
+                if light.kind == "directional":
+                    light_api = UsdLux.DistantLight.Define(stage, path)
+                else:
+                    light_api = UsdLux.SphereLight.Define(stage, path)
+                UsdGeom.XformCommonAPI(light_api).SetTranslate(Gf.Vec3d(*[float(v) for v in light.position]))
+            except Exception as exc:
+                self._warnings.append(f"Isaac light {idx} was not loaded into USD: {exc}")
+
+        for cam in world.cameras:
+            try:
+                cam_api = UsdGeom.Camera.Define(stage, f"/World/{cam.name}")
+                self._set_usd_pose(UsdGeom.XformCommonAPI(cam_api), Gf, cam.position, cam.orientation)
+                cam_api.GetVerticalApertureAttr().Set(float(cam.fov_deg))
+            except Exception as exc:
+                self._warnings.append(f"Isaac camera '{cam.name}' was not loaded into USD: {exc}")
+
+        if world.terrain.kind != "flat":
+            self._warnings.append(f"Isaac terrain kind '{world.terrain.kind}' is not implemented yet.")
+
+    def _read_usd_prop_pose(self, name: str):
+        path = getattr(self, "_scene_prop_paths", {}).get(name)
+        if not path:
+            return None
+        try:
+            import omni.usd  # type: ignore[import-not-found]
+            from pxr import UsdGeom  # type: ignore[import-not-found]
+
+            stage = omni.usd.get_context().get_stage()
+            prim = stage.GetPrimAtPath(path) if stage is not None else None
+            if prim is None or not prim.IsValid():
+                return None
+            xform = UsdGeom.Xformable(prim)
+            matrix = xform.ComputeLocalToWorldTransform(0)
+            tr = matrix.ExtractTranslation()
+            _, quat = self._scene_prop_poses[name]
+            return (tuple(float(v) for v in tr), quat)
+        except Exception:
+            return None
+
+    def _write_usd_prop_pose(self, name: str, position, orientation=None) -> bool:  # noqa: ANN001
+        path = getattr(self, "_scene_prop_paths", {}).get(name)
+        if not path:
+            return False
+        try:
+            import omni.usd  # type: ignore[import-not-found]
+            from pxr import Gf, UsdGeom  # type: ignore[import-not-found]
+
+            stage = omni.usd.get_context().get_stage()
+            prim = stage.GetPrimAtPath(path) if stage is not None else None
+            if prim is None or not prim.IsValid():
+                return False
+            self._set_usd_pose(
+                UsdGeom.XformCommonAPI(prim),
+                Gf,
+                position,
+                orientation,
+            )
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _set_usd_pose(xform_api, Gf, position, orientation=None) -> None:  # noqa: ANN001,N803
+        xform_api.SetTranslate(Gf.Vec3d(*[float(v) for v in position]))
+        if orientation is not None and hasattr(xform_api, "SetRotate"):
+            xform_api.SetRotate(_quat_to_xyz_degrees(tuple(float(v) for v in orientation)))
+
     def _import_urdf_robot(self, isaac: _IsaacHandles, urdf_path: Path) -> str:
         # URDF import config + import.
         try:
@@ -277,10 +471,7 @@ class IsaacSimBackend(BackendBase):
             pass
 
         for _ in range(int(self.config.get("startup_frames", 60))):
-            try:
-                simulation_app.update()
-            except Exception:
-                break
+            simulation_app.update()
 
     def _initialize_articulation(self, robot) -> None:
         try:
@@ -325,8 +516,8 @@ class IsaacSimBackend(BackendBase):
         self._ensure_physics_ready(self._world, self._simulation_app)
         try:
             self._robot.initialize()
-        except Exception:
-            return self._build_obs()
+        except Exception as exc:
+            raise RuntimeError("Failed to reinitialize Isaac articulation during reset.") from exc
         self._sim_time = 0.0
 
         home = getattr(self._description, "home_qpos", None)
@@ -339,9 +530,10 @@ class IsaacSimBackend(BackendBase):
                 self._world.step(render=not headless)
                 self._simulation_app.update()
 
-        obs = self._build_obs()
+        obs = self._merge_sensor_data(self._build_obs(), self._sensors)
         if getattr(self, "_rviz", None) is not None:
-            self._rviz.publish_robot_state("robot0", obs)
+            self._rviz.reset()
+            self._rviz.publish_robot_state(self._robot_id, obs)
             if self._latest_viz_payload is not None:
                 self._rviz.publish_task_viz(self._latest_viz_payload)
         return obs
@@ -360,15 +552,15 @@ class IsaacSimBackend(BackendBase):
             self._simulation_app.update()
             self._sim_time += self._physics_dt
 
-        obs = self._build_obs()
+        obs = self._merge_sensor_data(self._build_obs(), self._sensors)
         if getattr(self, "_rviz", None) is not None:
-            self._rviz.publish_robot_state("robot0", obs)
+            self._rviz.publish_robot_state(self._robot_id, obs)
             if self._latest_viz_payload is not None:
                 self._rviz.publish_task_viz(self._latest_viz_payload)
         return obs
 
     def _get_obs_impl(self) -> Observation:
-        return self._build_obs()
+        return self._merge_sensor_data(self._build_obs(), self._sensors)
 
     def _close_impl(self) -> None:
         if getattr(self, "_rviz", None) is not None:

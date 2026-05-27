@@ -4,6 +4,8 @@
 **Scope**: SOLID/OOP compliance, ARCHITECTURE.md conformance, generality, and Linux Gazebo/RViz/IsaacSim integration strategy.
 **Status**: Repo is ~60–70% aligned with the documented architecture. Several foundational abstractions drift; core real-time machinery is missing; Linux-side sim launchers need hardening.
 
+> Current note: this audit is historical. Since it was written, the branch has added robot-centric `RoboEnv`, explicit multi-backend contracts, `ActionTrajectory`, process-owned `RoboBridge`, sensor diagnostics/pairing, Gazebo launcher hardening, and the `ROS2GazeboBackend` / `ROS2RvizBackend` split. Treat individual findings below as a checklist to verify, not as guaranteed current defects.
+
 ---
 
 ## 1. Executive Summary

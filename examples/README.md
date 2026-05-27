@@ -22,4 +22,4 @@ Kuka sinusoid demos use [`backend_for_simulator`](../robodeploy/backends/simulat
   - [franka_sim_viewer_demo.py](franka_sim_viewer_demo.py)
   - [franka_robomimic_demo.py](franka_robomimic_demo.py)
   - [kuka_pick_demo.py](kuka_pick_demo.py)
-  - [multiagent_configs.py](multiagent_configs.py)
+  - [multiagent_configs.py](multiagent_configs.py) is structure-only. It sketches N:M:K wiring and is not a runnable smoke test.

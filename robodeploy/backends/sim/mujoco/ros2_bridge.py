@@ -17,6 +17,7 @@ class MujocoRos2BridgeConfig:
     fixed_frame: str = "world"
     publish_hz: float = 10.0
     namespace: str = "/robodeploy"
+    base_frame: str = "base_link"
 
 
 class MujocoRos2Bridge:
@@ -27,6 +28,7 @@ class MujocoRos2Bridge:
             fixed_frame=cfg.fixed_frame,
             publish_hz=cfg.publish_hz,
             namespace=cfg.namespace,
+            base_frame=cfg.base_frame,
         )
 
     def start(self) -> None:
@@ -34,6 +36,9 @@ class MujocoRos2Bridge:
 
     def close(self) -> None:
         self._rviz.close()
+
+    def reset(self) -> None:
+        self._rviz.reset()
 
     def publish_scene(self, scene: SceneSpec) -> None:
         self._rviz.publish_scene(scene)

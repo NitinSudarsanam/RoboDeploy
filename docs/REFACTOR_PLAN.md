@@ -1,5 +1,7 @@
 # Robot-Centric Refactor + ROS2 User-Code Cleanup
 
+> Status: historical. The robot-centric API, selectors, ROS2 fake-sim relocation, and most backend contract changes described here have been implemented or superseded by later defect plans. Use `README.md`, `CONTRIBUTING.md`, `docs/BACKEND_SETUP.md`, and the current code as the source of truth before starting new work.
+
 ## Context
 
 RoboDeploy today is **env-centric**: `RoboEnv` owns the arbitrator, the action router, and global lists of `RobotConfig` + `TaskConfig`. `TaskConfig` lists which robots execute it (inverted from the natural mental model) and binds a single policy. Task switching is explicit/sequential — no weight or scoring system exists.

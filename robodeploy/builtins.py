@@ -26,6 +26,12 @@ _BUILTIN_MODULES: tuple[str, ...] = (
     "robodeploy.tasks.manipulation.pick_place",
     "robodeploy.tasks.manipulation.pour",
     "robodeploy.tasks.manipulation.peg_insertion",
+    # Sensors
+    "robodeploy.sensors.camera.sim.mujoco_camera",
+    "robodeploy.sensors.camera.real.realsense",
+    "robodeploy.sensors.ft_sensor.sim.mujoco_ft",
+    "robodeploy.sensors.ft_sensor.real.ati_ft",
+    "robodeploy.backends.real.ros2.sensors.camera_rgbd",
     # Policies
     "robodeploy.policies.learned.robomimic",
     "robodeploy.policies.learned.diffusion",

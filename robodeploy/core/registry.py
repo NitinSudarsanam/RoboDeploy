@@ -38,7 +38,10 @@ use() function exists to make that import explicit and readable.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Type, TypeVar
+
+from robodeploy.core.types import SensorMount
 
 T = TypeVar("T")
 
@@ -48,6 +51,28 @@ _ROBOTS:    dict[str, type] = {}
 _POLICIES:  dict[str, type] = {}
 _TASKS:     dict[str, type] = {}
 _SENSORS:   dict[str, type] = {}
+_SENSOR_PAIRS: dict[str, "SensorPairSpec"] = {}
+
+
+def _put(store: dict[str, type], kind: str, name: str, cls: Type[T]) -> Type[T]:
+    existing = store.get(name)
+    if existing is cls:
+        return cls
+    if existing is not None:
+        raise KeyError(f"{kind} '{name}' is already registered.")
+    store[name] = cls
+    return cls
+
+
+@dataclass
+class SensorPairSpec:
+    """Explicit sim/real pairing for a user-facing sensor name."""
+
+    sim: type | None = None
+    real: type | None = None
+    by_backend: dict[str, type | None] = field(default_factory=dict)
+    default_mount: SensorMount = field(default_factory=SensorMount)
+    default_config: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -64,10 +89,7 @@ def register_backend(name: str):
         KeyError: If a backend with this name is already registered.
     """
     def decorator(cls: Type[T]) -> Type[T]:
-        if name in _BACKENDS:
-            raise KeyError(f"Backend '{name}' is already registered.")
-        _BACKENDS[name] = cls
-        return cls
+        return _put(_BACKENDS, "Backend", name, cls)
     return decorator
 
 
@@ -78,10 +100,7 @@ def register_robot(name: str):
         name: Lookup key (e.g. "franka", "ur5", "spot").
     """
     def decorator(cls: Type[T]) -> Type[T]:
-        if name in _ROBOTS:
-            raise KeyError(f"Robot '{name}' is already registered.")
-        _ROBOTS[name] = cls
-        return cls
+        return _put(_ROBOTS, "Robot", name, cls)
     return decorator
 
 
@@ -92,10 +111,7 @@ def register_policy(name: str):
         name: Lookup key (e.g. "robomimic", "diffusion", "vla", "joint_pd").
     """
     def decorator(cls: Type[T]) -> Type[T]:
-        if name in _POLICIES:
-            raise KeyError(f"Policy '{name}' is already registered.")
-        _POLICIES[name] = cls
-        return cls
+        return _put(_POLICIES, "Policy", name, cls)
     return decorator
 
 
@@ -106,10 +122,7 @@ def register_task(name: str):
         name: Lookup key (e.g. "pick_place", "pour", "peg_insertion").
     """
     def decorator(cls: Type[T]) -> Type[T]:
-        if name in _TASKS:
-            raise KeyError(f"Task '{name}' is already registered.")
-        _TASKS[name] = cls
-        return cls
+        return _put(_TASKS, "Task", name, cls)
     return decorator
 
 
@@ -120,9 +133,40 @@ def register_sensor(name: str):
         name: Lookup key (e.g. "wrist_camera", "realsense", "ati_ft").
     """
     def decorator(cls: Type[T]) -> Type[T]:
-        if name in _SENSORS:
-            raise KeyError(f"Sensor '{name}' is already registered.")
-        _SENSORS[name] = cls
+        return _put(_SENSORS, "Sensor", name, cls)
+    return decorator
+
+
+def register_sensor_pair(
+    name: str,
+    *,
+    sim: type | None = None,
+    real: type | None = None,
+    by_backend: dict[str, type | None] | None = None,
+    default_mount: SensorMount | None = None,
+    default_config: dict | None = None,
+):
+    """Decorator: register explicit sim/real sensor pairing metadata."""
+
+    def decorator(cls: Type[T]) -> Type[T]:
+        spec = SensorPairSpec(
+            sim=sim or getattr(cls, "sim", None),
+            real=real or getattr(cls, "real", None),
+            by_backend=dict(by_backend or getattr(cls, "by_backend", {}) or {}),
+            default_mount=default_mount or getattr(cls, "default_mount", SensorMount()),
+            default_config=dict(default_config or getattr(cls, "default_config", {}) or {}),
+        )
+        if name in _SENSOR_PAIRS:
+            existing = _SENSOR_PAIRS[name]
+            _SENSOR_PAIRS[name] = SensorPairSpec(
+                sim=spec.sim or existing.sim,
+                real=spec.real or existing.real,
+                by_backend={**existing.by_backend, **spec.by_backend},
+                default_mount=spec.default_mount or existing.default_mount,
+                default_config={**existing.default_config, **spec.default_config},
+            )
+        else:
+            _SENSOR_PAIRS[name] = spec
         return cls
     return decorator
 
@@ -190,6 +234,74 @@ def get_sensor(name: str) -> type:
             "Did you forget to import the sensor module?"
         )
     return _SENSORS[name]
+
+
+def get_sensor_pair(name: str) -> SensorPairSpec:
+    """Look up explicit sim/real pairing metadata for a sensor name."""
+
+    if name not in _SENSOR_PAIRS:
+        raise KeyError(
+            f"Sensor pair '{name}' not found. Registered: {list(_SENSOR_PAIRS)}"
+        )
+    return _SENSOR_PAIRS[name]
+
+
+def normalize_sensor_backend_name(name: str | None) -> str | None:
+    if not name:
+        return None
+    raw = str(name).strip().lower()
+    aliases = {
+        "real_world": "ros2",
+        "ros2_gazebo": "gazebo",
+    }
+    return aliases.get(raw, raw)
+
+
+def resolve_sensor_class(name: str, *, is_real: bool, backend_name: str | None = None) -> type:
+    """Resolve a user-facing sensor name to a concrete class.
+
+    The explicit pair registry is preferred. The legacy `_sim` / `_real`
+    suffix convention remains as a fallback during migration.
+    """
+
+    pair = _SENSOR_PAIRS.get(name)
+    normalized_backend = normalize_sensor_backend_name(backend_name)
+    if pair is not None:
+        if normalized_backend is not None and normalized_backend in pair.by_backend:
+            cls = pair.by_backend[normalized_backend]
+            if cls is None:
+                raise KeyError(
+                    f"Sensor pair '{name}' has no implementation for backend '{normalized_backend}'."
+                )
+            return cls
+        cls = pair.real if is_real else pair.sim
+        if cls is None:
+            side = "real" if is_real else "sim"
+            detail = f" backend '{normalized_backend}'" if normalized_backend is not None else ""
+            raise KeyError(f"Sensor pair '{name}' has no {side} implementation for{detail}.")
+        return cls
+    suffix = "_real" if is_real else "_sim"
+    return get_sensor(name + suffix)
+
+
+def unregister_backend(name: str) -> None:
+    _BACKENDS.pop(name, None)
+
+
+def unregister_robot(name: str) -> None:
+    _ROBOTS.pop(name, None)
+
+
+def unregister_policy(name: str) -> None:
+    _POLICIES.pop(name, None)
+
+
+def unregister_task(name: str) -> None:
+    _TASKS.pop(name, None)
+
+
+def unregister_sensor(name: str) -> None:
+    _SENSORS.pop(name, None)
 
 
 # ---------------------------------------------------------------------------
@@ -297,4 +409,5 @@ def list_registered() -> dict[str, list[str]]:
         "policies": sorted(_POLICIES),
         "tasks":    sorted(_TASKS),
         "sensors":  sorted(_SENSORS),
+        "sensor_pairs": sorted(_SENSOR_PAIRS),
     }

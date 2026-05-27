@@ -83,10 +83,13 @@ class SafetyFilter:
         if action_space == ActionSpace.JOINT_TORQUE:
             return self._filter_joint_torque(action)
 
-        # Cartesian spaces: pass through — safety checking is backend-specific
-        # for Cartesian limits (workspace depends on mounting). Backends that
-        # support Cartesian modes should override set_physics_params() with
-        # workspace bounds and check them internally.
+        if action_space in (ActionSpace.CARTESIAN_POSE, ActionSpace.DELTA_EE):
+            self._validate_cartesian(action)
+            raise NotImplementedError(
+                "Cartesian action safety bounds are not configured. "
+                "Use joint-space actions or provide a backend-specific Cartesian safety filter."
+            )
+
         return action
 
     # ------------------------------------------------------------------
@@ -140,6 +143,7 @@ class SafetyFilter:
         raw     = np.asarray(action.joint_velocities, dtype=np.float64)
         self._validate_shape(raw, "joint_velocities")
         clamped = np.clip(raw, -self._vel_max, self._vel_max)
+        self._prev_pos = None
 
         return Action(
             joint_velocities=clamped.astype(np.float32),
@@ -155,6 +159,7 @@ class SafetyFilter:
         raw     = np.asarray(action.joint_torques, dtype=np.float64)
         self._validate_shape(raw, "joint_torques")
         clamped = np.clip(raw, -self._tau_max, self._tau_max)
+        self._prev_pos = None
 
         return Action(
             joint_torques=clamped.astype(np.float32),
@@ -175,3 +180,13 @@ class SafetyFilter:
                 f"Action.{field} has shape {arr.shape}, "
                 f"expected ({self._dof},) for this robot."
             )
+
+    def _validate_cartesian(self, action: Action) -> None:
+        if action.ee_position is not None:
+            pos = np.asarray(action.ee_position, dtype=np.float64)
+            if pos.shape != (3,):
+                raise ValueError(f"Action.ee_position has shape {pos.shape}, expected (3,).")
+        if action.ee_orientation is not None:
+            quat = np.asarray(action.ee_orientation, dtype=np.float64)
+            if quat.shape != (4,):
+                raise ValueError(f"Action.ee_orientation has shape {quat.shape}, expected (4,).")

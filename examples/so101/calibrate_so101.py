@@ -77,54 +77,55 @@ def main() -> None:
     FeetechMotorsBus, Motor, MotorNormMode = _import_bus()
     bus = FeetechMotorsBus(str(args.port), _motors(Motor, MotorNormMode))
     bus.connect(handshake=True)
-    bus.disable_torque()
-    names = [str(i) for i in range(1, 7)]
+    try:
+        bus.disable_torque()
+        names = [str(i) for i in range(1, 7)]
 
-    desc = SO101Description()
-    lim = desc.joint_position_limits
+        desc = SO101Description()
+        lim = desc.joint_position_limits
 
-    print("Move the arm to the FIRST calibration pose (torque off). Default joint radians = all zeros.")
-    input("Press Enter when ready… ")
-    t_a = _read_ticks(bus, names)
-    print("Enter 6 joint positions in radians for this pose [default: 0 0 0 0 0 0]:")
-    q_a = _parse_floats(input(), [0.0] * 6)
+        print("Move the arm to the FIRST calibration pose (torque off). Default joint radians = all zeros.")
+        input("Press Enter when ready… ")
+        t_a = _read_ticks(bus, names)
+        print("Enter 6 joint positions in radians for this pose [default: 0 0 0 0 0 0]:")
+        q_a = _parse_floats(input(), [0.0] * 6)
 
-    print("Move the arm to a SECOND pose (different from the first).")
-    input("Press Enter when ready… ")
-    t_b = _read_ticks(bus, names)
-    print("Enter 6 joint positions in radians for this pose:")
-    q_b = _parse_floats(input(), [0.0] * 6)
+        print("Move the arm to a SECOND pose (different from the first).")
+        input("Press Enter when ready… ")
+        t_b = _read_ticks(bus, names)
+        print("Enter 6 joint positions in radians for this pose:")
+        q_b = _parse_floats(input(), [0.0] * 6)
 
-    joints: list[JointCalibration] = []
-    for i, name in enumerate(names):
-        da = q_a[i]
-        db = q_b[i]
-        t0 = float(t_a[name])
-        t1 = float(t_b[name])
-        denom = db - da
-        if abs(denom) < 1e-6:
-            raise SystemExit(f"joint {name}: second pose must differ in radians from first (dq≈0).")
-        ticks_per_rad = (t1 - t0) / denom
-        zero_ticks = int(round(t0 - da * ticks_per_rad))
-        joints.append(
-            JointCalibration(
-                name=name,
-                motor_id=i + 1,
-                zero_ticks=zero_ticks,
-                ticks_per_rad=float(ticks_per_rad),
-                soft_min_rad=float(lim[i, 0]),
-                soft_max_rad=float(lim[i, 1]),
+        joints: list[JointCalibration] = []
+        for i, name in enumerate(names):
+            da = q_a[i]
+            db = q_b[i]
+            t0 = float(t_a[name])
+            t1 = float(t_b[name])
+            denom = db - da
+            if abs(denom) < 1e-6:
+                raise SystemExit(f"joint {name}: second pose must differ in radians from first (dq≈0).")
+            ticks_per_rad = (t1 - t0) / denom
+            zero_ticks = int(round(t0 - da * ticks_per_rad))
+            joints.append(
+                JointCalibration(
+                    name=name,
+                    motor_id=i + 1,
+                    zero_ticks=zero_ticks,
+                    ticks_per_rad=float(ticks_per_rad),
+                    soft_min_rad=float(lim[i, 0]),
+                    soft_max_rad=float(lim[i, 1]),
+                )
             )
-        )
 
-    cal = SO101Calibration(joints=tuple(joints))
-    out = Path(args.out).expanduser()
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(cal.to_dict(), indent=2), encoding="utf-8")
-    print(f"Wrote {out}")
-    print("Set ROBODEPLOY_SO101_CALIBRATION to this path or pass robot0.calibration_path=... in config_overrides.")
-
-    bus.disconnect(disable_torque=True)
+        cal = SO101Calibration(joints=tuple(joints))
+        out = Path(args.out).expanduser()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(cal.to_dict(), indent=2), encoding="utf-8")
+        print(f"Wrote {out}")
+        print("Set ROBODEPLOY_SO101_CALIBRATION to this path or pass robot0.calibration_path=... in config_overrides.")
+    finally:
+        bus.disconnect(disable_torque=True)
 
 
 if __name__ == "__main__":

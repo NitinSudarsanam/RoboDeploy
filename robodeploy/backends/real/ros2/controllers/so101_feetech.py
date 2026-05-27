@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+import warnings
 from typing import Any, Optional
 
 import numpy as np
@@ -31,16 +32,16 @@ def _import_feetech_stack() -> tuple[type, Any, Any, Any]:
     except ImportError as e_new:
         try:
             from lerobot.common.robot_devices.motors.feetech import FeetechMotorsBus  # type: ignore[no-redef]
-
-            Motor = None  # type: ignore[assignment]
-            MotorNormMode = None  # type: ignore[assignment]
-            MotorCalibration = None  # type: ignore[assignment]
-            return FeetechMotorsBus, Motor, MotorNormMode, MotorCalibration
+            del FeetechMotorsBus
+            raise ImportError(
+                "Detected legacy lerobot Feetech layout, but SO-101 requires the newer "
+                "`lerobot.motors` API with Motor and MotorNormMode. Upgrade lerobot."
+            ) from e_new
         except ImportError as e_old:
             raise ImportError(
                 "SO-101 real adapter requires `lerobot` with Feetech support. Install with:\n"
                 '  pip install "lerobot[feetech]"'
-            ) from e_new
+            ) from e_old
 
 
 def _build_motors_dict(Motor: Any, MotorNormMode: Any) -> dict[str, Any]:
@@ -137,6 +138,8 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
         self._last_write_wall_s = 0.0
         self._diag_trip = ""
         self._hard_stop_msg: str | None = None
+        self._last_tf_error: str | None = None
+        self._warned_tf_failure = False
 
     @property
     def robot_id(self) -> str:
@@ -527,9 +530,20 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
             rot = tf_stamped.transform.rotation
             pos = np.array([tr.x, tr.y, tr.z], dtype=np.float64)
             quat = np.array([rot.w, rot.x, rot.y, rot.z], dtype=np.float64)
+            self._last_tf_error = None
             return pos, quat
-        except Exception:
-            return np.zeros(3, dtype=np.float64), np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+        except Exception as exc:
+            self._last_tf_error = f"{type(exc).__name__}: {exc}"
+            if not self._warned_tf_failure:
+                warnings.warn(
+                    f"TF lookup failed for {self._base_frame()}->{self._ee_frame()}; ee pose is invalid: {self._last_tf_error}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                self._warned_tf_failure = True
+            if bool(self._backend_config.get("allow_identity_tf_fallback", False)):
+                return np.zeros(3, dtype=np.float64), np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+            return np.full(3, np.nan, dtype=np.float64), np.full(4, np.nan, dtype=np.float64)
 
     def _base_frame(self) -> str:
         return str(self._cfg.base_frame)
@@ -592,6 +606,8 @@ class SO101FeetechControllerAdapter(Ros2NodeAdapter):
             "trip": self._diag_trip,
             "hard_stop_msg": self._hard_stop_msg,
             "present_temperature_c": temps,
+            "ee_pose_valid": self._last_tf_error is None,
+            "last_tf_error": self._last_tf_error,
         }
 
 

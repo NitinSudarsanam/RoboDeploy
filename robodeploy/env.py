@@ -8,7 +8,7 @@ and merges the per-robot observations / states into a single EpisodeInfo.
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from robodeploy.backends.capabilities import SupportsDiagnostics, SupportsMultiRobot, SupportsVizSink
 from robodeploy.core.extra_schemas import (
@@ -21,7 +21,14 @@ from robodeploy.core.interfaces.backend import IBackend
 from robodeploy.core.interfaces.policy import IPolicy
 from robodeploy.core.interfaces.sensor import ISensor
 from robodeploy.core.interfaces.task import ITask
-from robodeploy.core.registry import get_backend, get_policy, get_robot, get_sensor, get_task
+from robodeploy.core.registry import (
+    get_backend,
+    get_policy,
+    get_robot,
+    get_task,
+    normalize_sensor_backend_name,
+    resolve_sensor_class,
+)
 from robodeploy.core.robot import Robot, RobotTask
 from robodeploy.core.types import (
     Action,
@@ -64,6 +71,7 @@ class RoboEnv:
         self._initialized = False
         self._on_pause: Optional[Callable[[], None]] = None
         self._on_resume: Optional[Callable[[], None]] = None
+        self._on_intervention: Optional[Callable[[HumanInterventionRequired], None]] = None
 
         primary_robot = self._robots[0]
         primary_task_id = primary_robot.active_task_id
@@ -82,6 +90,7 @@ class RoboEnv:
         task: str,
         policy: Optional[str] = None,
         sensors: Optional[List[str]] = None,
+        sensor_kwargs: Optional[dict] = None,
         backend_kwargs: Optional[dict] = None,
         task_kwargs: Optional[dict] = None,
         policy_kwargs: Optional[dict] = None,
@@ -100,6 +109,7 @@ class RoboEnv:
         description_obj = DescriptionClass()
         backend_obj = BackendClass(**(backend_kwargs or {}))
         task_obj: ITask = TaskClass(**(task_kwargs or {}))
+        sensor_backend_name = cls._sensor_backend_name_for(backend_obj, default_name=backend)
 
         if policy is None:
             raise ValueError(
@@ -111,10 +121,17 @@ class RoboEnv:
 
         sensor_objs: List[ISensor] = []
         if sensors:
-            suffix = "_real" if backend_obj.is_real else "_sim"
             for s in sensors:
-                SensorClass = get_sensor(s + suffix)
-                sensor_objs.append(SensorClass())
+                SensorClass = resolve_sensor_class(
+                    s,
+                    is_real=backend_obj.is_real,
+                    backend_name=sensor_backend_name,
+                )
+                cfg = dict((sensor_kwargs or {}).get(s, {}) or {})
+                try:
+                    sensor_objs.append(SensorClass(config=cfg))
+                except TypeError:
+                    sensor_objs.append(SensorClass())
 
         robot_obj = Robot(
             robot_id=robot_id,
@@ -138,23 +155,161 @@ class RoboEnv:
         cfg: dict,
         obs_pipeline: Optional[ObsPipeline] = None,
     ) -> "RoboEnv":
+        from robodeploy.builtins import import_builtins
         from robodeploy.core.registry import use
 
+        import_builtins()
         cfg = dict(cfg)
         for module_path in cfg.pop("custom_modules", []):
             use(module_path)
 
-        return cls.make(
-            robot=cfg["robot"],
-            backend=cfg["backend"],
-            task=cfg["task"],
-            policy=cfg.get("policy"),
-            sensors=cfg.get("sensors"),
-            backend_kwargs=cfg.get("backend_kwargs"),
-            task_kwargs=cfg.get("task_kwargs"),
-            policy_kwargs=cfg.get("policy_kwargs"),
-            obs_pipeline=obs_pipeline,
+        backend_obj = cls._coerce_backend(cfg["backend"], cfg.get("backend_kwargs"))
+        sensor_backend_name = cls._sensor_backend_name_for(
+            backend_obj,
+            default_name=cfg["backend"] if isinstance(cfg.get("backend"), str) else None,
         )
+        if "robots" in cfg:
+            robots = [cls._coerce_robot_object(item) for item in cfg["robots"]]
+            return cls(
+                backend=backend_obj,
+                robots=robots,
+                shared_sensors=cfg.get("shared_sensors"),
+                max_episode_steps=cfg.get("max_episode_steps"),
+            )
+
+        robot_value = cfg["robot"]
+        if isinstance(robot_value, Robot):
+            return cls(
+                backend=backend_obj,
+                robots=[robot_value],
+                shared_sensors=cfg.get("shared_sensors"),
+                max_episode_steps=cfg.get("max_episode_steps"),
+            )
+
+        description_obj = cls._coerce_description(robot_value, cfg.get("robot_kwargs"))
+        task_obj = cls._coerce_task(cfg["task"], cfg.get("task_kwargs"))
+        policy_value = cfg.get("policy")
+        if policy_value is None:
+            raise ValueError("RoboEnv.from_config() requires a policy unless cfg['robot'] is already a Robot.")
+        policy_obj = cls._coerce_policy(policy_value, cfg.get("policy_kwargs"))
+        sensor_objs = cls._coerce_sensors(
+            cfg.get("sensors"),
+            cfg.get("sensor_kwargs"),
+            is_real=backend_obj.is_real,
+            backend_name=sensor_backend_name,
+        )
+
+        robot_obj = Robot(
+            robot_id=str(cfg.get("robot_id", "robot0")),
+            description=description_obj,
+            tasks={
+                str(cfg.get("task_id", "task0")): RobotTask(
+                    task=task_obj,
+                    policies={str(cfg.get("policy_id", "policy0")): policy_obj},
+                    task_id=str(cfg.get("task_id", "task0")),
+                ),
+            },
+            sensors=sensor_objs,
+            obs_pipeline=obs_pipeline or ObsPipeline(),
+        )
+        return cls(
+            backend=backend_obj,
+            robots=[robot_obj],
+            shared_sensors=cfg.get("shared_sensors"),
+            max_episode_steps=cfg.get("max_episode_steps"),
+        )
+
+    @staticmethod
+    def _instantiate_component(value: Any, kwargs: Optional[dict]) -> Any:
+        if isinstance(value, type):
+            return value(**(kwargs or {}))
+        if callable(value) and not isinstance(value, (str, Robot)):
+            return value(**(kwargs or {}))
+        return value
+
+    @classmethod
+    def _coerce_backend(cls, value: Any, kwargs: Optional[dict]) -> IBackend:
+        if isinstance(value, str):
+            BackendClass = get_backend(value)
+            return BackendClass(**(kwargs or {}))
+        obj = cls._instantiate_component(value, kwargs)
+        if not isinstance(obj, IBackend):
+            raise TypeError("backend must be a registry name, backend class, or IBackend instance.")
+        return obj
+
+    @classmethod
+    def _coerce_description(cls, value: Any, kwargs: Optional[dict]):
+        from robodeploy.description.base import RobotDescription
+
+        if isinstance(value, str):
+            DescriptionClass = get_robot(value)
+            return DescriptionClass(**(kwargs or {}))
+        obj = cls._instantiate_component(value, kwargs)
+        if not isinstance(obj, RobotDescription):
+            raise TypeError("robot must be a registry name, RobotDescription class, RobotDescription instance, or Robot.")
+        return obj
+
+    @classmethod
+    def _coerce_task(cls, value: Any, kwargs: Optional[dict]) -> ITask:
+        if isinstance(value, str):
+            TaskClass = get_task(value)
+            return TaskClass(**(kwargs or {}))
+        obj = cls._instantiate_component(value, kwargs)
+        if not isinstance(obj, ITask):
+            raise TypeError("task must be a registry name, task class, or ITask instance.")
+        return obj
+
+    @classmethod
+    def _coerce_policy(cls, value: Any, kwargs: Optional[dict]) -> IPolicy:
+        if isinstance(value, str):
+            PolicyClass = get_policy(value)
+            return PolicyClass(**(kwargs or {}))
+        obj = cls._instantiate_component(value, kwargs)
+        if not isinstance(obj, IPolicy):
+            raise TypeError("policy must be a registry name, policy class, or IPolicy instance.")
+        return obj
+
+    @staticmethod
+    def _coerce_robot_object(value: Any) -> Robot:
+        if not isinstance(value, Robot):
+            raise TypeError("cfg['robots'] entries must be Robot instances.")
+        return value
+
+    @classmethod
+    def _coerce_sensors(
+        cls,
+        sensors: Optional[List[Any]],
+        sensor_kwargs: Optional[dict],
+        *,
+        is_real: bool,
+        backend_name: str | None = None,
+    ) -> list[ISensor]:
+        out: list[ISensor] = []
+        for item in sensors or []:
+            if isinstance(item, str):
+                SensorClass = resolve_sensor_class(
+                    item,
+                    is_real=is_real,
+                    backend_name=backend_name,
+                )
+                cfg = dict((sensor_kwargs or {}).get(item, {}) or {})
+                try:
+                    out.append(SensorClass(config=cfg))
+                except TypeError:
+                    out.append(SensorClass())
+            else:
+                sensor_obj = cls._instantiate_component(item, None)
+                if not isinstance(sensor_obj, ISensor):
+                    raise TypeError("sensors entries must be registry names, sensor classes, or ISensor instances.")
+                out.append(sensor_obj)
+        return out
+
+    @staticmethod
+    def _sensor_backend_name_for(backend: IBackend, default_name: str | None = None) -> str | None:
+        name = getattr(backend, "sensor_backend_name", None)
+        if name:
+            return normalize_sensor_backend_name(str(name))
+        return normalize_sensor_backend_name(default_name)
 
     # ------------------------------------------------------------------
     # External hooks
@@ -163,6 +318,9 @@ class RoboEnv:
     def set_pause_hooks(self, on_pause: Callable[[], None], on_resume: Callable[[], None]) -> None:
         self._on_pause = on_pause
         self._on_resume = on_resume
+
+    def set_intervention_handler(self, handler: Callable[[HumanInterventionRequired], None]) -> None:
+        self._on_intervention = handler
 
     def switch_task(self, robot_id: str, to_task_id: str, reason: str = "") -> None:
         if robot_id not in self._robot_by_id:
@@ -195,18 +353,28 @@ class RoboEnv:
 
     def _merged_scene(self) -> SceneSpec:
         merged = SceneSpec()
-        seen: set[str] = set()
+        seen_props: dict[str, PropConfig] = {}
+        seen_cameras: set[str] = set()
         for robot in self._robots:
             for robot_task in robot.tasks.values():
                 scene = robot_task.task.scene_spec()
-                for prop in getattr(scene, "props", []) or []:
-                    if prop.name not in seen:
-                        merged.props.append(prop)
-                        seen.add(prop.name)
-                for obj in scene.objects or []:
-                    if obj.name not in seen:
-                        merged.objects.append(obj)
-                        seen.add(obj.name)
+                world = scene.to_world()
+                for prop in world.props:
+                    existing = seen_props.get(prop.name)
+                    if existing is not None:
+                        if existing != prop:
+                            raise ValueError(f"Scene prop name collision for '{prop.name}'.")
+                        continue
+                    merged.world.props.append(prop)
+                    seen_props[prop.name] = prop
+                for light in world.lights:
+                    merged.world.lights.append(light)
+                for camera in world.cameras:
+                    if camera.name not in seen_cameras:
+                        merged.world.cameras.append(camera)
+                        seen_cameras.add(camera.name)
+                merged.world.terrain = world.terrain
+                merged.world.gravity = world.gravity
                 merged.table_height = max(merged.table_height, scene.table_height)
                 if scene.lighting != "default":
                     merged.lighting = scene.lighting
@@ -223,9 +391,13 @@ class RoboEnv:
         self._backend.initialize_multi(self._robots, scene, self._shared_sensors)
 
         for robot in self._robots:
-            for sensor in robot.sensors:
-                sensor.warmup()
-        for sensor in self._shared_sensors:
+            for robot_task in robot.tasks.values():
+                binder = getattr(robot_task.task, "_bind_backend", None)
+                if callable(binder):
+                    binder(self._backend)
+
+        for sensor in self._all_sensors():
+            sensor.initialize(self._backend)
             sensor.warmup()
 
         try:
@@ -241,8 +413,23 @@ class RoboEnv:
 
         self._initialized = True
 
+    def _all_sensors(self) -> list[ISensor]:
+        sensors: list[ISensor] = []
+        seen: set[int] = set()
+        for robot in self._robots:
+            for sensor in robot.sensors:
+                if id(sensor) not in seen:
+                    sensors.append(sensor)
+                    seen.add(id(sensor))
+        for sensor in self._shared_sensors:
+            if id(sensor) not in seen:
+                sensors.append(sensor)
+                seen.add(id(sensor))
+        return sensors
+
     def get_processed_obs_by_robot(self) -> dict[str, Observation]:
         raw_obs_list = self._backend.get_obs_multi()
+        self._require_obs_count(raw_obs_list, "get_obs_multi")
         return {
             robot.robot_id: robot.obs_pipeline.process(raw_obs_list[idx])
             for idx, robot in enumerate(self._robots[: len(raw_obs_list)])
@@ -253,6 +440,7 @@ class RoboEnv:
             self._initialize_components()
 
         raw_obs_list = self._backend.reset_multi()
+        self._require_obs_count(raw_obs_list, "reset_multi")
 
         for robot in self._robots:
             robot.reset()
@@ -266,17 +454,9 @@ class RoboEnv:
         self._episode_info = EpisodeInfo(episode_id=self._episode_info.episode_id + 1)
 
         primary_robot = self._robots[0]
-        primary_obs = obs_by_robot.get(primary_robot.robot_id, raw_obs_list[0] if raw_obs_list else Observation(
-            joint_positions=primary_robot.description.home_qpos,
-            joint_velocities=primary_robot.description.home_qpos * 0.0,
-            joint_torques=primary_robot.description.home_qpos * 0.0,
-            ee_position=primary_robot.description.home_qpos[:3] * 0.0,
-            ee_orientation=primary_robot.description.home_qpos[:4] * 0.0,
-            ee_velocity=primary_robot.description.home_qpos[:3] * 0.0,
-            ee_angular_velocity=primary_robot.description.home_qpos[:3] * 0.0,
-        ))
+        primary_obs = obs_by_robot[primary_robot.robot_id]
 
-        info = EpisodeInfo(episode_id=self._episode_info.episode_id)
+        info = self._episode_info
         info.extra["multi_agent"] = build_multi_agent_extra(
             self._build_multi_info(obs_by_robot, {}, {}, [])
         )
@@ -297,7 +477,10 @@ class RoboEnv:
             if self._on_pause:
                 self._on_pause()
             print(f"\n[RoboEnv] Human intervention required: {e}")
-            input("[RoboEnv] Press Enter when ready to continue...")
+            if self._on_intervention is not None:
+                self._on_intervention(e)
+            else:
+                input("[RoboEnv] Press Enter when ready to continue...")
             if self._on_resume:
                 self._on_resume()
 
@@ -310,6 +493,10 @@ class RoboEnv:
         obs_by_robot = self.get_processed_obs_by_robot()
 
         final_actions: dict[str, Action] = {}
+        prepared_active_ids: dict[str, list[str]] = {}
+        precomputed_task_actions: dict[str, dict[str, Action]] = {}
+        if explicit_actions is None:
+            prepared_active_ids, precomputed_task_actions = self._plan_policy_actions(obs_by_robot)
         for robot in self._robots:
             obs = obs_by_robot[robot.robot_id]
             if explicit_actions is not None and robot.robot_id in explicit_actions:
@@ -319,7 +506,11 @@ class RoboEnv:
                 action_space = first_task.action_space()
                 final_actions[robot.robot_id] = robot.description.get_safety_filter().filter(adapted, action_space)
             else:
-                final_actions[robot.robot_id] = robot.step(obs)
+                final_actions[robot.robot_id] = robot.step(
+                    obs,
+                    active_ids=prepared_active_ids.get(robot.robot_id),
+                    precomputed_task_actions=precomputed_task_actions.get(robot.robot_id),
+                )
 
         ordered_actions = [
             final_actions.get(
@@ -329,6 +520,7 @@ class RoboEnv:
             for robot in self._robots
         ]
         raw_obs_list = self._backend.step_multi(ordered_actions)
+        self._require_obs_count(raw_obs_list, "step_multi")
         next_obs_by_robot = {
             robot.robot_id: robot.obs_pipeline.process(raw_obs_list[idx])
             for idx, robot in enumerate(self._robots[: len(raw_obs_list)])
@@ -361,8 +553,15 @@ class RoboEnv:
         if action is None:
             return None
         if isinstance(action, dict):
+            unknown = set(action) - {robot.robot_id for robot in self._robots}
+            if unknown:
+                raise ValueError(f"Explicit action dict contains unknown robot IDs: {sorted(unknown)}")
             return dict(action)
         if isinstance(action, list):
+            if len(action) != len(self._robots):
+                raise ValueError(
+                    f"Explicit action list length mismatch: got {len(action)}, expected {len(self._robots)}."
+                )
             return {
                 robot.robot_id: action[idx]
                 for idx, robot in enumerate(self._robots[: len(action)])
@@ -370,6 +569,52 @@ class RoboEnv:
         if isinstance(action, Action):
             return {self._robots[0].robot_id: action}
         raise TypeError("RoboEnv.step() expects Action, list[Action], dict[str, Action], or None.")
+
+    def _require_obs_count(self, raw_obs_list: list[Observation], method: str) -> None:
+        if len(raw_obs_list) < len(self._robots):
+            raise RuntimeError(
+                f"Backend {type(self._backend).__name__}.{method} returned {len(raw_obs_list)} "
+                f"observations for {len(self._robots)} robots."
+            )
+
+    def _plan_policy_actions(
+        self,
+        obs_by_robot: dict[str, Observation],
+    ) -> tuple[dict[str, list[str]], dict[str, dict[str, Action]]]:
+        prepared_active_ids: dict[str, list[str]] = {}
+        batch_groups: dict[int, dict[str, object]] = {}
+
+        for robot in self._robots:
+            active_ids = robot.prepare_step(obs_by_robot[robot.robot_id])
+            prepared_active_ids[robot.robot_id] = active_ids
+            for task_id in active_ids:
+                robot_task = robot.tasks[task_id]
+                if not robot_task.supports_batched_inference():
+                    continue
+                policy = robot_task.single_policy()
+                policy_obs = robot_task.policy_observation(obs_by_robot[robot.robot_id])
+                group = batch_groups.setdefault(
+                    id(policy),
+                    {"policy": policy, "items": []},
+                )
+                group["items"].append((robot.robot_id, task_id, policy_obs))
+
+        precomputed_actions: dict[str, dict[str, Action]] = {}
+        for group in batch_groups.values():
+            policy = group["policy"]
+            items = list(group["items"])
+            if len(items) == 1:
+                actions = [policy.get_action(items[0][2])]
+            else:
+                actions = list(policy.get_action_batch([obs for _, _, obs in items]))
+                if len(actions) != len(items):
+                    raise RuntimeError(
+                        f"Policy {type(policy).__name__}.get_action_batch returned {len(actions)} "
+                        f"actions for {len(items)} observations."
+                    )
+            for (robot_id, task_id, _), planned in zip(items, actions):
+                precomputed_actions.setdefault(robot_id, {})[task_id] = planned
+        return prepared_active_ids, precomputed_actions
 
     # ------------------------------------------------------------------
     # Evaluation / metadata

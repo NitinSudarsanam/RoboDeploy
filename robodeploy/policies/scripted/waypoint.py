@@ -8,7 +8,7 @@ from robodeploy.core.types import Action, Observation
 from robodeploy.policies.base import PolicyBase
 
 
-@register_policy("waypoint")
+@register_policy("waypoint_stub")
 class WaypointPolicy(PolicyBase):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(action_space=ActionSpace.JOINT_POS)

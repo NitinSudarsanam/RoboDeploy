@@ -106,9 +106,8 @@ def _copy_meshes_next_to_urdf(canonical_urdf: Path, root: ET.Element, *, out_dir
             continue
         try:
             dst.write_bytes(src.read_bytes())
-        except Exception:
-            # Non-fatal; callers will surface an IO error if a consumer truly needs it.
-            pass
+        except Exception as exc:
+            raise OSError(f"Failed to copy SO-101 mesh '{src}' to '{dst}'.") from exc
 
 
 def resolve_urdf_with_mesh_fallback(canonical_urdf: Path) -> Path:

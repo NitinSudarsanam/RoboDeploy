@@ -50,7 +50,16 @@ from robodeploy.core.selectors import (
     WeightTaskSelector,
 )
 from robodeploy.obs_pipeline import ObsPipeline
-from robodeploy.bridge import RoboBridge
+
+__version__ = "0.1.0"
+
+
+def __getattr__(name: str):
+    if name == "RoboBridge":
+        from robodeploy.bridge import RoboBridge
+
+        return RoboBridge
+    raise AttributeError(name)
 
 __all__ = [
     "RoboEnv",
@@ -64,4 +73,5 @@ __all__ = [
     "WeightedPolicySelector",
     "use",
     "discover",
+    "__version__",
 ]

@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robodeploy"
+version = "0.1.0"
+description = "Backend-agnostic robot learning runtime for simulators and ROS2 hardware."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "RoboDeploy contributors" }
+]
+dependencies = [
+  "numpy"
+]
+
+[project.optional-dependencies]
+sim = [
+  "mujoco"
+]
+real = [
+  "pyrealsense2"
+]
+isaacsim = []
+dev = [
+  "build",
+  "pytest"
+]
+
+[tool.setuptools.packages.find]
+include = ["robodeploy*"]
+
+[tool.setuptools.package-data]
+robodeploy = [
+  "description/**/*.urdf",
+  "description/**/*.mjcf",
+  "description/**/*.xml",
+  "description/**/*.stl",
+  "description/**/*.dae",
+  "description/**/*.obj",
+  "description/**/*.json",
+  "ros2_assets/**/*.rviz",
+  "ros2_assets/**/*.sdf",
+  "ros2_assets/**/*.world",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -5,17 +5,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from robodeploy.backends.sim.isaacsim.backend import IsaacSimBackend
-from robodeploy.core.robot import Robot, RobotTask
-from robodeploy.env import RoboEnv
-
-# Import registers @register_* components and exposes the user classes.
-from examples.user_kuka_sinusoid.components import (  # noqa: E402
-    UserKukaDescription,
-    UserKukaSinusoidTask,
-    UserSinusoidPolicy,
-)
-
 def _ensure_repo_on_path() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     if str(repo_root) not in sys.path:
@@ -24,8 +13,20 @@ def _ensure_repo_on_path() -> None:
 
 _ensure_repo_on_path()
 
+from robodeploy.core.robot import Robot, RobotTask  # noqa: E402
+from robodeploy.env import RoboEnv  # noqa: E402
+
+# Import registers @register_* components and exposes the user classes.
+from examples.user_kuka_sinusoid.components import (  # noqa: E402
+    UserKukaDescription,
+    UserKukaSinusoidTask,
+    UserSinusoidPolicy,
+)
+
 
 def main() -> None:
+    from robodeploy.backends.sim.isaacsim.backend import IsaacSimBackend
+
     backend = IsaacSimBackend(config={
             # Use a lighter experience by default to avoid optional extensions
             # failing to load on some Windows GPU/driver setups.

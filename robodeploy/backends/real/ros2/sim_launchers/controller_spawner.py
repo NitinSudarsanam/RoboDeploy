@@ -30,6 +30,7 @@ class ControllerSpawner:
             if svc in out:
                 return
             time.sleep(0.2)
+        raise TimeoutError(f"controller_manager service not available before timeout: {svc}")
 
     def spawn_all(self) -> None:
         if not self._cfg.controllers:
@@ -39,11 +40,16 @@ class ControllerSpawner:
             return
         self.wait_for_controller_manager()
         for ctl in self._cfg.controllers:
-            subprocess.run(
+            result = subprocess.run(
                 [ros2, "run", "controller_manager", "spawner", str(ctl), "--activate"],
                 check=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
             )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"controller_manager spawner failed for '{ctl}' with code {result.returncode}:\n"
+                    f"{result.stdout}"
+                )
 

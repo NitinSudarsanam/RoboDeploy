@@ -12,6 +12,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import time
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -44,6 +45,7 @@ class GazeboLaunchConfig:
     wait_for_topics: tuple[str, ...] = ()
     # Optional: additional ros_gz_bridge parameter_bridge rules.
     bridge_rules: tuple[str, ...] = ()
+    readiness_timeout_s: float = 15.0
 
 
 class GazeboLauncher:
@@ -54,6 +56,8 @@ class GazeboLauncher:
         self._gz_proc: Optional[subprocess.Popen] = None
         self._bridge: Optional[RosGzBridgeLauncher] = None
         self._rsp: Optional[RobotStatePublisherLauncher] = None
+        self._gz_log_path: Optional[Path] = None
+        self._gz_log_file = None
 
     def start(self) -> None:
         gz = shutil.which("gz")
@@ -71,15 +75,15 @@ class GazeboLauncher:
         args.extend(list(self._cfg.extra_args))
 
         # Use current environment; user is responsible for sourcing ROS/GZ setup.
-        # Avoid PIPE to prevent deadlocks if output isn't drained.
-        self._gz_proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, text=True)
+        self._gz_log_file = tempfile.NamedTemporaryFile(prefix="robodeploy_gazebo_", suffix=".log", delete=False, mode="w", encoding="utf-8")
+        self._gz_log_path = Path(self._gz_log_file.name)
+        self._gz_proc = subprocess.Popen(args, stdout=self._gz_log_file, stderr=subprocess.STDOUT, text=True)
 
         if self._cfg.start_ros_gz_bridge:
             self._bridge = RosGzBridgeLauncher(RosGzBridgeConfig(rules=tuple(self._cfg.bridge_rules)))
             self._bridge.start()
 
-        # Give processes a moment to start.
-        time.sleep(0.5)
+        self._wait_for_process_start(timeout_s=min(2.0, float(self._cfg.readiness_timeout_s)))
 
         # Optional: start robot_state_publisher so TF + RobotModel work in RViz when joint_states exist.
         if self._cfg.robot_urdf:
@@ -108,12 +112,22 @@ class GazeboLauncher:
 
         # Optional: readiness checks (topics exist).
         if self._cfg.wait_for_topics:
-            self._wait_for_topics(self._cfg.wait_for_topics, timeout_s=15.0)
+            self._wait_for_topics(self._cfg.wait_for_topics, timeout_s=float(self._cfg.readiness_timeout_s))
+
+    def _wait_for_process_start(self, *, timeout_s: float) -> None:
+        assert self._gz_proc is not None
+        deadline = time.monotonic() + float(timeout_s)
+        while time.monotonic() < deadline:
+            code = self._gz_proc.poll()
+            if code is not None:
+                log = self._read_gazebo_log()
+                raise RuntimeError(f"Gazebo exited during startup with code {code}.\nLog: {self._gz_log_path}\n{log}")
+            time.sleep(0.1)
 
     def _wait_for_topics(self, topics: tuple[str, ...], *, timeout_s: float) -> None:
         ros2 = shutil.which("ros2")
         if not ros2:
-            return
+            raise FileNotFoundError("Could not find `ros2` on PATH while waiting for Gazebo topics.")
         deadline = time.monotonic() + float(timeout_s)
         remaining = set(str(t) for t in topics)
         while time.monotonic() < deadline and remaining:
@@ -126,7 +140,22 @@ class GazeboLauncher:
                 if t in out:
                     remaining.discard(t)
             time.sleep(0.2)
-        return
+        if remaining:
+            raise TimeoutError(f"Timed out waiting for Gazebo/ROS topics: {sorted(remaining)}")
+
+    def _read_gazebo_log(self) -> str:
+        if self._gz_log_file is not None:
+            try:
+                self._gz_log_file.flush()
+            except Exception:
+                pass
+        if self._gz_log_path is None:
+            return ""
+        try:
+            text = self._gz_log_path.read_text(encoding="utf-8", errors="replace")
+            return text[-4000:]
+        except Exception:
+            return ""
 
     def stop(self) -> None:
         if self._rsp is not None:
@@ -156,4 +185,10 @@ class GazeboLauncher:
                 except Exception:
                     pass
             self._gz_proc = None
+        if self._gz_log_file is not None:
+            try:
+                self._gz_log_file.close()
+            except Exception:
+                pass
+            self._gz_log_file = None
 

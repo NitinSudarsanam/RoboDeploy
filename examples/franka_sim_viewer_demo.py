@@ -1,18 +1,14 @@
-"""Franka Panda oscillation demo (structure-only).
+"""Franka Panda simulation pointer.
 
-Migrated out of `robodeploy.demos` into `examples/` during the architecture
-migration. The legacy oscillation task was removed; the new architecture
-expects tasks under `robodeploy.tasks.*` inheriting `TaskBase` and policies
-under `robodeploy.policies.*` inheriting `PolicyBase`.
-
-This file is a placeholder showing where the updated demo will live.
+The old oscillation demo depended on a removed API. Use the SO-101 or user Kuka
+switch-simulator examples as the currently maintained end-to-end demos.
 """
 
 
 def main() -> None:
-    raise NotImplementedError(
-        "Replace the legacy oscillation demo with a TaskBase/PolicyBase based example."
-    )
+    print("This legacy demo has been retired. Try:")
+    print("  python -m examples.so101.run_switch_simulator --backend mujoco --home")
+    print("  python -m examples.user_kuka_sinusoid.run_mujoco")
 
 
 if __name__ == "__main__":

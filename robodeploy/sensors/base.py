@@ -39,7 +39,7 @@ from abc import abstractmethod
 from typing import Optional, TYPE_CHECKING
 
 from robodeploy.core.interfaces.sensor import ISensor
-from robodeploy.core.types             import SensorData, SensorTimeoutError
+from robodeploy.core.types             import SensorData, SensorMount, SensorTimeoutError
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.backend import IBackend
@@ -48,18 +48,20 @@ if TYPE_CHECKING:
 class SensorBase(ISensor):
     """Shared scaffolding for all sensors. Subclass this, not ISensor directly."""
 
-    def __init__(self, name: str, is_real: bool, config: dict | None = None) -> None:
+    def __init__(self, name: str, is_real: bool, config: dict | None = None, mount: SensorMount | None = None) -> None:
         """
         Args:
             name:    Unique sensor identifier (e.g. "wrist_camera", "ft_sensor").
             is_real: True if this is a real-hardware sensor implementation.
             config:  Sensor-specific configuration (resolution, frame rate, etc.).
+            mount:   Optional link/world pose metadata for sim backends.
         """
         self._name:        str                   = name
         self._is_real:     bool                  = is_real
         self._initialized: bool                  = False
         self._last_data:   Optional[SensorData]  = None   # last-valid cache
         self.config:       dict                  = config or {}
+        self.mount:        SensorMount           = mount or SensorMount()
 
     # ------------------------------------------------------------------
     # ISensor lifecycle

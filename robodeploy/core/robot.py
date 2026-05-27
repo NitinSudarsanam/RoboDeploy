@@ -17,7 +17,7 @@ combined by an optional `task_action_resolver` (parallels the legacy
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable, Mapping, Optional
 
 from robodeploy.action_adapter import ActionAdapter
@@ -71,6 +71,11 @@ class RobotTask:
                 f"RobotTask '{self.task_id or '?'}' has multiple policies but no "
                 "policy_weights or policy_selector."
             )
+        spaces = {policy.action_space for policy in self.policies.values()}
+        if len(spaces) > 1:
+            raise ValueError(
+                f"RobotTask '{self.task_id or '?'}' mixes policy action spaces: {sorted(s.name for s in spaces)}."
+            )
 
     def language_instruction(self) -> str:
         return self.task.language_instruction()
@@ -84,9 +89,10 @@ class RobotTask:
             policy.reset()
 
     def warmup_policies(self, obs: Observation) -> None:
+        policy_obs = self.policy_observation(obs)
         for policy in self.policies.values():
             try:
-                policy.warmup(obs)
+                policy.warmup(policy_obs)
             except Exception as exc:
                 print(f"[RobotTask:{self.task_id}] policy warmup failed: {exc}")
 
@@ -101,22 +107,50 @@ class RobotTask:
     def on_deactivate(self) -> None:
         self.task.on_deactivate()
 
-    def compute_action(self, *, robot_id: str, obs: Observation) -> Action:
+    def compute_action(
+        self,
+        *,
+        robot_id: str,
+        obs: Observation,
+        precomputed_action: Action | None = None,
+    ) -> Action:
         """Run policies for this task and return a single resolved action."""
-        if len(self.policies) == 1:
-            policy_id, policy = next(iter(self.policies.items()))
-            return policy.get_action(obs)
+        policy_obs = self.policy_observation(obs)
+        if len(self.policies) == 1 and self.policy_selector is None:
+            if precomputed_action is not None:
+                return precomputed_action
+            policy = next(iter(self.policies.values()))
+            return policy.get_action(policy_obs)
 
         candidate_actions: dict[str, Action] = {
-            pid: policy.get_action(obs) for pid, policy in self.policies.items()
+            pid: policy.get_action(policy_obs) for pid, policy in self.policies.items()
         }
-        assert self.policy_selector is not None  # validated in __post_init__
-        return self.policy_selector.select(
+        if self.policy_selector is None:
+            raise RuntimeError(f"RobotTask '{self.task_id or '?'}' has no policy selector.")
+        selected = self.policy_selector.select(
             robot_id=robot_id,
             task_id=self.task_id,
-            obs=obs,
+            obs=policy_obs,
             candidate_actions=candidate_actions,
         )
+        selected_pid = next((pid for pid, action in candidate_actions.items() if action is selected), None)
+        if selected_pid is not None:
+            for pid, action in candidate_actions.items():
+                if pid == selected_pid:
+                    continue
+                self.policies[pid].notify_rejected(policy_obs, action)
+        return selected
+
+    def single_policy(self) -> IPolicy:
+        if len(self.policies) != 1:
+            raise RuntimeError(f"RobotTask '{self.task_id or '?'}' does not have exactly one policy.")
+        return next(iter(self.policies.values()))
+
+    def supports_batched_inference(self) -> bool:
+        return len(self.policies) == 1 and self.policy_selector is None
+
+    def policy_observation(self, obs: Observation) -> Observation:
+        return replace(obs, language_instruction=self.task.language_instruction())
 
 
 def _default_obs_pipeline() -> ObsPipeline:
@@ -141,8 +175,8 @@ class Robot:
     action_adapter: ActionAdapter = field(default_factory=_default_action_adapter)
     task_action_resolver: Optional[Callable[[str, list[Action]], Action]] = None
 
-    _arbitrator: LocalArbitrator = field(init=False)
-    _safety: object = field(init=False)
+    _arbitrator: LocalArbitrator | None = field(default=None, init=False)
+    _safety: object | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         if not self.robot_id:
@@ -198,15 +232,33 @@ class Robot:
     # Step path
     # ------------------------------------------------------------------
 
-    def step(self, obs: Observation) -> Action:
-        """Pick active task, query policies, adapt, safety-filter, return."""
+    def prepare_step(self, obs: Observation) -> list[str]:
+        assert self._arbitrator is not None
         self._arbitrator.evaluate(obs)
         active_ids = list(self._arbitrator.active_and_concurrent())
         if not active_ids:
             raise RuntimeError(f"Robot '{self.robot_id}' has no active task.")
+        return active_ids
+
+    def step(
+        self,
+        obs: Observation,
+        *,
+        active_ids: list[str] | None = None,
+        precomputed_task_actions: dict[str, Action] | None = None,
+    ) -> Action:
+        """Pick active task, query policies, adapt, safety-filter, return."""
+        active_ids = active_ids or self.prepare_step(obs)
 
         candidates: list[tuple[str, Action]] = [
-            (tid, self.tasks[tid].compute_action(robot_id=self.robot_id, obs=obs))
+            (
+                tid,
+                self.tasks[tid].compute_action(
+                    robot_id=self.robot_id,
+                    obs=obs,
+                    precomputed_action=(precomputed_task_actions or {}).get(tid),
+                ),
+            )
             for tid in active_ids
         ]
 
@@ -226,6 +278,7 @@ class Robot:
 
         adapted = self.action_adapter.process(action)
         action_space = self.tasks[chosen_task_id].action_space()
+        assert self._safety is not None
         return self._safety.filter(adapted, action_space)
 
     # ------------------------------------------------------------------
@@ -234,9 +287,11 @@ class Robot:
 
     @property
     def active_task_id(self) -> Optional[str]:
+        assert self._arbitrator is not None
         return self._arbitrator.active_task_id
 
     def switch_task(self, to_task_id: str, reason: str = "") -> ArbitrationEvent:
+        assert self._arbitrator is not None
         return self._arbitrator.switch(to_task_id, reason=reason)
 
     def set_task_weights(self, weights: Mapping[str, float]) -> None:
@@ -248,9 +303,11 @@ class Robot:
         self.task_selector.update(weights)
 
     def consume_arbitration_events(self) -> list[ArbitrationEvent]:
+        assert self._arbitrator is not None
         return self._arbitrator.consume_events()
 
     def active_task_ids(self) -> list[str]:
+        assert self._arbitrator is not None
         return list(self._arbitrator.active_and_concurrent())
 
     # ------------------------------------------------------------------

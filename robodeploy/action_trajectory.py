@@ -32,14 +32,14 @@ class ActionTrajectory:
 
     Layout (per robot slot):
       - seq (uint64)
-      - wall_time_s (float64)
+      - monotonic_time_ns (uint64)
       - q (float32[dof_max])
 
     Writer protocol: increment seq to odd, write, increment seq to even.
     Reader protocol: read seq1, if odd retry; read payload; read seq2; accept if equal and even.
     """
 
-    _HDR = struct.Struct("<QdI")  # seq, wall_time_s, dof
+    _HDR = struct.Struct("<QQI")  # seq, monotonic_time_ns, dof
 
     def __init__(self, spec: ActionTrajectorySpec, *, name: Optional[str] = None, create: bool = True) -> None:
         self._spec = spec
@@ -48,6 +48,7 @@ class ActionTrajectory:
         self._slot_bytes = self._HDR.size + 4 * self._dof_max
         self._total_bytes = self._slot_bytes * len(self._robot_ids)
         self._index = {rid: i for i, rid in enumerate(self._robot_ids)}
+        self._last_valid: dict[str, tuple[np.ndarray, float]] = {}
 
         if create:
             self._shm = shared_memory.SharedMemory(create=True, size=self._total_bytes, name=name)
@@ -90,7 +91,8 @@ class ActionTrajectory:
         seq, _, _ = self._HDR.unpack_from(slot, 0)
         seq = int(seq)
         seq_odd = seq + 1 if (seq % 2 == 0) else seq + 2
-        self._HDR.pack_into(slot, 0, seq_odd, float(time.time()), dof)
+        commit_ns = time.monotonic_ns()
+        self._HDR.pack_into(slot, 0, seq_odd, commit_ns, dof)
 
         # Write q (pad with zeros)
         q_pad = np.zeros(self._dof_max, dtype=np.float32)
@@ -98,20 +100,35 @@ class ActionTrajectory:
         slot[self._HDR.size : self._HDR.size + 4 * self._dof_max] = q_pad.tobytes()
 
         # Publish complete (even seq)
-        self._HDR.pack_into(slot, 0, seq_odd + 1, float(time.time()), dof)
+        self._HDR.pack_into(slot, 0, seq_odd + 1, commit_ns, dof)
+        self._last_valid[robot_id] = (q_np.copy(), commit_ns * 1e-9)
 
-    def read_latest_joint_positions(self, robot_id: str) -> tuple[Optional[np.ndarray], float]:
+    def read_latest_joint_positions(self, robot_id: str, *, timeout_s: float = 0.0005) -> tuple[Optional[np.ndarray], float]:
         slot = self._slot_view(robot_id)
+        deadline = time.perf_counter() + float(timeout_s)
         while True:
-            seq1, t1, dof = self._HDR.unpack_from(slot, 0)
+            seq1, _, dof = self._HDR.unpack_from(slot, 0)
             if int(seq1) % 2 == 1:
+                if time.perf_counter() >= deadline:
+                    return self._read_last_valid_or_raise(robot_id)
                 continue
             dof_i = int(dof)
             raw = bytes(slot[self._HDR.size : self._HDR.size + 4 * self._dof_max])
             q_all = np.frombuffer(raw, dtype=np.float32, count=self._dof_max)
-            seq2, t2, dof2 = self._HDR.unpack_from(slot, 0)
+            seq2, t2_ns, dof2 = self._HDR.unpack_from(slot, 0)
             if seq1 == seq2 and int(seq2) % 2 == 0 and dof == dof2:
                 if dof_i <= 0:
-                    return None, float(t2)
-                return q_all[:dof_i].copy(), float(t2)
+                    return None, float(t2_ns) * 1e-9
+                q = q_all[:dof_i].copy()
+                ts = float(t2_ns) * 1e-9
+                self._last_valid[robot_id] = (q.copy(), ts)
+                return q, ts
+            if time.perf_counter() >= deadline:
+                return self._read_last_valid_or_raise(robot_id)
+
+    def _read_last_valid_or_raise(self, robot_id: str) -> tuple[Optional[np.ndarray], float]:
+        if robot_id in self._last_valid:
+            q, ts = self._last_valid[robot_id]
+            return q.copy(), ts
+        raise TimeoutError(f"Timed out reading action trajectory for '{robot_id}' with no last-valid action.")
 

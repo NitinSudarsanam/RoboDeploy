@@ -1,111 +1,40 @@
-"""RoboBridge — decoupled control/inference bridge for real hardware.
-
-Minimal multi-robot bridge that wraps a `RoboEnv`. The high-rate control loop
-runs in a background thread (best-effort; a process-based variant is sketched
-below). Each tick the bridge calls `env.step()` and publishes resulting actions
-to an `ActionBuffer` for the control loop to consume.
-"""
+"""RoboBridge — process-owned control bridge for real hardware."""
 
 from __future__ import annotations
 
 import asyncio
 import multiprocessing as mp
-import threading
+import queue
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from robodeploy.action_trajectory import ActionTrajectory, ActionTrajectorySpec
 from robodeploy.core.types import Action, EpisodeInfo
 from robodeploy.env import RoboEnv
 
 
-class ActionBuffer:
-    """Thread-safe store for the latest per-robot action."""
+EnvFactory = Callable[[], RoboEnv]
 
-    def __init__(self, freeze_actions: Optional[dict[str, Action]] = None) -> None:
-        self._actions: dict[str, Action] = dict(freeze_actions or {})
-        self._lock = threading.Lock()
-        self._write_count = 0
 
-    def put(self, actions: dict[str, Action]) -> None:
-        with self._lock:
-            self._actions.update(actions)
-            self._write_count += 1
+class EStopFlag:
+    """Shared e-stop/pause flag for bridge processes."""
 
-    def get(self) -> dict[str, Action]:
-        with self._lock:
-            return dict(self._actions)
+    def __init__(self, event=None) -> None:  # noqa: ANN001
+        self._event = event or mp.get_context("spawn").Event()
 
     @property
-    def has_action(self) -> bool:
-        with self._lock:
-            return bool(self._actions)
+    def raw(self):  # noqa: ANN201
+        return self._event
+
+    def trigger(self) -> None:
+        self._event.set()
+
+    def clear(self) -> None:
+        self._event.clear()
 
     @property
-    def write_count(self) -> int:
-        with self._lock:
-            return self._write_count
-
-
-class ControlLoop:
-    """High-frequency loop that re-publishes the latest action to the backend."""
-
-    def __init__(
-        self,
-        env: RoboEnv,
-        buffer: ActionBuffer,
-        control_hz: Optional[float] = None,
-        verbose: bool = False,
-    ) -> None:
-        self._env = env
-        self._buffer = buffer
-        self._hz = control_hz or env.backend.control_hz
-        self._period = 1.0 / self._hz
-        self._verbose = verbose
-        self._running = False
-        self._paused = False
-        self._thread: Optional[threading.Thread] = None
-
-    def start(self) -> None:
-        self._running = True
-        self._paused = False
-        self._thread = threading.Thread(target=self._loop, daemon=True, name="ControlLoop")
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._running = False
-        if self._thread:
-            self._thread.join(timeout=2.0)
-
-    def pause(self) -> None:
-        self._paused = True
-        if self._verbose:
-            print("[ControlLoop] Paused.")
-
-    def resume(self) -> None:
-        self._paused = False
-        if self._verbose:
-            print("[ControlLoop] Resumed.")
-
-    def _loop(self) -> None:
-        while self._running:
-            t_start = time.perf_counter()
-
-            if not self._paused:
-                actions_by_robot = self._buffer.get()
-                if actions_by_robot:
-                    ordered_actions = [
-                        actions_by_robot.get(robot.robot_id, Action(joint_positions=robot.description.home_qpos))
-                        for robot in self._env.robots
-                    ]
-                    self._env.backend.step_multi(ordered_actions)
-
-            elapsed = time.perf_counter() - t_start
-            remaining = self._period - elapsed
-            if remaining > 0:
-                time.sleep(remaining)
-            elif self._verbose and not self._paused:
-                print(f"[ControlLoop] {(-remaining) * 1000:.1f}ms overrun")
+    def active(self) -> bool:
+        return bool(self._event.is_set())
 
 
 class RoboBridge:
@@ -119,6 +48,8 @@ class RoboBridge:
     def __init__(
         self,
         env: RoboEnv,
+        *,
+        env_factory: EnvFactory | None = None,
         control_hz: Optional[float] = None,
         verbose: bool = False,
     ) -> None:
@@ -129,61 +60,60 @@ class RoboBridge:
             )
 
         self._env = env
+        self._env_factory = env_factory
         self._verbose = verbose
-        self._buffer = ActionBuffer()
-        self._control = ControlLoop(env, self._buffer, control_hz, verbose)
+        self._control_hz = float(control_hz or env.backend.control_hz)
         self._trajectory: Optional[ActionTrajectory] = None
         self._control_proc: Optional[mp.Process] = None
+        self._obs_queue = None
+        self._estop: EStopFlag | None = None
 
         env.set_pause_hooks(
-            on_pause=self._control.pause,
-            on_resume=self._control.resume,
+            on_pause=self.pause,
+            on_resume=self.resume,
         )
 
     async def __aenter__(self) -> "RoboBridge":
-        self._env.reset()
-        try:
-            self._start_control_process()
-        except Exception as exc:
-            if self._verbose:
-                print(f"[RoboBridge] Process control loop unavailable, falling back to thread loop: {exc}")
-            self._control.start()
+        if self._env_factory is None:
+            raise RuntimeError(
+                "RoboBridge now requires env_factory so the control process can own "
+                "the backend. Pass a top-level picklable callable returning a fresh RoboEnv."
+            )
+        self._start_control_process()
         return self
 
     async def __aexit__(self, *_) -> None:
         self._stop_control_process()
-        self._control.stop()
-        self._env.close()
+        try:
+            self._env.close()
+        except Exception:
+            pass
 
     async def run(self, max_steps: Optional[int] = None) -> EpisodeInfo:
         primary_task = self._env.primary_robot.tasks[self._env.primary_robot.active_task_id]
         limit = max_steps or primary_task.task.max_steps()
         step = 0
-        _, info = self._env.reset()
+        info = EpisodeInfo()
 
         while step < limit:
             t_start = time.perf_counter()
-            obs, reward, done, info = self._env.step()
-            multi_info = info.extra.get("multi_agent")
-            if multi_info is not None:
-                actions = {
-                    rid: state.action
-                    for rid, state in multi_info.robot_states.items()
-                    if state.action is not None
-                }
-                if actions:
-                    if self._trajectory is not None:
-                        for rid, act in actions.items():
-                            self._trajectory.write(rid, act)
-                    else:
-                        self._buffer.put(actions)
+            obs_by_robot = self._read_obs_snapshot(timeout_s=2.0)
+            actions = {
+                robot.robot_id: robot.step(obs_by_robot[robot.robot_id])
+                for robot in self._env.robots
+                if robot.robot_id in obs_by_robot
+            }
+            for rid, act in actions.items():
+                assert self._trajectory is not None
+                self._trajectory.write(rid, act)
 
             step += 1
-            if done or step >= limit:
+            if step >= limit:
                 break
 
+            target_hz = self._inference_hz()
             elapsed = time.perf_counter() - t_start
-            remaining = (1.0 / self._control._hz) - elapsed
+            remaining = (1.0 / target_hz) - elapsed
             if remaining > 0:
                 await asyncio.sleep(remaining)
             elif self._verbose:
@@ -191,13 +121,34 @@ class RoboBridge:
 
         return info
 
-    @property
-    def control_hz(self) -> float:
-        return self._control._hz
+    def pause(self) -> None:
+        if self._estop is not None:
+            self._estop.trigger()
+
+    def resume(self) -> None:
+        if self._estop is not None:
+            self._estop.clear()
 
     @property
-    def buffer(self) -> ActionBuffer:
-        return self._buffer
+    def control_hz(self) -> float:
+        return self._control_hz
+
+    @property
+    def estop_active(self) -> bool:
+        return bool(self._estop and self._estop.active)
+
+    def _inference_hz(self) -> float:
+        requested = 0.0
+        for robot in self._env.robots:
+            for task_id in robot.active_task_ids():
+                robot_task = robot.tasks.get(task_id)
+                if robot_task is None:
+                    continue
+                for policy in robot_task.policies.values():
+                    requested = max(requested, float(getattr(policy, "action_hz", 0.0) or 0.0))
+        if requested <= 0.0:
+            return self.control_hz
+        return min(self.control_hz, requested)
 
     # ------------------------------------------------------------------
     # Process-based control loop (best-effort)
@@ -210,9 +161,19 @@ class RoboBridge:
         )
         self._trajectory = ActionTrajectory(spec)
         ctx = mp.get_context("spawn")
+        self._obs_queue = ctx.Queue(maxsize=1)
+        self._estop = EStopFlag(ctx.Event())
         self._control_proc = ctx.Process(
             target=_control_process_entry,
-            args=(self._trajectory.name, spec, float(self._control._hz), self._verbose),
+            args=(
+                self._env_factory,
+                self._trajectory.name,
+                spec,
+                float(self.control_hz),
+                self._obs_queue,
+                self._estop.raw,
+                self._verbose,
+            ),
             daemon=True,
             name="RoboBridgeControlLoop",
         )
@@ -236,22 +197,78 @@ class RoboBridge:
             except Exception:
                 pass
             self._trajectory = None
+        self._obs_queue = None
+
+    def _read_obs_snapshot(self, *, timeout_s: float) -> dict:
+        if self._obs_queue is None:
+            raise RuntimeError("RoboBridge control process has not been started.")
+        try:
+            msg = self._obs_queue.get(timeout=timeout_s)
+        except queue.Empty as exc:
+            if self._estop is not None:
+                self._estop.trigger()
+            raise TimeoutError("Timed out waiting for control-process observation snapshot.") from exc
+        if isinstance(msg, dict) and "error" in msg:
+            raise RuntimeError(str(msg["error"]))
+        return dict(msg)
 
 
-def _control_process_entry(shm_name: str, spec: ActionTrajectorySpec, hz: float, verbose: bool) -> None:
+def _control_process_entry(
+    env_factory: EnvFactory,
+    shm_name: str,
+    spec: ActionTrajectorySpec,
+    hz: float,
+    obs_queue,
+    estop_event,
+    verbose: bool,
+) -> None:
     traj = ActionTrajectory(spec, name=shm_name, create=False)
     period = 1.0 / max(1.0, float(hz))
+    env = None
     try:
+        env = env_factory()
+        env.reset()
+        _publish_obs_snapshot(env, obs_queue)
         while True:
             t0 = time.perf_counter()
-            for rid in spec.robot_ids:
-                _q, _ = traj.read_latest_joint_positions(rid)
-                del _q
+            actions: list[Action] = []
+            for robot in env.robots:
+                if estop_event.is_set():
+                    actions.append(Action(joint_positions=robot.description.home_qpos))
+                    continue
+                try:
+                    q, _ = traj.read_latest_joint_positions(robot.robot_id)
+                except TimeoutError:
+                    estop_event.set()
+                    q = robot.description.home_qpos
+                actions.append(Action(joint_positions=q if q is not None else robot.description.home_qpos))
+            env.backend.step_multi(actions)
+            _publish_obs_snapshot(env, obs_queue)
             dt = time.perf_counter() - t0
             rem = period - dt
             if rem > 0:
                 time.sleep(rem)
             elif verbose:
                 print(f"[ControlLoopProcess] {(-rem) * 1000:.1f}ms overrun")
+    except Exception as exc:
+        try:
+            obs_queue.put_nowait({"error": repr(exc)})
+        except Exception:
+            pass
     finally:
+        if env is not None:
+            try:
+                env.close()
+            except Exception:
+                pass
         traj.close()
+
+
+def _publish_obs_snapshot(env: RoboEnv, obs_queue) -> None:  # noqa: ANN001
+    obs = env.get_processed_obs_by_robot()
+    try:
+        while True:
+            obs_queue.get_nowait()
+    except Exception:
+        pass
+    obs_queue.put(obs)

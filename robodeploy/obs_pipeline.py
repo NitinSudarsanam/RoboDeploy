@@ -62,9 +62,17 @@ class ObsPipeline:
         obs = pipeline.process(raw_obs)
     """
 
-    def __init__(self, transforms: list[ITransform] | None = None, *, sync_mode: ObsSyncMode = ObsSyncMode.DROP_LATEST) -> None:
+    def __init__(
+        self,
+        transforms: list[ITransform] | None = None,
+        *,
+        sync_mode: ObsSyncMode = ObsSyncMode.DROP_LATEST,
+        sync_window_s: float = 0.05,
+    ) -> None:
         self.transforms: list[ITransform] = transforms or [IdentityTransform()]
         self.sync_mode: ObsSyncMode = sync_mode
+        self.sync_window_s = float(sync_window_s)
+        self._latest_sync_obs: Observation | None = None
 
     def process(self, obs: Observation) -> Observation:
         """Apply all transforms in order and return the result.
@@ -105,15 +113,23 @@ class ObsPipeline:
         self.transforms.append(transform)
         return self
 
-    def sync_policy(self, obs: Observation) -> None:
-        """Optional policy sync seam for real-time bridges.
+    def sync_policy(self, obs: Observation) -> bool:
+        """Return whether an observation is within the configured sync policy.
 
         ARCHITECTURE.md describes strategies like DROP_LATEST and TIME_WINDOW.
-        The current codebase does not yet implement buffering windows; this
-        method exists as an explicit extension point.
         """
-        del obs
-        return
+        if self.sync_mode == ObsSyncMode.DROP_LATEST:
+            self._latest_sync_obs = obs
+            return True
+        if self._latest_sync_obs is None:
+            self._latest_sync_obs = obs
+            return True
+        latest_hw = float(self._latest_sync_obs.timestamp_hw or self._latest_sync_obs.timestamp)
+        current_hw = float(obs.timestamp_hw or obs.timestamp)
+        if abs(current_hw - latest_hw) <= self.sync_window_s:
+            self._latest_sync_obs = obs
+            return True
+        return False
 
     def __repr__(self) -> str:
         names = [type(t).__name__ for t in self.transforms]

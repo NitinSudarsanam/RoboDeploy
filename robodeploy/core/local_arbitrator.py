@@ -44,7 +44,7 @@ class LocalArbitrator:
         self._concurrent_ids: list[str] = [
             tid for tid, t in self._tasks.items() if t.mode == "concurrent"
         ]
-        self._active_task_id: Optional[str] = self._sequential_ids[0] if self._sequential_ids else None
+        self._active_task_id: Optional[str] = self._initial_active_task_id()
         self._events: list[ArbitrationEvent] = []
 
     @property
@@ -69,7 +69,7 @@ class LocalArbitrator:
         With a selector configured and >1 sequential candidates, ask it.
         Otherwise the active task is unchanged. Emits an event on switch.
         """
-        if self._selector is None or len(self._sequential_ids) <= 1:
+        if self._selector is None:
             return self._active_task_id
         chosen = self._selector.select(
             robot_id=self._robot_id, obs=obs, candidates=list(self._sequential_ids)
@@ -129,3 +129,20 @@ class LocalArbitrator:
         )
         self._events.append(event)
         return event
+
+    def _initial_active_task_id(self) -> Optional[str]:
+        if not self._sequential_ids:
+            return None
+        if self._selector is None:
+            return self._sequential_ids[0]
+        try:
+            chosen = self._selector.select(
+                robot_id=self._robot_id,
+                obs=None,  # type: ignore[arg-type]
+                candidates=list(self._sequential_ids),
+            )
+        except Exception:
+            return self._sequential_ids[0]
+        if chosen not in self._sequential_ids:
+            raise KeyError(f"Task selector chose unknown task '{chosen}' for robot '{self._robot_id}'.")
+        return chosen

@@ -102,6 +102,318 @@
       "timestamp": "2026-04-20T15:00:00Z",
       "reason": "Hardcoded robot0/actuators hid misconfiguration and broke multi-robot naming.",
       "goal": "Fail-fast by default; explicit escape hatch for legacy MJCF naming."
+    },
+    {
+      "decision": "Sensor pair resolution is backend-aware, not just sim-vs-real. Canonical sensor names now support per-backend overrides, so ROS2-backed envs resolve ROS sensor adapters while unsupported backends fail explicitly.",
+      "timestamp": "2026-05-27T01:15:00Z",
+      "reason": "Using only `is_real` incorrectly mapped `wrist_camera` and similar canonical names to MuJoCo sensor classes for Gazebo and ROS2/RViz backends.",
+      "goal": "Keep string-based sensor construction aligned with the active backend without breaking direct sensor injection or legacy sim/real fallbacks."
+    },
+    {
+      "decision": "ROS2GazeboBackend derives camera bridge topics from declared robot/shared sensors and synthesizes a temporary SDF world from `SceneSpec` only when `config.sim.world` is omitted.",
+      "timestamp": "2026-05-27T01:55:00Z",
+      "reason": "Gazebo parity was depending on legacy `robotX.sensors` config fragments and required a hand-authored world file even when tasks already declared the environment through `SceneSpec`.",
+      "goal": "Keep explicit Gazebo worlds authoritative while letting the shared scene contract and declared sensor wiring drive the default launch path."
+    },
+    {
+      "decision": "Isaac Sim now participates in backend-aware canonical sensor resolution for wrist/overhead cameras and wrist FT, while its USD scene loader preserves prop/camera orientation in stage state and editable prop-pose updates.",
+      "timestamp": "2026-05-27T02:25:00Z",
+      "reason": "Isaac scene loading had partial world support but still lost orientation data, and canonical sensor construction failed for Isaac-specific camera/FT requests despite the backend already merging sensor data.",
+      "goal": "Bring Isaac closer to the shared MuJoCo/Gazebo sensor-and-scene contract without requiring Isaac Sim to be installed just to test the contract wiring."
+    },
+    {
+      "decision": "TaskBase now carries a privately bound backend reference so object-centric tasks can read live prop poses through backend scene-edit capabilities without changing the public `ITask.reward_fn()` / `success_fn()` signatures.",
+      "timestamp": "2026-05-27T02:45:00Z",
+      "reason": "Manipulation tasks needed object-aware rewards and success checks, but the existing task interface only passed observations and actions during evaluation.",
+      "goal": "Preserve the current task contract while letting tasks become object-aware whenever the active backend can expose prop state."
+    },
+    {
+      "decision": "Advanced policy runtime hooks are now consumed directly by the runtime: shared single-policy tasks batch via `get_action_batch()`, policy arbitration notifies rejected candidates, and RoboBridge honors slower policy-side `action_hz` values while replaying the latest action at backend control rate.",
+      "timestamp": "2026-05-27T03:05:00Z",
+      "reason": "The advanced hooks already existed on `IPolicy`/`PolicyBase`, but the runtime still treated every policy like a simple per-step single-action function.",
+      "goal": "Normalize the runtime around the existing policy contract before building VLA and diffusion implementations on top of it."
+    },
+    {
+      "decision": "Task-scoped language now rides alongside the policy-facing observation, and the VLA slot is a concrete multimodal policy that either calls injected predictors on a real packet or falls back to a lightweight image+instruction heuristic instead of remaining a stub.",
+      "timestamp": "2026-05-27T03:20:00Z",
+      "reason": "Advanced policies needed a clean multimodal contract without VLA-only runtime hacks, and the repo still shipped only a placeholder VLA class.",
+      "goal": "Make multimodal observation + language available through the existing env/task/policy contract while landing an immediately usable VLA implementation."
+    },
+    {
+      "decision": "DiffusionPolicy now uses the normalized runtime as a real sequence policy: it emits action plans, replans after rejected actions, and supports optional single/batch plan predictors instead of remaining a one-step placeholder.",
+      "timestamp": "2026-05-27T03:35:00Z",
+      "reason": "The runtime had already been normalized for advanced hooks, but diffusion remained a stub with no action-sequence semantics.",
+      "goal": "Land a concrete diffusion-style policy that can benefit from the existing batching/rejection/runtime contract without forcing heavyweight dependencies."
+    }
+  ],
+  "subtask_history": [
+    {
+      "subtask_id": "goal1-subtask1",
+      "title": "Backend-aware sensor resolution and shared env/sensor contract cleanup",
+      "timestamp": "2026-05-27T01:15:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "Added per-backend sensor overrides to the shared sensor-pair registry.",
+          "Taught `RoboEnv.make()` and `RoboEnv.from_config()` to pass backend-aware sensor resolution context.",
+          "Added `sensor_backend_name` metadata to MuJoCo, Isaac Sim, ROS2 real, ROS2 RViz, and Gazebo backends.",
+          "Mapped canonical `wrist_camera` to the ROS2 RGBD ISensor adapter for ROS2-backed backends while preserving MuJoCo and direct real fallbacks.",
+          "Made unsupported canonical camera requests on Isaac Sim fail clearly instead of silently selecting the MuJoCo renderer."
+        ],
+        "known_gaps": [
+          "Isaac Sim still has no canonical built-in camera pair for backend-aware string construction.",
+          "Gazebo scene ingestion and mounted-sensor parity are still pending the next subtask."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m compileall on the touched registry/env/backend/sensor/test files",
+        "conda run -n ros2_env python -m unittest discover -s tests -> 14 tests OK",
+        "git diff --check -> no diff formatting errors, only existing CRLF warnings",
+        "ReadLints -> no new actionable issues; one existing optional-import warning remains in MuJoCo backend"
+      ],
+      "next_subtask": {
+        "id": "goal1-subtask2",
+        "title": "Gazebo scene ingestion and mounted sensor parity",
+        "instructions": [
+          "Use the new backend-aware registry path instead of adding Gazebo-specific string hacks in env construction.",
+          "Focus on getting declared world assets and camera bridge rules into the Gazebo launch/config path first.",
+          "Keep MuJoCo as the contract reference and avoid regressing existing ROS2 transport behavior."
+        ]
+      }
+    },
+    {
+      "subtask_id": "goal1-subtask2",
+      "title": "Gazebo scene ingestion and mounted sensor parity",
+      "timestamp": "2026-05-27T01:55:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "ROS2GazeboBackend now derives image bridge rules and readiness topics from declared robot sensors and shared sensors, preserving per-robot ROS namespaces.",
+          "Gazebo launch config now auto-fills `robot_urdf` from the robot description when the sim config omits it.",
+          "Added a Gazebo SDF scene builder that converts merged `SceneSpec.to_world()` data into a temporary world file when `config.sim.world` is not provided.",
+          "Temporary generated Gazebo world files are cleaned up when the backend closes."
+        ],
+        "known_gaps": [
+          "If the caller provides an explicit `config.sim.world`, Gazebo still trusts that file instead of merging additional `SceneSpec` props into it.",
+          "Generated Gazebo worlds currently cover world props, lights, terrain, and cameras, but do not yet attach scene props to robot links."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m compileall on the touched Gazebo backend, scene builder, and env/sensor capability test files",
+        "conda run -n ros2_env python -m unittest discover -s tests -p test_sensor_env_capabilities.py -> 7 tests OK",
+        "conda run -n ros2_env python -m unittest discover -s tests -> 16 tests OK",
+        "git diff --check -> only existing CRLF conversion warnings, no diff formatting errors",
+        "ReadLints on touched Gazebo/test files -> no errors"
+      ],
+      "next_subtask": {
+        "id": "goal1-subtask3",
+        "title": "Isaac Sim scene and sensor parity",
+        "instructions": [
+          "Mirror the backend-aware sensor-resolution contract instead of adding backend-specific env hacks.",
+          "Use the Gazebo and MuJoCo work as the reference for world ingestion, declared cameras, and mounted-sensor semantics.",
+          "Prefer small contract-preserving runtime changes plus focused capability tests before touching advanced policy work."
+        ]
+      }
+    },
+    {
+      "subtask_id": "goal1-subtask3",
+      "title": "Isaac Sim scene and sensor parity",
+      "timestamp": "2026-05-27T02:25:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "Isaac USD scene loading now applies orientation to props and declared cameras instead of dropping rotation on stage writes.",
+          "Editable Isaac prop-pose writes now propagate both translation and orientation into USD stage state.",
+          "Canonical `wrist_camera` and `overhead_camera` now resolve to Isaac Sim camera sensors through the backend-aware registry path.",
+          "Canonical `wrist_ft` now resolves to an Isaac Sim FT sensor that reads measured joint-force hooks when available.",
+          "Added mocked tests for Isaac stage loading, camera reads, FT reads, and backend-aware sensor construction."
+        ],
+        "known_gaps": [
+          "Actual Isaac Sim runtime was not available on this machine, so verification covered contract wiring and mocked stage/sensor APIs rather than a live Kit session.",
+          "The Isaac camera and FT wrappers are best-effort around optional Isaac APIs and may still need small runtime adjustments on a fully provisioned Isaac install."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m compileall on the touched Isaac backend/sensor/test files",
+        "conda run -n ros2_env python -m unittest discover -s tests -p test_registry_honesty.py -> 4 tests OK",
+        "conda run -n ros2_env python -m unittest discover -s tests -p test_sensor_env_capabilities.py -> 10 tests OK",
+        "conda run -n ros2_env python -m unittest discover -s tests -> 19 tests OK",
+        "git diff --check -> only existing CRLF conversion warnings, no diff formatting errors",
+        "ReadLints on touched Isaac/test files -> no errors"
+      ],
+      "next_subtask": {
+        "id": "goal1-subtask4",
+        "title": "Object-aware task semantics and env/sensor verification cleanup",
+        "instructions": [
+          "Shift manipulation tasks away from pure end-effector waypoint rewards and toward object-aware success/reward semantics now that scene props exist across multiple backends.",
+          "Keep the task contract aligned with the current backend capabilities, and extend tests only where they materially reduce regression risk.",
+          "Use the leader/follower split only for clearly separable task-logic versus verification-cleanup slices."
+        ]
+      }
+    },
+    {
+      "subtask_id": "goal1-subtask4",
+      "title": "Object-aware task semantics and env/sensor verification cleanup",
+      "timestamp": "2026-05-27T02:45:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "TaskBase now binds the active backend privately and exposes helpers for scene prop lookup and live prop pose queries.",
+          "RoboEnv now binds tasks to the backend during component initialization so reward/success logic can use runtime prop state.",
+          "PickPlaceTask, PourTask, and PegTask now prefer live object poses for reward and success evaluation instead of only measuring end-effector distance to a fixed waypoint.",
+          "Added focused unit tests for object-aware pick-place, pour, and peg-insertion task semantics."
+        ],
+        "known_gaps": [
+          "Object-aware task evaluation still depends on backend scene-edit support; transport-only backends keep the existing end-effector fallback path.",
+          "The new pour semantics are still object-proxy based because the repo has no liquid state or fluid transfer model yet."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m compileall on the touched task/env/test files",
+        "conda run -n ros2_env python -m unittest discover -s tests -p test_task_object_semantics.py -> 3 tests OK",
+        "conda run -n ros2_env python -m unittest discover -s tests -> 22 tests OK",
+        "ReadLints on touched task/env/test files -> no errors"
+      ],
+      "next_subtask": {
+        "id": "goal2-subtask1",
+        "title": "Advanced policy runtime contract normalization",
+        "instructions": [
+          "Normalize the runtime around the actual advanced-policy hooks that already exist on `IPolicy`/`PolicyBase` instead of adding new ad hoc policy entry points.",
+          "Focus first on runtime consumption of existing batch/rejection/action-rate hooks before adding new policy implementations.",
+          "Keep verification tight and prefer focused contract tests over broad speculative coverage."
+        ]
+      }
+    },
+    {
+      "subtask_id": "goal2-subtask1",
+      "title": "Advanced policy runtime contract normalization",
+      "timestamp": "2026-05-27T03:05:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "RoboEnv now batches shared single-policy task inference across robots via `get_action_batch()` when the active task layout allows it.",
+          "RobotTask policy arbitration now calls `notify_rejected()` on non-selected policy candidates.",
+          "RoboBridge now derives its inference cadence from active policy `action_hz` values when they are slower than backend control rate.",
+          "Added focused tests covering shared-policy batching, rejected-policy notification, and bridge-side policy-rate handling."
+        ],
+        "known_gaps": [
+          "Batch inference currently targets the honest low-risk case: shared tasks with exactly one policy and no selector. More complex selector/resolver cases still run per-policy/per-task.",
+          "Concurrent-task action resolvers still do not emit a rejected-action callback because they may blend rather than reject candidate actions."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m py_compile on the touched policy-runtime files and tests",
+        "conda run -n ros2_env python -m unittest discover -s tests -p test_env_refactor.py -> 5 tests OK",
+        "conda run -n ros2_env python -m unittest discover -s tests -> 25 tests OK",
+        "ReadLints on touched runtime/test files -> no errors"
+      ],
+      "next_subtask": {
+        "id": "goal2-subtask2",
+        "title": "Multimodal/language observation path plus VLA implementation",
+        "instructions": [
+          "Build on the normalized policy runtime instead of introducing VLA-specific execution shortcuts.",
+          "Connect language instruction and image-bearing observations through the existing task/policy/env contracts first, then land a concrete VLA policy implementation.",
+          "Keep tests focused on the new multimodal contract and VLA behavior rather than replaying all existing policy coverage."
+        ]
+      }
+    },
+    {
+      "subtask_id": "goal2-subtask2",
+      "title": "Multimodal/language observation path plus VLA implementation",
+      "timestamp": "2026-05-27T03:20:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "Observation now includes an optional `language_instruction` field for task-scoped policy inputs.",
+          "RobotTask now stamps task language into the observation each policy sees, including warmup, arbitration, and batched shared-policy execution.",
+          "Replaced the VLA stub with a concrete `VLAPolicy` that builds multimodal packets, supports injected single/batch predictor callables, and falls back to a lightweight image+instruction heuristic when no external model runtime is configured.",
+          "Added focused VLA tests covering language injection, packet construction, batch prediction, and heuristic fallback behavior."
+        ],
+        "known_gaps": [
+          "The shipped VLA is intentionally lightweight and dependency-free; heavyweight pretrained VLA backends still need explicit integration through injected callables or a future backend-specific adapter.",
+          "Language is attached at the task-policy boundary rather than globally to every raw backend observation, which keeps the contract honest for multi-task robots but means generic observation logs only include language after task annotation."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m py_compile on the touched multimodal/VLA files and tests",
+        "conda run -n ros2_env python -m unittest discover -s tests -p test_vla_policy.py -> 4 tests OK",
+        "conda run -n ros2_env python -m unittest discover -s tests -> 29 tests OK",
+        "ReadLints on touched multimodal/VLA files -> no errors"
+      ],
+      "next_subtask": {
+        "id": "goal2-subtask3",
+        "title": "DiffusionPolicy on the normalized runtime",
+        "instructions": [
+          "Mirror the VLA approach: fit the current policy/runtime contract first, and keep heavyweight inference optional or injectable instead of pretending unavailable dependencies exist.",
+          "Prefer action-sequence aware behavior that can actually benefit from batch/runtime hooks already normalized in goal2-subtask1.",
+          "Keep tests focused on concrete diffusion-policy contract behavior and rollout semantics."
+        ]
+      }
+    },
+    {
+      "subtask_id": "goal2-subtask3",
+      "title": "DiffusionPolicy on the normalized runtime",
+      "timestamp": "2026-05-27T03:35:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "Replaced the diffusion stub with a concrete `DiffusionPolicy` that manages multi-step action plans on top of the normalized policy runtime.",
+          "DiffusionPolicy now supports injected single-plan and batch-plan predictors while keeping a lightweight fallback sequence planner for dependency-free operation.",
+          "Rejected-action notifications now trigger diffusion replanning instead of leaving stale plans in flight.",
+          "Added focused diffusion-policy tests covering plan rollout, rejected-action replanning, batch plan prediction, and fallback directional planning."
+        ],
+        "known_gaps": [
+          "The shipped diffusion policy is still lightweight and injection-friendly rather than a fully integrated heavyweight diffusion-model runtime.",
+          "Batch plan execution currently returns the first action from each predicted plan; persistent per-stream plan queues for shared-policy multi-robot execution would need additional keyed state if that becomes important."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m py_compile on the touched diffusion files and tests",
+        "conda run -n ros2_env python -m unittest discover -s tests -p test_diffusion_policy.py -> 4 tests OK",
+        "conda run -n ros2_env python -m unittest discover -s tests -> 33 tests OK",
+        "ReadLints on touched diffusion files -> no errors"
+      ],
+      "next_subtask": {
+        "id": "goal2-subtask4",
+        "title": "Remote advanced policy serving, composition, and final policy drift audit",
+        "instructions": [
+          "Harden remote-serving/composition around the concrete VLA and diffusion contracts already landed instead of inventing a separate serving-only API.",
+          "Audit policy/runtime drift at the end so remote composition, batching, rejection hooks, and task/language wiring still agree.",
+          "Prefer small honest serving seams with focused tests over speculative infrastructure."
+        ]
+      }
+    },
+    {
+      "subtask_id": "goal2-subtask4",
+      "title": "Remote advanced policy serving, composition, and final policy drift audit",
+      "timestamp": "2026-05-27T04:10:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "Removed the conflicting top-level `robodeploy/policies/remote.py` module; HTTP JSON remote predictors now live in `robodeploy/policies/remote/http_client.py` as `HttpRemotePolicyClient` alongside the existing ZMQ/gRPC `RemotePolicy` package.",
+          "VLAPolicy and DiffusionPolicy accept optional `remote_url` / `remote_transport` config to route predictor calls through the HTTP client without a parallel policy API.",
+          "Exported `HttpRemotePolicyClient` and `to_jsonable` from `robodeploy.policies.remote` for honest discovery next to `RemotePolicy` and `PolicyServer`.",
+          "Added focused remote-client tests for JSON serialization and VLA/diffusion remote transport wiring."
+        ],
+        "known_gaps": [
+          "HTTP remote serving is intentionally minimal (JSON POST); production serving should prefer the existing ZMQ/gRPC `PolicyServer` transport where latency matters.",
+          "No end-to-end live PolicyServer + VLAPolicy integration test on this machine; coverage is contract/mocked transport only."
+        ]
+      },
+      "verification": [
+        "conda run -n ros2_env python -m py_compile on remote http_client, VLA, diffusion, and remote policy tests",
+        "conda run -n ros2_env python -m unittest discover -s tests -> 36 tests OK",
+        "Resolved import collision: `robodeploy.policies.remote` package no longer shadowed by a sibling `remote.py` module"
+      ],
+      "next_subtask": {
+        "id": "goal3-subtask1",
+        "title": "Observation pipeline sync and multi-camera schema",
+        "instructions": [
+          "Implement honest ObsPipeline buffering for ObsSyncMode instead of stubs.",
+          "Extend Observation/ObsSpec for named image dicts without breaking single-rgb callers.",
+          "Keep tests mocked and contract-focused."
+        ]
+      }
     }
   ]
 }

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import threading
 import time
+import warnings
 from typing import Optional
 
 import numpy as np
@@ -67,6 +68,8 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
         self.node_name = f"robodeploy_jointpos_{self._robot_id}"
         self._executor = None
         self._executor_thread: Optional[threading.Thread] = None
+        self._last_tf_error: str | None = None
+        self._warned_tf_failure = False
 
     @property
     def robot_id(self) -> str:
@@ -221,9 +224,20 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
             rot = tf_stamped.transform.rotation
             pos = np.array([tr.x, tr.y, tr.z], dtype=np.float64)
             quat = np.array([rot.w, rot.x, rot.y, rot.z], dtype=np.float64)
+            self._last_tf_error = None
             return pos, quat
-        except Exception:
-            return np.zeros(3, dtype=np.float64), np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+        except Exception as exc:
+            self._last_tf_error = f"{type(exc).__name__}: {exc}"
+            if not self._warned_tf_failure:
+                warnings.warn(
+                    f"TF lookup failed for {self._base_frame}->{self._ee_frame}; ee pose is invalid: {self._last_tf_error}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                self._warned_tf_failure = True
+            if bool(self._backend_config.get("allow_identity_tf_fallback", False)):
+                return np.zeros(3, dtype=np.float64), np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+            return np.full(3, np.nan, dtype=np.float64), np.full(4, np.nan, dtype=np.float64)
 
     def get_obs(self) -> Observation:
         with self._lock:
@@ -256,6 +270,8 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
             "last_joint_state_stamp_s": float(last_stamp),
             "command_count": self._commander.record.count,
             "last_command_wall_s": self._commander.record.sent_wall_s,
+            "ee_pose_valid": self._last_tf_error is None,
+            "last_tf_error": self._last_tf_error,
         }
 
 
