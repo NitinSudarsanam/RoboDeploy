@@ -31,5 +31,29 @@ class DatasetExportTests(unittest.TestCase):
         self.assertEqual(len(lines), 1)
 
 
+    def test_export_hdf5_when_h5py_available(self):
+        try:
+            import h5py  # noqa: F401
+        except ImportError:
+            self.skipTest("h5py not installed")
+        from robodeploy.dataset_export import export_demo_hdf5
+
+        recorder = DemoRecorder()
+        obs = Observation(
+            joint_positions=np.zeros(2, dtype=np.float32),
+            joint_velocities=np.zeros(2, dtype=np.float32),
+            joint_torques=np.zeros(2, dtype=np.float32),
+            ee_position=np.zeros(3, dtype=np.float32),
+            ee_orientation=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32),
+            ee_velocity=np.zeros(3, dtype=np.float32),
+            ee_angular_velocity=np.zeros(3, dtype=np.float32),
+        )
+        recorder.record_step(obs, Action(joint_positions=np.ones(2, dtype=np.float32)))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "demo.h5"
+            export_demo_hdf5(recorder, path)
+            self.assertTrue(path.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

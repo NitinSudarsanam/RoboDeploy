@@ -10,6 +10,7 @@ class PresetTests(unittest.TestCase):
         preset = load_preset("kuka_pick_mujoco")
         self.assertEqual(preset["backend"], "mujoco")
         self.assertEqual(preset["task"], "pick_place")
+        self.assertEqual(preset["policy"], "joint_pd_stub")
 
     def test_unknown_preset_raises(self):
         with self.assertRaises(KeyError):

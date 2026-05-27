@@ -3,10 +3,10 @@ kuka_pick_mujoco:
   robot: kuka
   backend: mujoco
   task: pick_place
-  policy: joint_pd
+  policy: joint_pd_stub
 
 franka_pick_mujoco:
   robot: franka
   backend: mujoco
   task: pick_place
-  policy: waypoint
+  policy: waypoint_stub

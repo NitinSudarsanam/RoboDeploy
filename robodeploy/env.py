@@ -455,6 +455,28 @@ class RoboEnv:
 
         return DemoSession(self)
 
+    @classmethod
+    def from_preset(cls, preset_name: str, **overrides) -> "RoboEnv":
+        """Build RoboEnv via RoboEnv.make using a named YAML preset."""
+        from robodeploy.builtins import import_builtins
+        from robodeploy.config import load_preset
+
+        import_builtins()
+        cfg = {**load_preset(preset_name), **overrides}
+        return cls.make(
+            robot=str(cfg["robot"]),
+            backend=str(cfg["backend"]),
+            task=str(cfg["task"]),
+            policy=str(cfg["policy"]),
+            robot_id=str(cfg.get("robot_id", "robot0")),
+            task_id=str(cfg.get("task_id", "task0")),
+            policy_id=str(cfg.get("policy_id", "policy0")),
+            backend_kwargs=cfg.get("backend_kwargs"),
+            task_kwargs=cfg.get("task_kwargs"),
+            policy_kwargs=cfg.get("policy_kwargs"),
+            sensor_kwargs=cfg.get("sensor_kwargs"),
+        )
+
     def reset(self) -> tuple[Observation, EpisodeInfo]:
         if not self._initialized:
             self._initialize_components()
@@ -766,13 +788,16 @@ class RoboEnv:
                 return
 
     def _backend_diagnostics(self) -> dict:
+        from robodeploy.builtins import failed_builtin_imports
+
+        payload: dict = {"failed_builtin_imports": failed_builtin_imports()}
         getter = getattr(self._backend, "get_diagnostics", None)
         if isinstance(self._backend, SupportsDiagnostics) or callable(getter):
             try:
-                return getter()
+                payload.update(getter())
             except Exception:
-                return {}
-        return {}
+                pass
+        return payload
 
     # ------------------------------------------------------------------
     # Cleanup

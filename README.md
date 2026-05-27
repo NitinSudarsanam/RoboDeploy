@@ -37,6 +37,17 @@ tests/            Unit, smoke, and hardware-gated tests
 
 `robodeploy/core/interop.py` copies JAX arrays through NumPy before PyTorch conversion. NumPy-to-PyTorch may share memory through `torch.from_numpy`; the project does not currently provide a DLPack zero-copy path.
 
+## Presets and policy chains
+
+```python
+from robodeploy import RoboEnv
+
+env = RoboEnv.from_preset("kuka_pick_mujoco")  # YAML preset -> RoboEnv.make
+session = env.demo_session()  # record explicit actions for replay
+```
+
+Register a composed policy with `policy_names` in config (see `robodeploy.policies.composition.PolicyChain`).
+
 ## Basic use
 
 ```python

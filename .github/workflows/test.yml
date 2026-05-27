@@ -32,5 +32,5 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev,sim]"
-      - name: Import MuJoCo backend
-        run: python -c "from robodeploy.backends.sim.mujoco.backend import MuJoCoBackend; print(MuJoCoBackend)"
+      - name: MuJoCo smoke tests
+        run: python -m unittest tests.test_mujoco_smoke -q

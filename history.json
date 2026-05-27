@@ -800,6 +800,129 @@
       },
       "verification": ["62 tests OK"],
       "next_subtask": { "id": "goal8-subtask1", "title": "MuJoCo reset+step smoke test" }
+    },
+    {
+      "subtask_id": "goal8-subtask1",
+      "title": "MuJoCo reset+step smoke",
+      "timestamp": "2026-05-27T08:30:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["tests/test_mujoco_smoke.py reset+step through RoboEnv + minimal MJCF."],
+        "known_gaps": []
+      },
+      "verification": ["test_mujoco_smoke.py"],
+      "next_subtask": { "id": "goal8-subtask2", "title": "demo_session test" }
+    },
+    {
+      "subtask_id": "goal8-subtask2",
+      "title": "demo_session test",
+      "timestamp": "2026-05-27T08:35:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["tests/test_demo_session.py uses env.demo_session()."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_demo_session.py"],
+      "next_subtask": { "id": "goal8-subtask3", "title": "HDF5 export test" }
+    },
+    {
+      "subtask_id": "goal8-subtask3",
+      "title": "HDF5 export test",
+      "timestamp": "2026-05-27T08:40:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["tests/test_dataset_export.py h5py path when installed."],
+        "known_gaps": []
+      },
+      "verification": ["skipped when h5py missing"],
+      "next_subtask": { "id": "goal8-subtask4", "title": "RoboEnv.from_preset" }
+    },
+    {
+      "subtask_id": "goal8-subtask4",
+      "title": "RoboEnv.from_preset",
+      "timestamp": "2026-05-27T08:45:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "RoboEnv.from_preset() loads YAML presets and delegates to RoboEnv.make.",
+          "presets.yaml policy names fixed to registered stubs."
+        ],
+        "known_gaps": ["Presets assume builtin robots/assets exist on disk."]
+      },
+      "verification": ["tests/test_from_preset.py"],
+      "next_subtask": { "id": "goal8-subtask5", "title": "Diagnostics builtin import report" }
+    },
+    {
+      "subtask_id": "goal8-subtask5",
+      "title": "Diagnostics builtin import report",
+      "timestamp": "2026-05-27T08:50:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["EpisodeInfo diagnostics.extra includes failed_builtin_imports from builtins."],
+        "known_gaps": []
+      },
+      "verification": ["66 tests OK (1 skipped)"],
+      "next_subtask": { "id": "goal9-subtask1", "title": "CI mujoco reset+step job" }
+    },
+    {
+      "subtask_id": "goal9-subtask1",
+      "title": "CI mujoco reset+step job",
+      "timestamp": "2026-05-27T09:00:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["CI mujoco-smoke job runs tests.test_mujoco_smoke."],
+        "known_gaps": []
+      },
+      "verification": [".github/workflows/test.yml"],
+      "next_subtask": { "id": "goal9-subtask2", "title": "VecEnv preset example" }
+    },
+    {
+      "subtask_id": "goal9-subtask2",
+      "title": "VecEnv preset example",
+      "timestamp": "2026-05-27T09:05:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["examples/preset_vecenv_demo.py documents preset + SequentialVecEnv."],
+        "known_gaps": []
+      },
+      "verification": [],
+      "next_subtask": { "id": "goal9-subtask3", "title": "Diagnostics unittest" }
+    },
+    {
+      "subtask_id": "goal9-subtask3",
+      "title": "Diagnostics unittest",
+      "timestamp": "2026-05-27T09:10:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["tests/test_env_diagnostics.py asserts failed_builtin_imports in reset info."],
+        "known_gaps": []
+      },
+      "verification": ["tests/test_env_diagnostics.py"],
+      "next_subtask": { "id": "goal9-subtask4", "title": "PolicyChain registry env wiring doc" }
+    },
+    {
+      "subtask_id": "goal9-subtask4",
+      "title": "PolicyChain registry env wiring doc",
+      "timestamp": "2026-05-27T09:15:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["README documents PolicyChain and from_preset/demo_session."],
+        "known_gaps": []
+      },
+      "verification": [],
+      "next_subtask": { "id": "goal9-subtask5", "title": "Master plan doc trim" }
+    },
+    {
+      "subtask_id": "goal9-subtask5",
+      "title": "Master plan doc trim",
+      "timestamp": "2026-05-27T09:20:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["Removed MASTER_PLAN_GOAL3–7 nav files; keep MASTER_PLAN_GOAL8/9."],
+        "known_gaps": []
+      },
+      "verification": ["67 tests OK"],
+      "next_subtask": { "id": "goal10-subtask1", "title": "Parallel VecEnv design spike" }
     }
   ]
 }
