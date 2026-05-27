@@ -99,6 +99,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default="none",
         help="Inject explicit actions instead of using policy actions.",
     )
+    p_run.add_argument("--json", action="store_true", help="Print a structured JSON result.")
     p_run.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     p_serve = sub.add_parser("serve-policy", help="Serve a registered policy via ZMQ or gRPC.")
@@ -295,6 +296,7 @@ def _cmd_run_episode(
     custom_modules: list[str],
     action_mode: str,
     pretty: bool,
+    as_json: bool,
 ) -> int:
     from robodeploy.env import RoboEnv
     from robodeploy.policies.remote.http_client import to_jsonable
@@ -323,7 +325,18 @@ def _cmd_run_episode(
     try:
         action_fn = _action_fn_for_mode(action_mode, env)
         _, info = env.run_episode(int(steps), record=False, action_fn=action_fn)
-        _print_json(to_jsonable(_episode_info_summary(info)), pretty=pretty)
+        info_payload = to_jsonable(_episode_info_summary(info))
+        if as_json:
+            payload = {
+                "preset": str(preset),
+                "dummy": bool(dummy),
+                "steps": int(steps),
+                "action": str(action_mode),
+                "info": info_payload,
+            }
+            _print_json(payload, pretty=pretty)
+        else:
+            _print_json(info_payload, pretty=pretty)
         return 0
     finally:
         try:
@@ -404,6 +417,7 @@ def main(argv: list[str] | None = None) -> int:
             custom_modules=list(args.custom_module or []),
             action_mode=str(args.action),
             pretty=bool(args.pretty),
+            as_json=bool(args.json),
         )
     if cmd == "serve-policy":
         return _cmd_serve_policy_with_modules(

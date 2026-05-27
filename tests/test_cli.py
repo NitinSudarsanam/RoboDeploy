@@ -163,6 +163,19 @@ class CliTests(unittest.TestCase):
         payload = _json.loads(buf.getvalue())
         self.assertIn("episode_id", payload)
 
+    def test_run_episode_json_pretty_is_parseable(self):
+        import json as _json
+
+        from robodeploy.cli import main
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["run-episode", "--dummy", "--steps", "1", "--json", "--pretty"])
+        self.assertEqual(code, 0)
+        payload = _json.loads(buf.getvalue())
+        self.assertIn("info", payload)
+        self.assertIn("episode_id", payload["info"])
+
     def test_run_episode_dummy_action_mode_sinusoid_is_ok(self):
         import json as _json
 
