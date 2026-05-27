@@ -46,6 +46,18 @@ class CliTests(unittest.TestCase):
             code = main(["list-registry", "--discover"])
         self.assertEqual(code, 0)
 
+    def test_list_registry_custom_module_registers_user_components(self):
+        from robodeploy.cli import main
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["list-registry", "--custom-module", "examples.user_kuka_sinusoid.components"])
+        self.assertEqual(code, 0)
+        out = buf.getvalue()
+        self.assertIn("user_kuka", out)
+        self.assertIn("user_kuka_sinusoid", out)
+        self.assertIn("user_sinusoid", out)
+
     def test_export_episode_dummy_writes_path(self):
         from pathlib import Path
         import tempfile

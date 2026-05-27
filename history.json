@@ -1196,6 +1196,36 @@
       "repo_state": { "implemented": ["MASTER_PLAN_GOAL15.md added; history.json updated."], "known_gaps": [] },
       "verification": ["git status clean after commit/push"],
       "next_subtask": { "id": "goal16-subtask1", "title": "TBD next iteration" }
+    },
+    {
+      "subtask_id": "goal16-subtask1",
+      "title": "list-registry --custom-module",
+      "timestamp": "2026-05-27T16:20:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["robodeploy list-registry supports --custom-module."], "known_gaps": [] },
+      "verification": ["tests/test_cli.py"],
+      "next_subtask": { "id": "goal16-subtask2", "title": "Test custom-module with example components" }
+    },
+    {
+      "subtask_id": "goal16-subtask2",
+      "title": "Test custom-module with example components",
+      "timestamp": "2026-05-27T16:21:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": ["CLI test imports examples.user_kuka_sinusoid.components and asserts registry output includes user_* entries."],
+        "known_gaps": []
+      },
+      "verification": ["python -m unittest discover -s tests -q"],
+      "next_subtask": { "id": "goal16-subtask3", "title": "Update history + commit/push + cleanup" }
+    },
+    {
+      "subtask_id": "goal16-subtask3",
+      "title": "Update history + commit/push + cleanup",
+      "timestamp": "2026-05-27T16:22:00Z",
+      "status": "completed",
+      "repo_state": { "implemented": ["MASTER_PLAN_GOAL16.md added; history.json updated."], "known_gaps": [] },
+      "verification": ["git status clean after commit/push"],
+      "next_subtask": { "id": "goal17-subtask1", "title": "TBD next iteration" }
     }
   ]
 }

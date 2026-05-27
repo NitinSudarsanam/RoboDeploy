@@ -28,6 +28,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Load Python entry points before listing (pip-installed extensions).",
     )
     p_reg.add_argument(
+        "--custom-module",
+        action="append",
+        default=[],
+        help="Import dotted module path(s) before listing (register project components).",
+    )
+    p_reg.add_argument(
         "--builtins",
         action="store_true",
         help="Import builtin modules before listing (populates robots/tasks/policies).",
@@ -84,11 +90,16 @@ def _cmd_list_presets(*, as_json: bool) -> int:
     return 0
 
 
-def _cmd_list_registry(*, discover: bool, builtins: bool, as_json: bool) -> int:
+def _cmd_list_registry(*, discover: bool, custom_modules: list[str], builtins: bool, as_json: bool) -> int:
     if discover:
         from robodeploy import discover as _discover
 
         _discover()
+    if custom_modules:
+        from robodeploy.core.registry import use
+
+        for mod in custom_modules:
+            use(str(mod))
     if builtins:
         from robodeploy.builtins import import_builtins
 
@@ -195,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "list-registry":
         return _cmd_list_registry(
             discover=bool(args.discover),
+            custom_modules=list(args.custom_module or []),
             builtins=bool(args.builtins),
             as_json=bool(args.json),
         )
