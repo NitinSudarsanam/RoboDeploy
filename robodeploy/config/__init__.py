@@ -1,4 +1,8 @@
-"""Lightweight preset loading without requiring Hydra."""
+"""Optional YAML preset loading (no bundled presets in the robodeploy package).
+
+Presets and demo policies belong under ``examples/``. Pass an explicit ``presets_file``
+path, or set ``ROBODEPLOY_PRESETS_FILE`` for the CLI.
+"""
 
 from __future__ import annotations
 
@@ -8,29 +12,27 @@ from typing import Any
 
 import yaml
 
-_PRESETS_PATH = Path(__file__).with_name("presets.yaml")
-
-
-@lru_cache(maxsize=1)
-def _load_all_presets() -> dict[str, dict[str, Any]]:
-    if not _PRESETS_PATH.exists():
-        return {}
-    data = yaml.safe_load(_PRESETS_PATH.read_text(encoding="utf-8")) or {}
-    return {str(name): dict(values) for name, values in data.items()}
-
-
 _REQUIRED_PRESET_KEYS = ("robot", "backend", "task", "policy")
 
 
-def list_presets() -> list[str]:
-    return sorted(_load_all_presets().keys())
+@lru_cache(maxsize=16)
+def _load_all_presets(presets_file: str) -> dict[str, dict[str, Any]]:
+    path = Path(presets_file)
+    if not path.is_file():
+        return {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return {str(name): dict(values) for name, values in data.items()}
 
 
-def load_preset(name: str) -> dict[str, Any]:
-    presets = _load_all_presets()
+def list_presets(*, presets_file: Path | str) -> list[str]:
+    return sorted(_load_all_presets(str(presets_file)).keys())
+
+
+def load_preset(name: str, *, presets_file: Path | str) -> dict[str, Any]:
+    presets = _load_all_presets(str(presets_file))
     if name not in presets:
         known = ", ".join(sorted(presets)) or "(none)"
-        raise KeyError(f"Unknown preset '{name}'. Known presets: {known}")
+        raise KeyError(f"Unknown preset '{name}' in {presets_file}. Known presets: {known}")
     preset = dict(presets[name])
     missing = [key for key in _REQUIRED_PRESET_KEYS if key not in preset]
     if missing:

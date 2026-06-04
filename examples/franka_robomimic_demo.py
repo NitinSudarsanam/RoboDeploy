@@ -22,7 +22,7 @@ from robodeploy.backends import MuJoCoBackend, ROS2Backend
 from robodeploy.core.robot import Robot, RobotTask
 from robodeploy.description.franka import FrankaDescription
 from robodeploy.policies.learned.robomimic import RobomimicPolicy
-from robodeploy.tasks.manipulation.pick_place import PickPlaceTask
+from examples.tasks.pick_place import PickPlaceTask
 
 
 def make_env(checkpoint: Path | None, use_real: bool, *, dry_run: bool = False) -> RoboEnv:

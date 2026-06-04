@@ -1,5 +1,3 @@
-from .waypoint import WaypointPolicy
-from .joint_pd import JointPDPolicy
+"""Scripted policy stubs live in ``examples/policies/``, not in the core package."""
 
-__all__ = ["WaypointPolicy", "JointPDPolicy"]
-
+__all__: list[str] = []

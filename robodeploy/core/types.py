@@ -68,6 +68,13 @@ class Observation:
     # --- Gripper (0.0 = fully open, 1.0 = fully closed) --------------------
     gripper_state:        Optional[float] = None
 
+    # --- Perception (populated by sensors / perception transforms) ---------
+    # objects[name] = (position_xyz, orientation_wxyz)
+    objects:              dict[str, tuple[tuple[float, float, float], tuple[float, float, float, float]]] = field(
+        default_factory=dict
+    )
+    sensor_status:        dict[str, str] = field(default_factory=dict)
+
     # --- Metadata -----------------------------------------------------------
     # timestamp:      anchor time this observation represents (sim time or wall clock)
     # timestamp_hw:   hardware-level timestamp from the sensor/controller itself.
@@ -127,6 +134,10 @@ class SensorData:
     ft_torque:       Optional[jnp.ndarray] = None   # [3]  N·m
     imu_acceleration: Optional[jnp.ndarray] = None  # [3]  m/s²
     imu_angular_velocity: Optional[jnp.ndarray] = None  # [3]  rad/s
+    objects: dict[str, tuple[tuple[float, float, float], tuple[float, float, float, float]]] = field(
+        default_factory=dict
+    )
+    status: str = "ok"
     # timestamp_hw:   hardware clock of the sensor (e.g. camera frame timestamp).
     #                 On sim backends, use the sim clock. On real backends, use the
     #                 sensor's own hardware timestamp when available.

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,30 @@ def _print_json(payload: Any, *, pretty: bool) -> None:
         print(json.dumps(payload))
 
 
+def _resolve_presets_file(explicit: str | None) -> Path:
+    if explicit and str(explicit).strip():
+        path = Path(explicit).expanduser().resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"Presets file not found: {path}")
+        return path
+    env_path = os.environ.get("ROBODEPLOY_PRESETS_FILE", "").strip()
+    if env_path:
+        path = Path(env_path).expanduser().resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"ROBODEPLOY_PRESETS_FILE not found: {path}")
+        return path
+    for candidate in (
+        Path.cwd() / "examples" / "config" / "presets.yaml",
+        Path(__file__).resolve().parent.parent / "examples" / "config" / "presets.yaml",
+    ):
+        if candidate.is_file():
+            return candidate.resolve()
+    raise FileNotFoundError(
+        "No presets file found. Set ROBODEPLOY_PRESETS_FILE or pass --presets-file "
+        "(default location when developing from the repo: examples/config/presets.yaml)."
+    )
+
+
 def _import_custom_modules(custom_modules: list[str]) -> None:
     if not custom_modules:
         return
@@ -30,7 +55,13 @@ def _import_custom_modules(custom_modules: list[str]) -> None:
         use(str(mod))
 
 
-def _make_env(*, preset: str, dummy: bool):
+def _make_env(
+    *,
+    preset: str,
+    dummy: bool,
+    presets_file: str | None,
+    custom_modules: list[str],
+):
     from robodeploy.env import RoboEnv
 
     if dummy:
@@ -46,7 +77,28 @@ def _make_env(*, preset: str, dummy: bool):
 
     if not str(preset).strip():
         raise ValueError("--preset is required unless --dummy is set.")
-    return RoboEnv.from_preset(preset)
+
+    from robodeploy.builtins import import_builtins
+    from robodeploy.config import load_preset
+
+    path = _resolve_presets_file(presets_file)
+    import_builtins()
+    cfg = load_preset(preset, presets_file=path)
+    merged_modules = list(custom_modules) + [str(m) for m in (cfg.get("custom_modules") or [])]
+    _import_custom_modules(merged_modules)
+    return RoboEnv.make(
+        robot=str(cfg["robot"]),
+        backend=str(cfg["backend"]),
+        task=str(cfg["task"]),
+        policy=str(cfg["policy"]),
+        robot_id=str(cfg.get("robot_id", "robot0")),
+        task_id=str(cfg.get("task_id", "task0")),
+        policy_id=str(cfg.get("policy_id", "policy0")),
+        backend_kwargs=cfg.get("backend_kwargs"),
+        task_kwargs=cfg.get("task_kwargs"),
+        policy_kwargs=cfg.get("policy_kwargs"),
+        sensor_kwargs=cfg.get("sensor_kwargs"),
+    )
 
 
 def _close_quietly(env) -> None:  # noqa: ANN001
@@ -60,7 +112,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="robodeploy", add_help=True)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_presets = sub.add_parser("list-presets", help="List YAML preset names.")
+    p_presets = sub.add_parser("list-presets", help="List YAML preset names from a presets file.")
+    p_presets.add_argument(
+        "--presets-file",
+        default="",
+        help="Path to presets YAML (default: ROBODEPLOY_PRESETS_FILE or examples/config/presets.yaml).",
+    )
     p_presets.add_argument("--json", action="store_true", help="Print as JSON array.")
     p_presets.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
@@ -85,7 +142,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_reg.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     p_export = sub.add_parser("export-episode", help="Run a preset and export a recorded episode.")
-    p_export.add_argument("--preset", default="", help="Preset name from robodeploy.config.")
+    p_export.add_argument("--preset", default="", help="Preset name from your presets YAML file.")
+    p_export.add_argument(
+        "--presets-file",
+        default="",
+        help="Path to presets YAML (default: ROBODEPLOY_PRESETS_FILE or examples/config/presets.yaml).",
+    )
     p_export.add_argument(
         "--custom-module",
         action="append",
@@ -115,7 +177,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_export.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     p_run = sub.add_parser("run-episode", help="Run an episode and print a small EpisodeInfo summary JSON.")
-    p_run.add_argument("--preset", default="", help="Preset name from robodeploy.config.")
+    p_run.add_argument("--preset", default="", help="Preset name from your presets YAML file.")
+    p_run.add_argument(
+        "--presets-file",
+        default="",
+        help="Path to presets YAML (default: ROBODEPLOY_PRESETS_FILE or examples/config/presets.yaml).",
+    )
     p_run.add_argument(
         "--custom-module",
         action="append",
@@ -153,10 +220,10 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _cmd_list_presets(*, as_json: bool, pretty: bool) -> int:
+def _cmd_list_presets(*, presets_file: str, as_json: bool, pretty: bool) -> int:
     from robodeploy.config import list_presets
 
-    names = list_presets()
+    names = list_presets(presets_file=_resolve_presets_file(presets_file or None))
     if as_json:
         _print_json(names, pretty=pretty)
     else:
@@ -210,6 +277,7 @@ def _episode_info_summary(info) -> dict[str, Any]:  # noqa: ANN001
 def _cmd_export_episode(
     *,
     preset: str,
+    presets_file: str,
     steps: int,
     out: str,
     fmt: str,
@@ -219,8 +287,12 @@ def _cmd_export_episode(
     as_json: bool,
     pretty: bool,
 ) -> int:
-    _import_custom_modules(custom_modules)
-    env = _make_env(preset=preset, dummy=dummy)
+    env = _make_env(
+        preset=preset,
+        dummy=dummy,
+        presets_file=presets_file or None,
+        custom_modules=custom_modules,
+    )
     out_path = Path(out)
     try:
         action_fn = _action_fn_for_mode(action_mode, env)
@@ -303,6 +375,7 @@ def _action_fn_for_mode(mode: str, env):  # noqa: ANN001
 def _cmd_run_episode(
     *,
     preset: str,
+    presets_file: str,
     steps: int,
     dummy: bool,
     custom_modules: list[str],
@@ -312,8 +385,12 @@ def _cmd_run_episode(
 ) -> int:
     from robodeploy.policies.remote.http_client import to_jsonable
 
-    _import_custom_modules(custom_modules)
-    env = _make_env(preset=preset, dummy=dummy)
+    env = _make_env(
+        preset=preset,
+        dummy=dummy,
+        presets_file=presets_file or None,
+        custom_modules=custom_modules,
+    )
 
     try:
         action_fn = _action_fn_for_mode(action_mode, env)
@@ -367,7 +444,11 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "list-presets":
         if bool(args.pretty) and not bool(args.json):
             raise ValueError("--pretty requires --json.")
-        return _cmd_list_presets(as_json=bool(args.json), pretty=bool(args.pretty))
+        return _cmd_list_presets(
+            presets_file=str(args.presets_file),
+            as_json=bool(args.json),
+            pretty=bool(args.pretty),
+        )
     if cmd == "list-registry":
         if bool(args.pretty) and not bool(args.json):
             raise ValueError("--pretty requires --json.")
@@ -383,6 +464,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("--pretty requires --json.")
         return _cmd_export_episode(
             preset=str(args.preset),
+            presets_file=str(args.presets_file),
             steps=int(args.steps),
             out=str(args.out),
             fmt=str(args.format),
@@ -398,6 +480,7 @@ def main(argv: list[str] | None = None) -> int:
             pass
         return _cmd_run_episode(
             preset=str(args.preset),
+            presets_file=str(args.presets_file),
             steps=int(args.steps),
             dummy=bool(args.dummy),
             custom_modules=list(args.custom_module or []),

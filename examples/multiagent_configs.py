@@ -10,9 +10,9 @@ from robodeploy.description.franka import FrankaDescription
 from robodeploy.description.kuka import KukaDescription
 from robodeploy.policies.learned.diffusion import DiffusionPolicy
 from robodeploy.policies.learned.robomimic import RobomimicPolicy
-from robodeploy.tasks.manipulation.peg_insertion import PegTask
-from robodeploy.tasks.manipulation.pick_place import PickPlaceTask
-from robodeploy.tasks.manipulation.pour import PourTask
+from examples.tasks.peg_insertion import PegTask
+from examples.tasks.pick_place import PickPlaceTask
+from examples.tasks.pour import PourTask
 
 
 def average_joint_position_actions(robot_id: str, actions: list[Action]) -> Action:

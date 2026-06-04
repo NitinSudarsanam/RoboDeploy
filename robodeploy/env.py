@@ -198,6 +198,32 @@ class RoboEnv:
             is_real=backend_obj.is_real,
             backend_name=sensor_backend_name,
         )
+        rig_specs = cfg.get("sensor_rigs")
+        if rig_specs:
+            from robodeploy.core.sensor_rig import SensorRig, materialize_sensor_rigs
+
+            rigs: list[SensorRig] = []
+            for entry in rig_specs:
+                if isinstance(entry, SensorRig):
+                    rigs.append(entry)
+                elif isinstance(entry, dict):
+                    rigs.append(
+                        SensorRig.robot_mounted(
+                            str(entry.get("rig_id", "arm_sensors")),
+                            ee_link=str(entry.get("ee_link", "robot0/ee_link")),
+                            wrist_rgbd=entry.get("wrist_rgbd"),
+                            overhead_rgbd=entry.get("overhead_rgbd"),
+                            wrist_ft=entry.get("wrist_ft"),
+                            prop_pose=entry.get("prop_pose"),
+                        )
+                    )
+                else:
+                    raise TypeError("sensor_rigs entries must be SensorRig instances or dicts.")
+            sensor_objs = list(sensor_objs) + materialize_sensor_rigs(
+                rigs,
+                is_real=backend_obj.is_real,
+                backend_name=sensor_backend_name,
+            )
 
         robot_obj = Robot(
             robot_id=str(cfg.get("robot_id", "robot0")),
@@ -477,28 +503,6 @@ class RoboEnv:
         if record:
             return recorder
         return obs, info
-
-    @classmethod
-    def from_preset(cls, preset_name: str, **overrides) -> "RoboEnv":
-        """Build RoboEnv via RoboEnv.make using a named YAML preset."""
-        from robodeploy.builtins import import_builtins
-        from robodeploy.config import load_preset
-
-        import_builtins()
-        cfg = {**load_preset(preset_name), **overrides}
-        return cls.make(
-            robot=str(cfg["robot"]),
-            backend=str(cfg["backend"]),
-            task=str(cfg["task"]),
-            policy=str(cfg["policy"]),
-            robot_id=str(cfg.get("robot_id", "robot0")),
-            task_id=str(cfg.get("task_id", "task0")),
-            policy_id=str(cfg.get("policy_id", "policy0")),
-            backend_kwargs=cfg.get("backend_kwargs"),
-            task_kwargs=cfg.get("task_kwargs"),
-            policy_kwargs=cfg.get("policy_kwargs"),
-            sensor_kwargs=cfg.get("sensor_kwargs"),
-        )
 
     def reset(self) -> tuple[Observation, EpisodeInfo]:
         if not self._initialized:

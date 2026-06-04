@@ -39,7 +39,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("backends:", out)
         self.assertIn("robots:", out)
 
-    def test_list_registry_with_builtins_includes_tasks(self):
+    def test_list_registry_with_builtins_includes_backends(self):
         from robodeploy.cli import main
 
         buf = io.StringIO()
@@ -47,7 +47,19 @@ class CliTests(unittest.TestCase):
             code = main(["list-registry", "--builtins"])
         self.assertEqual(code, 0)
         out = buf.getvalue()
-        self.assertIn("tasks:", out)
+        self.assertIn("backends:", out)
+        self.assertIn("mujoco", out)
+
+    def test_list_registry_includes_example_tasks_after_use(self):
+        from robodeploy.cli import main
+        from robodeploy.core.registry import use
+
+        use("examples.tasks")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["list-registry"])
+        self.assertEqual(code, 0)
+        out = buf.getvalue()
         self.assertIn("pick_place", out)
 
     def test_list_registry_discover_flag_is_safe(self):

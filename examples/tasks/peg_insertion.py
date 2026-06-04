@@ -1,4 +1,4 @@
-"""PegTask placeholder matching architecture layout."""
+"""PegTask — example manipulation task (not part of robodeploy core)."""
 
 from __future__ import annotations
 
@@ -40,7 +40,6 @@ class PegTask(TaskBase):
 
     def reset_fn(self, backend) -> None:
         self._bind_backend(backend)
-        return
 
     def reward_fn(self, obs: Observation, action: Action) -> float:
         del action
@@ -76,4 +75,3 @@ class PegTask(TaskBase):
         dy = float(a[1]) - float(b[1])
         dz = float(a[2]) - float(b[2])
         return math.sqrt(dx * dx + dy * dy + dz * dz)
-

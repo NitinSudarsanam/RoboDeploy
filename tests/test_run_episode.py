@@ -67,7 +67,7 @@ class PresetValidationTests(unittest.TestCase):
             return_value={"bad": {"robot": "kuka"}},
         ):
             with self.assertRaises(ValueError):
-                load_preset("bad")
+                load_preset("bad", presets_file="presets.yaml")
 
 
 if __name__ == "__main__":

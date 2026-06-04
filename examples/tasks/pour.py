@@ -1,4 +1,4 @@
-"""PourTask placeholder matching architecture layout."""
+"""PourTask — example manipulation task (not part of robodeploy core)."""
 
 from __future__ import annotations
 
@@ -40,7 +40,6 @@ class PourTask(TaskBase):
 
     def reset_fn(self, backend) -> None:
         self._bind_backend(backend)
-        return
 
     def reward_fn(self, obs: Observation, action: Action) -> float:
         del action
@@ -84,4 +83,3 @@ class PourTask(TaskBase):
     def _tilt_angle_rad(quat: tuple[float, float, float, float]) -> float:
         w = max(-1.0, min(1.0, abs(float(quat[0]))))
         return 2.0 * math.acos(w)
-

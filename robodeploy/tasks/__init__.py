@@ -1,9 +1,5 @@
-"""Task implementations."""
+"""Task framework (concrete tasks belong in your project or ``examples/tasks``)."""
 
-from robodeploy.tasks.manipulation.peg_insertion import PegTask
-from robodeploy.tasks.manipulation.pick_place import PickPlaceTask
-from robodeploy.tasks.manipulation.pour import PourTask
+from robodeploy.tasks.base import TaskBase
 
-PegInsertionTask = PegTask
-
-__all__ = ["PickPlaceTask", "PourTask", "PegTask", "PegInsertionTask"]
+__all__ = ["TaskBase"]

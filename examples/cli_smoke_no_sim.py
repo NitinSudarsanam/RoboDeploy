@@ -1,18 +1,19 @@
 """Minimal CLI smoke example (no simulator required).
 
-This is intentionally tiny: it just shows the CLI subcommands that work
-everywhere by using the built-in dummy environment.
+Uses example presets under ``examples/config/presets.yaml`` (not the robodeploy package).
 """
 
 from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
 
 def main() -> int:
+    presets_file = Path(__file__).resolve().parent / "config" / "presets.yaml"
     cmds = [
-        [sys.executable, "-m", "robodeploy.cli", "list-presets"],
+        [sys.executable, "-m", "robodeploy.cli", "list-presets", "--presets-file", str(presets_file)],
         [sys.executable, "-m", "robodeploy.cli", "list-registry", "--builtins"],
         [
             sys.executable,
@@ -21,6 +22,8 @@ def main() -> int:
             "run-episode",
             "--preset",
             "kuka_pick_mujoco",
+            "--presets-file",
+            str(presets_file),
             "--dummy",
             "--steps",
             "5",
@@ -35,4 +38,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

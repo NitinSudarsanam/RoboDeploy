@@ -1,19 +1,18 @@
-"""Example: load a preset name and step a SequentialVecEnv (contract demo).
-
-Uses DummyBackend stand-in when run without assets; intended as API documentation.
-"""
+"""Example: load preset names and build a SequentialVecEnv (contract demo)."""
 
 from __future__ import annotations
 
-from robodeploy.config import load_preset
-from robodeploy.vec_env import SequentialVecEnv
+from examples.config import load_example_preset, list_example_presets
+from examples.vecenv_from_presets import vecenv_from_example_presets
 
 
 def main() -> None:
-    preset = load_preset("kuka_pick_mujoco")
+    print("Example presets:", list_example_presets())
+    preset = load_example_preset("kuka_pick_mujoco")
     print("Preset:", preset)
-    print("Use RoboEnv.from_preset('kuka_pick_mujoco') for a single env.")
-    print("Wrap multiple RoboEnv instances in SequentialVecEnv for batched stepping.")
+    print("Use examples.env_from_preset('kuka_pick_mujoco') for a single env.")
+    vec = vecenv_from_example_presets(["kuka_pick_mujoco"])
+    print("SequentialVecEnv env count:", vec.num_envs)
 
 
 if __name__ == "__main__":

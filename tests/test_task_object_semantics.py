@@ -8,9 +8,9 @@ except Exception:
     import numpy as jnp  # type: ignore[assignment]
 
 from robodeploy.core.types import Action, Observation
-from robodeploy.tasks.manipulation.peg_insertion import PegTask
-from robodeploy.tasks.manipulation.pick_place import PickPlaceTask
-from robodeploy.tasks.manipulation.pour import PourTask
+from examples.tasks.peg_insertion import PegTask
+from examples.tasks.pick_place import PickPlaceTask
+from examples.tasks.pour import PourTask
 
 
 def make_obs(position=(0.0, 0.0, 0.0)) -> Observation:

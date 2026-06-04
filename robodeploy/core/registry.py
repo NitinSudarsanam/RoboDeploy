@@ -25,7 +25,7 @@ Three usage levels — choose the one that fits your project:
       from robodeploy import use, RoboEnv
 
       use("my_project.components")           # imports module → triggers decorators
-      env = RoboEnv.make(robot="myrobot", backend="mujoco", task="pick_place")
+      env = RoboEnv.make(robot="myrobot", backend="mujoco", task="my_task")
 
   Level 3 — Entry points (for pip-installable robot/task packages):
       Declare entry points in pyproject.toml. RoboDeploy auto-discovers them.
@@ -119,7 +119,7 @@ def register_task(name: str):
     """Decorator: register a task class under a string name.
 
     Args:
-        name: Lookup key (e.g. "pick_place", "pour", "peg_insertion").
+        name: Lookup key (e.g. "my_task"; example repo tasks live under examples.tasks).
     """
     def decorator(cls: Type[T]) -> Type[T]:
         return _put(_TASKS, "Task", name, cls)

@@ -60,10 +60,14 @@ class SensorSampleBuffer:
         depth = obs.depth
         ft_force = obs.ft_force
         ft_torque = obs.ft_torque
+        objects = dict(getattr(obs, "objects", {}) or {})
+        sensor_status = dict(getattr(obs, "sensor_status", {}) or {})
         for name, sample in self._latest.items():
             ts = float(sample.timestamp_hw or sample.timestamp)
             if abs(ts - anchor) > self.window_s:
                 continue
+            if getattr(sample, "status", "ok") != "ok":
+                sensor_status[name] = str(sample.status)
             if sample.rgb is not None:
                 images[name] = sample.rgb
                 if rgb is None:
@@ -74,6 +78,8 @@ class SensorSampleBuffer:
                     depth = sample.depth
             ft_force = sample.ft_force if sample.ft_force is not None else ft_force
             ft_torque = sample.ft_torque if sample.ft_torque is not None else ft_torque
+            if getattr(sample, "objects", None):
+                objects.update(sample.objects)
         return replace(
             obs,
             rgb=rgb,
@@ -82,6 +88,8 @@ class SensorSampleBuffer:
             depths=depths,
             ft_force=ft_force,
             ft_torque=ft_torque,
+            objects=objects,
+            sensor_status=sensor_status,
         )
 
     def reset(self) -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from robodeploy.tasks.manipulation.pick_place import PickPlaceTask
+from examples.tasks.pick_place import PickPlaceTask
 from robodeploy.tasks.randomization import DomainRandomizer, DomainRandomizerConfig, ObjectRandomConfig, RandomLevel
 
 

@@ -215,6 +215,8 @@ class BackendBase(IBackend):
         imu_angular_velocity = obs.imu_angular_velocity
         timestamp_hw = obs.timestamp_hw
         timestamp_recv = obs.timestamp_recv
+        objects = dict(getattr(obs, "objects", {}) or {})
+        sensor_status = dict(getattr(obs, "sensor_status", {}) or {})
 
         for sensor in sensors:
             name = str(getattr(sensor, "name", type(sensor).__name__))
@@ -222,11 +224,13 @@ class BackendBase(IBackend):
                 sd = sensor.read()
             except Exception as exc:
                 self._record_sensor_error(name, exc)
+                sensor_status[name] = "error"
                 if str(self.config.get("sensor_read_policy", "warn")).lower() == "raise":
                     raise RuntimeError(f"Sensor '{name}' read failed.") from exc
                 continue
             self._sensor_errors.pop(name, None)
             self._pending_sensor_reads.append((name, sd))
+            sensor_status[name] = str(getattr(sd, "status", "ok"))
             if sd.rgb is not None:
                 images[name] = sd.rgb
                 if rgb is None:
@@ -239,6 +243,8 @@ class BackendBase(IBackend):
             ft_torque = sd.ft_torque if sd.ft_torque is not None else ft_torque
             imu_acceleration = sd.imu_acceleration if sd.imu_acceleration is not None else imu_acceleration
             imu_angular_velocity = sd.imu_angular_velocity if sd.imu_angular_velocity is not None else imu_angular_velocity
+            if getattr(sd, "objects", None):
+                objects.update(sd.objects)
             timestamp_hw = max(float(timestamp_hw), float(sd.timestamp_hw or 0.0))
             timestamp_recv = max(float(timestamp_recv), float(sd.timestamp_recv or 0.0))
 
@@ -252,6 +258,8 @@ class BackendBase(IBackend):
             ft_torque=ft_torque,
             imu_acceleration=imu_acceleration,
             imu_angular_velocity=imu_angular_velocity,
+            objects=objects,
+            sensor_status=sensor_status,
             timestamp_hw=timestamp_hw,
             timestamp_recv=timestamp_recv,
         )

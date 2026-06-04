@@ -29,7 +29,7 @@ robodeploy/
   description/    Robot descriptions and bundled URDF/MJCF/mesh assets
   policies/       Policy interfaces plus placeholder examples
   sensors/        Camera, RGBD, force/torque, and sensor pairing code
-  tasks/          Task interfaces and manipulation task stubs
+  tasks/          TaskBase + domain randomization (concrete tasks in examples/tasks)
   viz/            RViz marker and trace publishing
 examples/         Runnable demos and structure-only examples
 tests/            Unit, smoke, and hardware-gated tests
@@ -40,9 +40,9 @@ tests/            Unit, smoke, and hardware-gated tests
 ## Presets and policy chains
 
 ```python
-from robodeploy import RoboEnv
+from examples.env_from_preset import env_from_preset
 
-env = RoboEnv.from_preset("kuka_pick_mujoco")  # YAML preset -> RoboEnv.make
+env = env_from_preset("kuka_pick_mujoco")  # examples/config/presets.yaml
 session = env.demo_session()  # record explicit actions for replay
 ```
 
@@ -77,9 +77,9 @@ robodeploy run-episode --dummy --steps 1 --json --pretty
 # Simulator-free dataset export
 robodeploy export-episode --dummy --steps 10 --action hold --out demo.jsonl --json
 
-# Preset-based runs (uses YAML presets)
-robodeploy run-episode --preset kuka_pick_mujoco --steps 10 --json
-robodeploy export-episode --preset kuka_pick_mujoco --steps 10 --out demo.jsonl --json
+# Preset-based runs (example presets under examples/config/presets.yaml)
+robodeploy run-episode --preset kuka_pick_mujoco --dummy --steps 10 --json
+# Or set ROBODEPLOY_PRESETS_FILE=/path/to/presets.yaml when not in the repo root
 ```
 
 ## Basic use
@@ -88,9 +88,11 @@ robodeploy export-episode --preset kuka_pick_mujoco --steps 10 --out demo.jsonl 
 from robodeploy import RoboEnv, Robot, RobotTask
 from robodeploy.backends.simulator import backend_for_simulator
 from robodeploy.description.franka import FrankaDescription
-from robodeploy.tasks.manipulation.pick_place import PickPlaceTask
+from robodeploy import use
+from examples.tasks.pick_place import PickPlaceTask  # or your own @register_task
 from my_project.policies import MyPolicy
 
+use("examples.tasks")  # if using task="pick_place" via RoboEnv.make()
 robot = Robot(
     robot_id="robot0",
     description=FrankaDescription(),
@@ -119,11 +121,11 @@ For string-based construction, register project components first:
 ```python
 from robodeploy import RoboEnv, use
 
-use("my_project.components")
+use("my_project.components")  # registers tasks, policies, robots, ...
 env = RoboEnv.make(
     robot="franka",
     backend="mujoco",
-    task="pick_place",
+    task="my_task",
     policy="my_policy",
     backend_kwargs={"enable_viewer": False},
 )

@@ -22,10 +22,6 @@ _BUILTIN_MODULES: tuple[str, ...] = (
     "robodeploy.description.franka.description",
     "robodeploy.description.kuka.description",
     "robodeploy.description.so101.description",
-    # Tasks
-    "robodeploy.tasks.manipulation.pick_place",
-    "robodeploy.tasks.manipulation.pour",
-    "robodeploy.tasks.manipulation.peg_insertion",
     # Sensors
     "robodeploy.sensors.camera.sim.mujoco_camera",
     "robodeploy.sensors.camera.real.realsense",
@@ -36,8 +32,6 @@ _BUILTIN_MODULES: tuple[str, ...] = (
     "robodeploy.policies.learned.robomimic",
     "robodeploy.policies.learned.diffusion",
     "robodeploy.policies.learned.vla",
-    "robodeploy.policies.scripted.waypoint",
-    "robodeploy.policies.scripted.joint_pd",
     "robodeploy.policies.composition",
 )
 

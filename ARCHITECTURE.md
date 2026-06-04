@@ -304,6 +304,7 @@ env = RoboEnv(backend=my_backend, robots=[robot])
 | Observation transforms | `Robot.obs_pipeline` |
 | Action transforms | `Robot.action_adapter` |
 | Robot-local sensors | `Robot.sensors` |
+| Declarative sensor composition | `SensorRig` (`core/sensor_rig.py`) → `Robot.sensors` via `materialize()` |
 | Task logic (reward/success/reset) | `RobotTask.task` |
 | Policy choice within a task | `RobotTask.policy_selector` (or weights) |
 | Backend execution | `RoboEnv.backend` |
@@ -325,6 +326,7 @@ robodeploy/
 │   │                              #   SceneSpec, EpisodeInfo  (all dataclasses)
 │   ├── spaces.py                  # ActionSpace enum, AssetFormat enum
 │   ├── robot.py                   # Robot + RobotTask aggregates
+│   ├── sensor_rig.py              # SensorRig / SensorSpec composition
 │   ├── interfaces/
 │   │   ├── backend.py             # IBackend (ABC)
 │   │   ├── policy.py              # IPolicy  (ABC)
@@ -389,7 +391,7 @@ robodeploy/
 │       ├── sim/mujoco_ft.py       # @register_sensor("ft_sensor_sim")
 │       └── real/ati_ft.py         # @register_sensor("ft_sensor_real")
 │
-├── tasks/                         # Scene + goal — backend-agnostic
+├── tasks/                         # TaskBase + DR helpers only (concrete tasks in your repo / examples/tasks)
 │   ├── base.py                    # TaskBase(ITask)
 │   │                              #   Adds: step/episode counters, default failure_fn
 │   │                              #   Subclasses implement: obs_spec, scene_spec,
@@ -397,10 +399,7 @@ robodeploy/
 │   │                              #     success_fn
 │   ├── randomization.py           # DomainRandomizer + DomainRandomizerConfig
 │   │                              #   RandomLevel: NONE / LIGHT / FULL
-│   └── manipulation/
-│       ├── pick_place.py          # PickPlaceTask   @register_task("pick_place")
-│       ├── pour.py                # PourTask        @register_task("pour")
-│       └── peg_insertion.py       # PegTask         @register_task("peg_insertion")
+│   └── (no bundled manipulation tasks — see examples/tasks/)
 │
 ├── kinematics/                    # Pure math — no backend dependency
 │   ├── solver.py                  # KinematicsSolver: fk(), ik(), jacobian()
@@ -426,7 +425,7 @@ robodeploy/
 ├── env.py                         # RoboEnv: gym-compatible orchestrator
 │                                  #   RoboEnv(backend=..., robots=[Robot(...)], shared_sensors=[])
 │                                  #   RoboEnv.make(robot=, backend=, task=, policy=)
-│                                  #   RoboEnv.from_preset(name)
+│                                  #   Example presets: examples/env_from_preset.py
 │                                  #   RoboEnv.from_config(cfg)
 │                                  #   step() / reset() return scalar when 1 task,
 │                                  #     dict-like obs when multi-robot (see `core/types.py`)

@@ -1,4 +1,4 @@
-"""PickPlaceTask — architecture-compliant manipulation task stub."""
+"""PickPlaceTask — example manipulation task (not part of robodeploy core)."""
 
 from __future__ import annotations
 
@@ -11,20 +11,17 @@ from robodeploy.tasks.base import TaskBase
 
 @register_task("pick_place")
 class PickPlaceTask(TaskBase):
-    """Pick-and-place task (minimal)."""
+    """Pick-and-place task (minimal example)."""
 
     def obs_spec(self) -> ObsSpec:
-        # Minimal default: no vision until concrete sensor stack is added.
         return ObsSpec(rgb=False, depth=False)
 
     def scene_spec(self) -> SceneSpec:
-        # Minimal scene: a "source" prop and a "target" prop marker.
-        # Backends may ignore asset_path for now; RViz can still show markers.
         return SceneSpec(
             props=[
                 PropConfig(
                     name="source",
-                    position=(0.5, 0.0, 0.025),
+                    position=(0.55, 0.0, 0.38),
                     is_fixed=False,
                     mass=0.05,
                     geom=GeomSpec(kind="box", size=(0.025, 0.025, 0.025)),
@@ -32,7 +29,7 @@ class PickPlaceTask(TaskBase):
                 ),
                 PropConfig(
                     name="target",
-                    position=(0.6, 0.2, 0.003),
+                    position=(0.60, 0.20, 0.38),
                     is_fixed=True,
                     geom=GeomSpec(kind="box", size=(0.04, 0.04, 0.003)),
                     material=MaterialSpec(rgba=(0.0, 0.8, 0.0, 0.7)),
@@ -72,7 +69,7 @@ class PickPlaceTask(TaskBase):
         target = self.scene_prop("target")
         source = self.scene_prop("source")
         if target is None:
-            return (0.6, 0.2, 0.02)
+            return (0.6, 0.2, 0.41)
         z = float(target.position[2])
         if source is not None and source.geom is not None and source.geom.kind == "box" and len(source.geom.size) >= 3:
             z += float(source.geom.size[2])
@@ -84,4 +81,3 @@ class PickPlaceTask(TaskBase):
         dy = float(a[1]) - float(b[1])
         dz = float(a[2]) - float(b[2])
         return math.sqrt(dx * dx + dy * dy + dz * dz)
-

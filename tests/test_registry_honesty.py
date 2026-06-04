@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import sys
 import unittest
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from robodeploy import RoboEnv
 from robodeploy.core.registry import list_registered, register_policy, resolve_sensor_class, unregister_policy
@@ -57,6 +63,9 @@ class RegistryHonestyTests(unittest.TestCase):
 
     def test_make_uses_backend_aware_sensor_resolution(self):
         import robodeploy.builtins  # noqa: F401
+        from robodeploy.core.registry import use
+
+        use("examples.tasks")
         from robodeploy.backends.real.ros2.sensors.camera_rgbd import Ros2RgbdCameraISensor
         from robodeploy.sensors.camera.sim.isaacsim_camera import IsaacSimCameraRenderer
         from robodeploy.sensors.camera.sim.mujoco_camera import MuJoCoCameraRenderer
@@ -66,7 +75,7 @@ class RegistryHonestyTests(unittest.TestCase):
             robot="franka",
             backend="mujoco",
             task="pick_place",
-            policy="waypoint_stub",
+            policy="vla_stub",
             sensors=["wrist_camera"],
         )
         self.assertIsInstance(mujoco_env.robots[0].sensors[0], MuJoCoCameraRenderer)
@@ -75,7 +84,7 @@ class RegistryHonestyTests(unittest.TestCase):
             robot="franka",
             backend="ros2_rviz",
             task="pick_place",
-            policy="waypoint_stub",
+            policy="vla_stub",
             sensors=["wrist_camera"],
             sensor_kwargs={
                 "wrist_camera": {
@@ -91,7 +100,7 @@ class RegistryHonestyTests(unittest.TestCase):
             robot="franka",
             backend="isaacsim",
             task="pick_place",
-            policy="waypoint_stub",
+            policy="vla_stub",
             sensors=["wrist_camera"],
         )
         self.assertIsInstance(isaac_env.robots[0].sensors[0], IsaacSimCameraRenderer)
@@ -100,7 +109,7 @@ class RegistryHonestyTests(unittest.TestCase):
             robot="franka",
             backend="isaacsim",
             task="pick_place",
-            policy="waypoint_stub",
+            policy="vla_stub",
             sensors=["wrist_ft"],
         )
         self.assertIsInstance(isaac_ft_env.robots[0].sensors[0], IsaacSimFTSensor)
