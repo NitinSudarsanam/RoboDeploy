@@ -54,6 +54,7 @@ class RoboEnv:
         *,
         shared_sensors: Optional[List[ISensor]] = None,
         max_episode_steps: Optional[int] = None,
+        obs_spec_policy: str = "warn",
     ) -> None:
         if backend is None:
             raise ValueError("RoboEnv requires a backend.")
@@ -67,6 +68,7 @@ class RoboEnv:
             raise ValueError("Robot IDs must be unique within a RoboEnv.")
 
         self._shared_sensors: List[ISensor] = shared_sensors or []
+        self._obs_spec_policy = str(obs_spec_policy)
         self._episode_info = EpisodeInfo()
         self._initialized = False
         self._on_pause: Optional[Callable[[], None]] = None
@@ -473,7 +475,26 @@ class RoboEnv:
     def _process_robot_obs(self, robot: Robot, obs: Observation, *, pending_reads: list) -> Observation:
         for name, sensor_data in pending_reads:
             robot.obs_pipeline.buffer_sensor(name, sensor_data)
-        return robot.obs_pipeline.process(obs)
+        processed = robot.obs_pipeline.process(obs)
+        self._validate_obs_against_task(robot, processed)
+        return processed
+
+    def _validate_obs_against_task(self, robot: Robot, obs: Observation) -> None:
+        if self._obs_spec_policy.lower() == "off":
+            return
+        task_id = robot.active_task_id
+        if not task_id:
+            return
+        robot_task = robot.tasks.get(task_id)
+        if robot_task is None:
+            return
+        from robodeploy.core.types import validate_observation
+
+        validate_observation(
+            obs,
+            robot_task.task.obs_spec(),
+            policy=self._obs_spec_policy,
+        )
 
     def demo_session(self):
         """Return a DemoSession wrapper that records explicit env.step actions."""

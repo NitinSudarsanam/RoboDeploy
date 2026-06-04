@@ -186,9 +186,40 @@ class ObsSpec:
     depth:        bool = False
     ft_sensor:    bool = False
     imu:          bool = False
+    objects:      bool = False
     image_width:  int  = 128
     image_height: int  = 128
     cameras:      list[CameraRequest] = field(default_factory=list)
+
+
+def validate_observation(
+    obs: Observation,
+    spec: ObsSpec,
+    *,
+    policy: str = "warn",
+) -> None:
+    """Check that required ObsSpec fields are present on an observation."""
+    missing: list[str] = []
+    if spec.rgb and obs.rgb is None and not obs.images:
+        missing.append("rgb")
+    if spec.depth and obs.depth is None and not obs.depths:
+        missing.append("depth")
+    if spec.ft_sensor and obs.ft_force is None:
+        missing.append("ft_force")
+    if spec.imu and obs.imu_acceleration is None:
+        missing.append("imu_acceleration")
+    if spec.objects and not obs.objects:
+        missing.append("objects")
+    if not missing:
+        return
+    msg = f"Observation missing required ObsSpec fields: {', '.join(missing)}"
+    mode = str(policy).lower()
+    if mode == "raise":
+        raise ValueError(msg)
+    if mode == "warn":
+        import warnings
+
+        warnings.warn(msg, RuntimeWarning, stacklevel=3)
 
 
 @dataclass

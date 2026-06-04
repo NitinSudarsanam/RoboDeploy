@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -116,6 +117,8 @@ MJCF = """<mujoco model="tiny">
 
 class MuJoCoSensorSceneE2ETests(unittest.TestCase):
     def test_sensor_and_scene_capabilities_on_mujoco(self) -> None:
+        if sys.platform == "win32":
+            self.skipTest("MuJoCo Renderer (GLFW) is unstable in headless Windows tests")
         try:
             import mujoco  # noqa: F401
         except Exception as exc:
