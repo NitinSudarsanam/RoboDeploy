@@ -57,9 +57,14 @@ class ReachPickPlacePolicy(PolicyBase):
         blend: float = 0.22,
         settle_dist: float = 0.025,
         steps_per_phase: int = 180,
+        carry_mode: str = "kinematic",
         description=None,
+        config: dict | None = None,
     ) -> None:
-        super().__init__(action_space=ActionSpace.JOINT_POS, config={"action_hz": 50.0})
+        policy_cfg = {"action_hz": 50.0, "carry_mode": str(carry_mode)}
+        if config:
+            policy_cfg.update(dict(config))
+        super().__init__(action_space=ActionSpace.JOINT_POS, config=policy_cfg)
         self._description = description
         self._home = np.array(
             home_qpos if home_qpos is not None else [0.0, -0.6, 0.0, -1.8, 0.0, 1.2, 0.0],
@@ -93,6 +98,7 @@ class ReachPickPlacePolicy(PolicyBase):
         self._backend = None
         self._carrying = False
         self._carry_offset = np.array([0.0, 0.0, 0.03], dtype=np.float32)
+        self._kinematic_carry = str(self.config.get("carry_mode", "kinematic")).lower() != "none"
 
     def set_ik_solver(self, solver: MujocoIkSolver) -> None:
         self._ik = solver
@@ -134,7 +140,7 @@ class ReachPickPlacePolicy(PolicyBase):
         self._carrying = False
 
     def _sync_carried_object(self, ee: np.ndarray) -> None:
-        if not self._carrying or self._backend is None:
+        if not self._kinematic_carry or not self._carrying or self._backend is None:
             return
         if not hasattr(self._backend, "set_prop_pose"):
             return

@@ -4,6 +4,8 @@ import sys
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -14,6 +16,22 @@ class ExampleEnvTests(unittest.TestCase):
         from examples.dummy_pick_place.run import main
 
         main()
+
+    def test_reach_policy_carry_mode_none_skips_prop_teleport(self):
+        from examples.policies.reach_pick_place import ReachPickPlacePolicy
+
+        class _Backend:
+            calls = 0
+
+            def set_prop_pose(self, name, pos, quat):
+                _Backend.calls += 1
+
+        policy = ReachPickPlacePolicy(carry_mode="none")
+        policy._backend = _Backend()
+        policy._carrying = True
+        policy._kinematic_carry = False
+        policy._sync_carried_object(np.zeros(3, dtype=np.float32))
+        self.assertEqual(_Backend.calls, 0)
 
     def test_reach_policy_produces_joint_actions(self):
         from robodeploy.core.types import Observation

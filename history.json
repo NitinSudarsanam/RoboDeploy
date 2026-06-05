@@ -1531,7 +1531,22 @@
         "known_gaps": ["Full SE(3) camera-to-world transform not yet applied in perception transforms."]
       },
       "verification": ["pytest tests/test_color_blob.py + full suite"],
-      "next_subtask": { "id": "goal26-subtask1", "title": "Physics grasp or MuJoCo attach constraint for pick-place" }
+      "next_subtask": { "id": "goal26-subtask1", "title": "Configurable carry_mode on reach policies" }
+    },
+    {
+      "subtask_id": "goal26-subtask1",
+      "title": "Configurable carry_mode on reach policies",
+      "timestamp": "2026-06-04T14:00:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "ReachPickPlacePolicy carry_mode: kinematic (default) or none.",
+          "CONTRACTS.md documents carry_mode and camera_extrinsics/ft_forces metadata."
+        ],
+        "known_gaps": ["Physics weld/contact grasp not implemented; carry_mode=none disables teleport only."]
+      },
+      "verification": ["pytest: 130 passed, 3 skipped"],
+      "next_subtask": { "id": "goal26-subtask2", "title": "MuJoCo weld/attach constraint grasp" }
     }
   ]
 }
