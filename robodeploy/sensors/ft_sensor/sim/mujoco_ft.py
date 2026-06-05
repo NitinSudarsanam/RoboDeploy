@@ -9,6 +9,7 @@ import numpy as np
 from robodeploy.core.registry import register_sensor, register_sensor_pair
 from robodeploy.core.types import SensorData, SensorMount
 from robodeploy.sensors.base import SensorBase
+from robodeploy.backends.real.ros2.sensors.wrench import Ros2WrenchISensor
 from robodeploy.sensors.ft_sensor.sim.isaacsim_ft import IsaacSimFTSensor
 
 
@@ -54,6 +55,8 @@ class MuJoCoFTSensor(SensorBase):
         return SensorData(
             ft_force=force,
             ft_torque=torque,
+            ft_forces={self.name: force},
+            ft_torques={self.name: torque},
             timestamp=sim_time,
             timestamp_hw=sim_time,
             timestamp_recv=time.monotonic(),
@@ -82,8 +85,9 @@ class MuJoCoFTSensor(SensorBase):
     by_backend={
         "mujoco": MuJoCoFTSensor,
         "isaacsim": IsaacSimFTSensor,
-        "ros2_rviz": None,
-        "gazebo": None,
+        "ros2": Ros2WrenchISensor,
+        "ros2_rviz": Ros2WrenchISensor,
+        "gazebo": Ros2WrenchISensor,
     },
 )
 class WristFTPair:

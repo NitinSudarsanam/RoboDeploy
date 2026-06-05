@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from robodeploy.core.interfaces.sensor import ISensor
-from robodeploy.core.registry import resolve_sensor_class
+from robodeploy.core.registry import normalize_sensor_backend_name, resolve_sensor_class
 from robodeploy.core.types import SensorMount
 
 SensorKind = Literal["wrist_camera", "overhead_camera", "wrist_ft", "sim_prop_pose"]
@@ -96,7 +96,11 @@ class SensorRig:
             if spec.kind == "sim_prop_pose":
                 registry_name = "sim_prop_pose"
             SensorClass = resolve_sensor_class(registry_name, is_real=is_real, backend_name=backend_name)
-            cfg = {**spec.config, "name": logical}
+            cfg = _apply_backend_sensor_defaults(
+                spec.kind,
+                {**spec.config, "name": logical},
+                backend_name=backend_name,
+            )
             if spec.mount is not None:
                 cfg.setdefault("mount", {
                     "parent_link": spec.mount.parent_link,
@@ -108,6 +112,28 @@ class SensorRig:
             except TypeError:
                 out.append(SensorClass(logical, config=cfg))
         return out
+
+
+def _apply_backend_sensor_defaults(
+    kind: SensorKind,
+    cfg: dict[str, Any],
+    *,
+    backend_name: str | None,
+) -> dict[str, Any]:
+    """Fill ROS2/Gazebo topic defaults for logical rig sensors."""
+    backend = normalize_sensor_backend_name(backend_name)
+    if backend not in ("gazebo", "ros2", "ros2_rviz"):
+        return cfg
+    logical = str(cfg.get("name", kind))
+    if kind in ("wrist_camera", "overhead_camera"):
+        cfg.setdefault("namespace", f"/{logical}")
+        cfg.setdefault("rgb", "image_raw")
+        cfg.setdefault("depth", "depth/image_raw")
+        cfg.setdefault("info", "camera_info")
+    if kind == "wrist_ft":
+        cfg.setdefault("namespace", f"/{logical}")
+        cfg.setdefault("wrench_topic", "wrench")
+    return cfg
 
 
 def materialize_sensor_rigs(

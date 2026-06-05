@@ -140,6 +140,20 @@ class SensorRigTests(unittest.TestCase):
         finally:
             env.close()
 
+    def test_gazebo_sensor_rig_applies_ros_topic_defaults(self):
+        from robodeploy.builtins import import_builtins
+        from robodeploy.core.sensor_rig import SensorRig
+
+        import_builtins()
+        rig = SensorRig.robot_mounted(wrist_rgbd={"width": 64}, wrist_ft={})
+        sensors = rig.materialize(is_real=True, backend_name="gazebo")
+        self.assertEqual(len(sensors), 2)
+        cam_cfg = sensors[0].config
+        self.assertEqual(cam_cfg.get("rgb"), "image_raw")
+        self.assertEqual(cam_cfg.get("namespace"), "/wrist_camera")
+        ft_cfg = sensors[1].config
+        self.assertEqual(ft_cfg.get("wrench_topic"), "wrench")
+
     def test_from_config_sensor_rigs_materialize(self):
         from robodeploy.env import RoboEnv
 

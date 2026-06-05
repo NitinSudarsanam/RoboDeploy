@@ -28,6 +28,7 @@ _BUILTIN_MODULES: tuple[str, ...] = (
     "robodeploy.sensors.ft_sensor.sim.mujoco_ft",
     "robodeploy.sensors.ft_sensor.real.ati_ft",
     "robodeploy.backends.real.ros2.sensors.camera_rgbd",
+    "robodeploy.backends.real.ros2.sensors.wrench",
     # Policies
     "robodeploy.policies.learned.robomimic",
     "robodeploy.policies.learned.diffusion",

@@ -34,6 +34,7 @@ from .controllers import joint_position as _builtin_joint_position  # noqa: F401
 from .controllers import joint_trajectory as _builtin_joint_trajectory  # noqa: F401
 from .controllers import so101_feetech as _builtin_so101_feetech  # noqa: F401
 from .sensors import camera_rgbd as _builtin_rgbd_sensor  # noqa: F401
+from .sensors import wrench as _builtin_wrench_sensor  # noqa: F401
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.sensor import ISensor

@@ -60,6 +60,8 @@ class Observation:
     # --- Force / torque sensor (populated when hardware present) -----------
     ft_force:             Optional[jnp.ndarray] = None   # [3]  Newtons
     ft_torque:            Optional[jnp.ndarray] = None   # [3]  N·m
+    ft_forces:            dict[str, jnp.ndarray] = field(default_factory=dict)
+    ft_torques:           dict[str, jnp.ndarray] = field(default_factory=dict)
 
     # --- IMU (populated when hardware present) ------------------------------
     imu_acceleration:     Optional[jnp.ndarray] = None   # [3]  m/s²
@@ -134,6 +136,8 @@ class SensorData:
     depth:           Optional[jnp.ndarray] = None   # [H, W]     float32 metres
     ft_force:        Optional[jnp.ndarray] = None   # [3]  Newtons
     ft_torque:       Optional[jnp.ndarray] = None   # [3]  N·m
+    ft_forces:       dict[str, jnp.ndarray] = field(default_factory=dict)
+    ft_torques:      dict[str, jnp.ndarray] = field(default_factory=dict)
     imu_acceleration: Optional[jnp.ndarray] = None  # [3]  m/s²
     imu_angular_velocity: Optional[jnp.ndarray] = None  # [3]  rad/s
     objects: dict[str, tuple[tuple[float, float, float], tuple[float, float, float, float]]] = field(
@@ -208,7 +212,7 @@ def validate_observation(
         missing.append("rgb")
     if spec.depth and obs.depth is None and not obs.depths:
         missing.append("depth")
-    if spec.ft_sensor and obs.ft_force is None:
+    if spec.ft_sensor and obs.ft_force is None and not obs.ft_forces:
         missing.append("ft_force")
     if spec.imu and obs.imu_acceleration is None:
         missing.append("imu_acceleration")

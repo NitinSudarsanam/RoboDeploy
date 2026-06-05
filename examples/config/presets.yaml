@@ -57,3 +57,20 @@ kuka_sensor_pick_mujoco:
     - examples.tasks
     - examples.sensors
     - examples.policies
+
+kuka_sensor_ros2_rviz:
+  robot: kuka
+  backend: ros2_rviz
+  task: pick_place
+  policy: example_joint_track
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      wrist_rgbd:
+        width: 64
+        height: 48
+        depth: false
+      wrist_ft: {}
+  custom_modules:
+    - examples.tasks
+    - examples.policies

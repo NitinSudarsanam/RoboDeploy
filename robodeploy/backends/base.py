@@ -211,6 +211,8 @@ class BackendBase(IBackend):
         depth = obs.depth
         ft_force = obs.ft_force
         ft_torque = obs.ft_torque
+        ft_forces = dict(getattr(obs, "ft_forces", {}) or {})
+        ft_torques = dict(getattr(obs, "ft_torques", {}) or {})
         imu_acceleration = obs.imu_acceleration
         imu_angular_velocity = obs.imu_angular_velocity
         timestamp_hw = obs.timestamp_hw
@@ -243,6 +245,14 @@ class BackendBase(IBackend):
                     depth = sd.depth
             ft_force = sd.ft_force if sd.ft_force is not None else ft_force
             ft_torque = sd.ft_torque if sd.ft_torque is not None else ft_torque
+            if getattr(sd, "ft_forces", None):
+                ft_forces.update(sd.ft_forces)
+            elif sd.ft_force is not None:
+                ft_forces[name] = sd.ft_force
+            if getattr(sd, "ft_torques", None):
+                ft_torques.update(sd.ft_torques)
+            elif sd.ft_torque is not None:
+                ft_torques[name] = sd.ft_torque
             imu_acceleration = sd.imu_acceleration if sd.imu_acceleration is not None else imu_acceleration
             imu_angular_velocity = sd.imu_angular_velocity if sd.imu_angular_velocity is not None else imu_angular_velocity
             if getattr(sd, "objects", None):
@@ -262,6 +272,8 @@ class BackendBase(IBackend):
             depths=depths,
             ft_force=ft_force,
             ft_torque=ft_torque,
+            ft_forces=ft_forces,
+            ft_torques=ft_torques,
             imu_acceleration=imu_acceleration,
             imu_angular_velocity=imu_angular_velocity,
             objects=objects,

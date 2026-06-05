@@ -60,6 +60,8 @@ class SensorSampleBuffer:
         depth = obs.depth
         ft_force = obs.ft_force
         ft_torque = obs.ft_torque
+        ft_forces = dict(getattr(obs, "ft_forces", {}) or {})
+        ft_torques = dict(getattr(obs, "ft_torques", {}) or {})
         objects = dict(getattr(obs, "objects", {}) or {})
         sensor_status = dict(getattr(obs, "sensor_status", {}) or {})
         camera_frames = dict(getattr(obs, "camera_frames", {}) or {})
@@ -80,6 +82,14 @@ class SensorSampleBuffer:
                     depth = sample.depth
             ft_force = sample.ft_force if sample.ft_force is not None else ft_force
             ft_torque = sample.ft_torque if sample.ft_torque is not None else ft_torque
+            if getattr(sample, "ft_forces", None):
+                ft_forces.update(sample.ft_forces)
+            elif sample.ft_force is not None:
+                ft_forces[name] = sample.ft_force
+            if getattr(sample, "ft_torques", None):
+                ft_torques.update(sample.ft_torques)
+            elif sample.ft_torque is not None:
+                ft_torques[name] = sample.ft_torque
             if getattr(sample, "objects", None):
                 objects.update(sample.objects)
             if getattr(sample, "frame_id", None):
@@ -94,6 +104,8 @@ class SensorSampleBuffer:
             depths=depths,
             ft_force=ft_force,
             ft_torque=ft_torque,
+            ft_forces=ft_forces,
+            ft_torques=ft_torques,
             objects=objects,
             sensor_status=sensor_status,
             camera_frames=camera_frames,
