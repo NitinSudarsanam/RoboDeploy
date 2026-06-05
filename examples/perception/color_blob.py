@@ -76,7 +76,12 @@ class ColorBlobCentroidTransform(ITransform):
         y_cam = (cy - icy) * z / max(fy, 1e-6)
         z_cam = z
 
-        ox, oy, oz = self._world_origin
+        extr = (getattr(obs, "camera_extrinsics", {}) or {}).get(self._camera)
+        if isinstance(extr, dict) and extr.get("position"):
+            mount_pos = extr["position"]
+            ox, oy, oz = (float(mount_pos[0]), float(mount_pos[1]), float(mount_pos[2]))
+        else:
+            ox, oy, oz = self._world_origin
         sx, sy, sz = self._world_scale
         pos = (ox + x_cam * sx, oy + y_cam * sy, oz + (z_cam - self._default_z) * sz)
         objects = dict(getattr(obs, "objects", {}) or {})

@@ -221,6 +221,7 @@ class BackendBase(IBackend):
         sensor_status = dict(getattr(obs, "sensor_status", {}) or {})
         camera_frames = dict(getattr(obs, "camera_frames", {}) or {})
         camera_intrinsics = dict(getattr(obs, "camera_intrinsics", {}) or {})
+        camera_extrinsics = dict(getattr(obs, "camera_extrinsics", {}) or {})
 
         for sensor in sensors:
             name = str(getattr(sensor, "name", type(sensor).__name__))
@@ -261,6 +262,8 @@ class BackendBase(IBackend):
                 camera_frames[name] = str(sd.frame_id)
             if getattr(sd, "intrinsics", None):
                 camera_intrinsics[name] = dict(sd.intrinsics)
+            if getattr(sd, "extrinsics", None):
+                camera_extrinsics[name] = dict(sd.extrinsics)
             timestamp_hw = max(float(timestamp_hw), float(sd.timestamp_hw or 0.0))
             timestamp_recv = max(float(timestamp_recv), float(sd.timestamp_recv or 0.0))
 
@@ -280,6 +283,7 @@ class BackendBase(IBackend):
             sensor_status=sensor_status,
             camera_frames=camera_frames,
             camera_intrinsics=camera_intrinsics,
+            camera_extrinsics=camera_extrinsics,
             timestamp_hw=timestamp_hw,
             timestamp_recv=timestamp_recv,
         )

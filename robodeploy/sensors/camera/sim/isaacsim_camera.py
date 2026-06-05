@@ -103,6 +103,7 @@ class IsaacSimCameraRenderer(SensorBase):
                 "cy": float(self._height) * 0.5,
                 "fovy_deg": fovy_deg,
             },
+            extrinsics=self.mount_extrinsics(),
             timestamp=sim_time,
             timestamp_hw=sim_time,
             timestamp_recv=time.monotonic(),

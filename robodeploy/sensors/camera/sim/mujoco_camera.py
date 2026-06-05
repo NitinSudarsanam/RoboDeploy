@@ -71,6 +71,7 @@ class MuJoCoCameraRenderer(SensorBase):
             depth=depth,
             frame_id=self._camera_name,
             intrinsics=self._intrinsics,
+            extrinsics=self.mount_extrinsics(),
             timestamp=sim_time,
             timestamp_hw=sim_time,
             timestamp_recv=time.monotonic(),

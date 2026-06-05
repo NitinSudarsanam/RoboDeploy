@@ -78,6 +78,7 @@ class Observation:
     sensor_status:        dict[str, str] = field(default_factory=dict)
     camera_frames:        dict[str, str] = field(default_factory=dict)
     camera_intrinsics:    dict[str, dict[str, float]] = field(default_factory=dict)
+    camera_extrinsics:    dict[str, dict[str, object]] = field(default_factory=dict)
 
     # --- Metadata -----------------------------------------------------------
     # timestamp:      anchor time this observation represents (sim time or wall clock)
@@ -146,6 +147,7 @@ class SensorData:
     status: str = "ok"
     frame_id: Optional[str] = None
     intrinsics: Optional[dict[str, float]] = None
+    extrinsics: Optional[dict[str, object]] = None
     # timestamp_hw:   hardware clock of the sensor (e.g. camera frame timestamp).
     #                 On sim backends, use the sim clock. On real backends, use the
     #                 sensor's own hardware timestamp when available.

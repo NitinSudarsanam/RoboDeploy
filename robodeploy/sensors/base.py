@@ -72,6 +72,17 @@ class SensorBase(ISensor):
         self._init_impl(backend)
         self._initialized = True
 
+    def mount_extrinsics(self) -> dict[str, object] | None:
+        """Return mount pose metadata for camera-frame transforms."""
+        mount = getattr(self, "mount", None)
+        if mount is None or not mount.parent_link:
+            return None
+        return {
+            "parent_link": str(mount.parent_link),
+            "position": tuple(float(v) for v in mount.position),
+            "orientation": tuple(float(v) for v in mount.orientation),
+        }
+
     def read(self) -> SensorData:
         """Return the latest reading, falling back to last-valid data on failure.
 

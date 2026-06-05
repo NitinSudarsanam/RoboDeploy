@@ -1500,7 +1500,7 @@
       "subtask_id": "goal25-subtask3",
       "title": "Gazebo URDF sensor injection + CI sensor e2e",
       "timestamp": "2026-06-04T13:00:00Z",
-      "status": "in_progress",
+      "status": "completed",
       "repo_state": {
         "implemented": [
           "robodeploy/backends/sim/gazebo/urdf_sensors.py injects camera/FT links from SensorMount.",
@@ -1514,8 +1514,24 @@
           "Physics-based grasp to replace kinematic carry."
         ]
       },
-      "verification": ["pytest tests/test_gazebo_urdf_sensors.py + full suite"],
-      "next_subtask": { "id": "goal25-subtask4", "title": "Physics grasp + camera extrinsics in perception transforms" }
+      "verification": ["pytest: 128 passed, 3 skipped"],
+      "next_subtask": { "id": "goal25-subtask4", "title": "Camera extrinsics in observation contract" }
+    },
+    {
+      "subtask_id": "goal25-subtask4",
+      "title": "Camera extrinsics in observation contract",
+      "timestamp": "2026-06-04T13:30:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "SensorData.extrinsics and Observation.camera_extrinsics merged by backend/pipeline.",
+          "MuJoCo/Isaac cameras publish mount extrinsics via SensorBase.mount_extrinsics().",
+          "ColorBlobCentroidTransform uses camera_extrinsics mount position when present."
+        ],
+        "known_gaps": ["Full SE(3) camera-to-world transform not yet applied in perception transforms."]
+      },
+      "verification": ["pytest tests/test_color_blob.py + full suite"],
+      "next_subtask": { "id": "goal26-subtask1", "title": "Physics grasp or MuJoCo attach constraint for pick-place" }
     }
   ]
 }

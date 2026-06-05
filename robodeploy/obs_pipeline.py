@@ -66,6 +66,7 @@ class SensorSampleBuffer:
         sensor_status = dict(getattr(obs, "sensor_status", {}) or {})
         camera_frames = dict(getattr(obs, "camera_frames", {}) or {})
         camera_intrinsics = dict(getattr(obs, "camera_intrinsics", {}) or {})
+        camera_extrinsics = dict(getattr(obs, "camera_extrinsics", {}) or {})
         for name, sample in self._latest.items():
             ts = float(sample.timestamp_hw or sample.timestamp)
             if abs(ts - anchor) > self.window_s:
@@ -96,6 +97,8 @@ class SensorSampleBuffer:
                 camera_frames[name] = str(sample.frame_id)
             if getattr(sample, "intrinsics", None):
                 camera_intrinsics[name] = dict(sample.intrinsics)
+            if getattr(sample, "extrinsics", None):
+                camera_extrinsics[name] = dict(sample.extrinsics)
         return replace(
             obs,
             rgb=rgb,
@@ -110,6 +113,7 @@ class SensorSampleBuffer:
             sensor_status=sensor_status,
             camera_frames=camera_frames,
             camera_intrinsics=camera_intrinsics,
+            camera_extrinsics=camera_extrinsics,
         )
 
     def reset(self) -> None:
