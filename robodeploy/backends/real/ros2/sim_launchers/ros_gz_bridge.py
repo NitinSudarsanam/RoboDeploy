@@ -71,3 +71,17 @@ def image_bridge_rules(*topics: str) -> tuple[str, ...]:
         rules.append(f"{t}@sensor_msgs/msg/Image[gz.msgs.Image")
     return tuple(dict.fromkeys(rules))
 
+
+def wrench_bridge_rules(*topics: str) -> tuple[str, ...]:
+    """Return ros_gz_bridge rules for Gazebo wrench / FT topics."""
+
+    rules: list[str] = []
+    for topic in topics:
+        t = str(topic or "").strip()
+        if not t:
+            continue
+        if not t.startswith("/"):
+            t = f"/{t}"
+        rules.append(f"{t}@geometry_msgs/msg/WrenchStamped[gz.msgs.Wrench")
+    return tuple(dict.fromkeys(rules))
+

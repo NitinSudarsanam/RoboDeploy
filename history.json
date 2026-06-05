@@ -144,6 +144,24 @@
       "timestamp": "2026-05-27T03:35:00Z",
       "reason": "The runtime had already been normalized for advanced hooks, but diffusion remained a stub with no action-sequence semantics.",
       "goal": "Land a concrete diffusion-style policy that can benefit from the existing batching/rejection/runtime contract without forcing heavyweight dependencies."
+    },
+    {
+      "decision": "SensorRig is the user-facing perception composition layer; policies and tasks consume Observation.objects/images/ft_forces instead of backend.get_prop_pose().",
+      "timestamp": "2026-06-04T12:00:00Z",
+      "reason": "Sensors were attached as ad-hoc lists without a rig abstraction or a perception-first contract for policies/tasks.",
+      "goal": "Declare logical sensors once (wrist_rgbd, wrist_ft, prop_pose) and resolve sim/real/Gazebo implementations through the registry."
+    },
+    {
+      "decision": "RoboEnv.from_config is the canonical preset path; sensor_rigs, obs_pipeline transforms, and PolicyBase.bind_runtime wire MuJoCo IK without example-only hooks.",
+      "timestamp": "2026-06-04T12:30:00Z",
+      "reason": "CLI and env_from_preset used RoboEnv.make() which dropped sensor_rigs; reach policies required manual attach_mujoco after reset.",
+      "goal": "Reproducible YAML presets and automatic runtime binding for working pick-place demos."
+    },
+    {
+      "decision": "Gazebo URDF sensor injection patches robot descriptions from SensorMount before spawn; ros_gz_bridge derives image and wrench rules from declared sensors.",
+      "timestamp": "2026-06-04T13:00:00Z",
+      "reason": "Gazebo launched worlds from SceneSpec but robot-mounted cameras/FT sensors were not inserted into URDF or bridged to ROS topics.",
+      "goal": "Same SensorRig logical names work on MuJoCo, ROS2/RViz, and Gazebo with backend-specific topic defaults."
     }
   ],
   "subtask_history": [
@@ -1438,6 +1456,66 @@
       },
       "verification": ["python -m unittest discover -s tests -q (90 tests)"],
       "next_subtask": { "id": "goal24-subtask2", "title": "Commit/push drift-cleanup iteration" }
+    },
+    {
+      "subtask_id": "goal25-subtask1",
+      "title": "SensorRig + perception-first examples (MuJoCo pick-place)",
+      "timestamp": "2026-06-04T12:00:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "SensorRig/SensorSpec in robodeploy/core/sensor_rig.py with robot_mounted() shorthand.",
+          "Observation.objects, sensor_status, camera_frames, camera_intrinsics, ft_forces/ft_torques.",
+          "examples/sensors/prop_pose.py (SimPropPoseSensor) and example_sensor_reach_pick policy.",
+          "examples/kuka_sensor_pick_mujoco demo + kuka_sensor_pick_mujoco preset.",
+          "Moved tasks/policies/presets out of robodeploy core into examples/."
+        ],
+        "known_gaps": [
+          "Kinematic carry of source prop still used in sim (not physics grasp).",
+          "MuJoCo Renderer crashes on headless Windows; e2e skipped locally."
+        ]
+      },
+      "verification": ["pytest: 119+ passed; sensor pick success=True in MuJoCo"],
+      "next_subtask": { "id": "goal25-subtask2", "title": "Preset path, ObsSpec validation, vision transforms" }
+    },
+    {
+      "subtask_id": "goal25-subtask2",
+      "title": "Preset path, ObsSpec validation, vision transforms",
+      "timestamp": "2026-06-04T12:30:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "env_from_preset and CLI use RoboEnv.from_config with sensor_rigs.",
+          "TaskBase.object_pose() reads obs.objects when require_objects is set.",
+          "validate_observation() + ObsSpec.objects; ColorBlobCentroidTransform.",
+          "PolicyBase.bind_runtime() auto-binds MuJoCo IK; kuka_vision_pick_mujoco preset.",
+          "Ros2WrenchISensor + SensorRig ROS2/Gazebo topic defaults."
+        ],
+        "known_gaps": ["Vision pick needs calibrated camera-to-world extrinsics for accuracy."]
+      },
+      "verification": ["pytest: 126 passed, 3 skipped"],
+      "next_subtask": { "id": "goal25-subtask3", "title": "Gazebo URDF sensor injection + CI sensor e2e" }
+    },
+    {
+      "subtask_id": "goal25-subtask3",
+      "title": "Gazebo URDF sensor injection + CI sensor e2e",
+      "timestamp": "2026-06-04T13:00:00Z",
+      "status": "in_progress",
+      "repo_state": {
+        "implemented": [
+          "robodeploy/backends/sim/gazebo/urdf_sensors.py injects camera/FT links from SensorMount.",
+          "ROS2GazeboBackend patches robot URDF and bridges wrench topics.",
+          "wrench_bridge_rules() for ros_gz_bridge.",
+          "Isaac FT/camera publish named ft maps and camera intrinsics.",
+          "GitHub Actions sensor-e2e-linux job for MuJoCo sensor tests on Ubuntu."
+        ],
+        "known_gaps": [
+          "Gazebo URDF injection not yet validated against a live Gazebo launch.",
+          "Physics-based grasp to replace kinematic carry."
+        ]
+      },
+      "verification": ["pytest tests/test_gazebo_urdf_sensors.py + full suite"],
+      "next_subtask": { "id": "goal25-subtask4", "title": "Physics grasp + camera extrinsics in perception transforms" }
     }
   ]
 }

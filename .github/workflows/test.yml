@@ -18,7 +18,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
       - name: Run unit tests
-        run: python -m unittest discover -s tests -q
+        run: python -m pytest tests/ -q --ignore=tests/test_sensors_and_scenes_e2e.py
+
+  sensor-e2e-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install with sim extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,sim]"
+      - name: MuJoCo sensor e2e (Linux)
+        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py -q
 
   mujoco-smoke:
     runs-on: ubuntu-latest

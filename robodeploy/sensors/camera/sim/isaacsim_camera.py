@@ -84,9 +84,25 @@ class IsaacSimCameraRenderer(SensorBase):
                     depth = method()
                     break
         sim_time = float(getattr(self._backend, "_sim_time", 0.0))
+        fovy_deg = float(self.config.get("fovy_deg", 60.0))
+        import math
+
+        fovy_rad = math.radians(fovy_deg)
+        fy = (0.5 * self._height) / math.tan(0.5 * fovy_rad)
+        fx = fy
         return SensorData(
             rgb=self._coerce_rgb(rgb),
             depth=self._coerce_depth(depth),
+            frame_id=self._camera_name,
+            intrinsics={
+                "width": float(self._width),
+                "height": float(self._height),
+                "fx": float(fx),
+                "fy": float(fy),
+                "cx": float(self._width) * 0.5,
+                "cy": float(self._height) * 0.5,
+                "fovy_deg": fovy_deg,
+            },
             timestamp=sim_time,
             timestamp_hw=sim_time,
             timestamp_recv=time.monotonic(),

@@ -35,12 +35,15 @@ class ROS2GazeboBackend(ROS2RealBackend):
             raise ValueError("ROS2GazeboBackend requires config.sim.kind == 'gazebo'.")
 
         from robodeploy.backends.real.ros2.sim_launchers.gazebo import GazeboLaunchConfig, GazeboLauncher
-        from robodeploy.backends.real.ros2.sim_launchers.ros_gz_bridge import image_bridge_rules
+        from robodeploy.backends.real.ros2.sim_launchers.ros_gz_bridge import image_bridge_rules, wrench_bridge_rules
+        from robodeploy.backends.sim.gazebo.urdf_sensors import write_urdf_with_sensors
         from robodeploy.backends.sim.gazebo.scene_builder import GazeboSceneBuilder
 
         bridge_rules = [*tuple(sim_cfg.get("bridge_rules", ()) or ())]
         wait_for_topics = [*tuple(sim_cfg.get("wait_for_topics", ()) or ())]
+        all_robot_sensors: list["ISensor"] = []
         for robot in robots:
+            all_robot_sensors.extend(list(robot.sensors))
             sensors_cfg = self.config.get(f"{robot.robot_id}.sensors", None)
             topics = self._image_topics_from_sensor_config(robot.robot_id, sensors_cfg)
             bridge_rules.extend(image_bridge_rules(*topics))
@@ -49,10 +52,18 @@ class ROS2GazeboBackend(ROS2RealBackend):
                 topics = self._image_topics_from_sensor_object(robot.robot_id, sensor)
                 bridge_rules.extend(image_bridge_rules(*topics))
                 wait_for_topics.extend(topics)
+                wrench_topic = self._wrench_topic_from_sensor_object(robot.robot_id, sensor)
+                if wrench_topic:
+                    bridge_rules.extend(wrench_bridge_rules(wrench_topic))
+                    wait_for_topics.append(wrench_topic)
         for sensor in shared_sensors:
             topics = self._image_topics_from_sensor_object(None, sensor)
             bridge_rules.extend(image_bridge_rules(*topics))
             wait_for_topics.extend(topics)
+            wrench_topic = self._wrench_topic_from_sensor_object(None, sensor)
+            if wrench_topic:
+                bridge_rules.extend(wrench_bridge_rules(wrench_topic))
+                wait_for_topics.append(wrench_topic)
 
         robot_urdf = sim_cfg.get("robot_urdf")
         if not robot_urdf and robots:
@@ -60,6 +71,14 @@ class ROS2GazeboBackend(ROS2RealBackend):
                 robot_urdf = str(robots[0].description.asset_path(AssetFormat.URDF))
             except Exception:
                 robot_urdf = None
+        self._generated_robot_urdf_path = None
+        if robot_urdf and all_robot_sensors:
+            try:
+                patched = write_urdf_with_sensors(robot_urdf, all_robot_sensors)
+                self._generated_robot_urdf_path = str(patched)
+                robot_urdf = str(patched)
+            except Exception:
+                pass
         self._generated_world_path = None
         world_path = sim_cfg.get("world")
         if not world_path:
@@ -101,6 +120,13 @@ class ROS2GazeboBackend(ROS2RealBackend):
                 except Exception:
                     pass
                 self._generated_world_path = None
+            generated_urdf = getattr(self, "_generated_robot_urdf_path", None)
+            if generated_urdf:
+                try:
+                    Path(str(generated_urdf)).unlink(missing_ok=True)
+                except Exception:
+                    pass
+                self._generated_robot_urdf_path = None
 
     @staticmethod
     def _qualify_topic(namespace: str | None, topic: str | None) -> str | None:
@@ -141,4 +167,15 @@ class ROS2GazeboBackend(ROS2RealBackend):
             if topic:
                 out.append(topic)
         return list(dict.fromkeys(out))
+
+    @classmethod
+    def _wrench_topic_from_sensor_object(cls, robot_id: str | None, sensor: "ISensor") -> str | None:
+        cfg = dict(getattr(sensor, "config", {}) or {})
+        namespace = cfg.get("namespace")
+        if not isinstance(namespace, str) or not namespace.strip():
+            namespace = f"/{robot_id}" if robot_id else ""
+        rel = cfg.get("wrench_topic") or cfg.get("topic")
+        if not rel and "ft" in str(getattr(sensor, "name", "")).lower():
+            rel = "wrench"
+        return cls._qualify_topic(namespace, rel)
 

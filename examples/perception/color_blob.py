@@ -21,12 +21,16 @@ class ColorBlobCentroidTransform(ITransform):
         target_rgb: tuple[int, int, int] = (255, 0, 0),
         tolerance: int = 90,
         default_z: float = 0.38,
+        world_origin: tuple[float, float, float] = (0.55, 0.0, 0.38),
+        camera_to_world_scale: tuple[float, float, float] = (0.15, 0.15, 1.0),
     ) -> None:
         self._camera = str(camera)
         self._object_name = str(object_name)
         self._target = np.asarray(target_rgb, dtype=np.int16)
         self._tolerance = int(tolerance)
         self._default_z = float(default_z)
+        self._world_origin = tuple(float(v) for v in world_origin)
+        self._world_scale = tuple(float(v) for v in camera_to_world_scale)
 
     def forward(self, obs: Observation) -> Observation:
         images = getattr(obs, "images", {}) or {}
@@ -68,11 +72,13 @@ class ColorBlobCentroidTransform(ITransform):
         icx = float(intr.get("cx", arr.shape[1] * 0.5))
         icy = float(intr.get("cy", arr.shape[0] * 0.5))
 
-        x = (cx - icx) * z / max(fx, 1e-6)
-        y = (cy - icy) * z / max(fy, 1e-6)
+        x_cam = (cx - icx) * z / max(fx, 1e-6)
+        y_cam = (cy - icy) * z / max(fy, 1e-6)
+        z_cam = z
 
-        # Camera frame → simple tabletop frame (demo heuristic).
-        pos = (0.55 + x * 0.15, y * 0.15, z)
+        ox, oy, oz = self._world_origin
+        sx, sy, sz = self._world_scale
+        pos = (ox + x_cam * sx, oy + y_cam * sy, oz + (z_cam - self._default_z) * sz)
         objects = dict(getattr(obs, "objects", {}) or {})
         objects[self._object_name] = (pos, (1.0, 0.0, 0.0, 0.0))
         return replace(obs, objects=objects)

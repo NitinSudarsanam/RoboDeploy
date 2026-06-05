@@ -62,6 +62,8 @@ class IsaacSimFTSensor(SensorBase):
         return SensorData(
             ft_force=force,
             ft_torque=torque,
+            ft_forces={self.name: force},
+            ft_torques={self.name: torque},
             timestamp=sim_time,
             timestamp_hw=sim_time,
             timestamp_recv=time.monotonic(),
