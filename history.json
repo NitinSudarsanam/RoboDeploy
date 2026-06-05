@@ -1564,6 +1564,21 @@
       },
       "verification": ["pytest: 131 passed, 3 skipped"],
       "next_subtask": { "id": "goal26-subtask3", "title": "SE(3) color-blob unprojection with camera extrinsics" }
+    },
+    {
+      "subtask_id": "goal26-subtask3",
+      "title": "SE(3) color-blob unprojection with camera extrinsics",
+      "timestamp": "2026-06-04T15:00:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "ColorBlobCentroidTransform applies quaternion mount extrinsics for camera-to-world unprojection.",
+          "Falls back to scaled heuristic when extrinsics are incomplete."
+        ],
+        "known_gaps": ["No TF-tree lookup yet; uses static mount extrinsics only."]
+      },
+      "verification": ["pytest: 133 passed, 3 skipped"],
+      "next_subtask": { "id": "goal27-subtask1", "title": "Live Gazebo sensor rig smoke test" }
     }
   ]
 }

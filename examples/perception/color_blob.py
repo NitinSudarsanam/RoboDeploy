@@ -10,6 +10,43 @@ from robodeploy.core.transforms import ITransform
 from robodeploy.core.types import Observation
 
 
+def _quat_rotate_wxyz(quat: tuple[float, float, float, float], vec: tuple[float, float, float]) -> tuple[float, float, float]:
+    """Rotate a vector by quaternion (w, x, y, z)."""
+    w, x, y, z = (float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3]))
+    vx, vy, vz = (float(vec[0]), float(vec[1]), float(vec[2]))
+    ix = w * vx + y * vz - z * vy
+    iy = w * vy + z * vx - x * vz
+    iz = w * vz + x * vy - y * vx
+    iw = -x * vx - y * vy - z * vz
+    rx = ix * w + iw * -x + iy * -z - iz * -y
+    ry = iy * w + iw * -y + iz * -x - ix * -z
+    rz = iz * w + iw * -z + ix * -y - iy * -x
+    return (rx, ry, rz)
+
+
+def _camera_to_world(
+    point_cam: tuple[float, float, float],
+    extr: dict[str, object] | None,
+    *,
+    fallback_origin: tuple[float, float, float],
+    fallback_scale: tuple[float, float, float],
+    default_z: float,
+) -> tuple[float, float, float]:
+    if isinstance(extr, dict) and extr.get("position") and extr.get("orientation"):
+        pos = extr["position"]
+        quat = extr["orientation"]
+        origin = (float(pos[0]), float(pos[1]), float(pos[2]))
+        rotated = _quat_rotate_wxyz(
+            (float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])),
+            point_cam,
+        )
+        return (origin[0] + rotated[0], origin[1] + rotated[1], origin[2] + rotated[2])
+    ox, oy, oz = fallback_origin
+    sx, sy, sz = fallback_scale
+    x_cam, y_cam, z_cam = point_cam
+    return (ox + x_cam * sx, oy + y_cam * sy, oz + (z_cam - default_z) * sz)
+
+
 class ColorBlobCentroidTransform(ITransform):
     """Estimate an object pose from a colored region in a wrist/overhead camera."""
 
@@ -77,13 +114,13 @@ class ColorBlobCentroidTransform(ITransform):
         z_cam = z
 
         extr = (getattr(obs, "camera_extrinsics", {}) or {}).get(self._camera)
-        if isinstance(extr, dict) and extr.get("position"):
-            mount_pos = extr["position"]
-            ox, oy, oz = (float(mount_pos[0]), float(mount_pos[1]), float(mount_pos[2]))
-        else:
-            ox, oy, oz = self._world_origin
-        sx, sy, sz = self._world_scale
-        pos = (ox + x_cam * sx, oy + y_cam * sy, oz + (z_cam - self._default_z) * sz)
+        pos = _camera_to_world(
+            (x_cam, y_cam, z_cam),
+            extr if isinstance(extr, dict) else None,
+            fallback_origin=self._world_origin,
+            fallback_scale=self._world_scale,
+            default_z=self._default_z,
+        )
         objects = dict(getattr(obs, "objects", {}) or {})
         objects[self._object_name] = (pos, (1.0, 0.0, 0.0, 0.0))
         return replace(obs, objects=objects)

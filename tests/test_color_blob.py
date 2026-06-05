@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from examples.perception.color_blob import ColorBlobCentroidTransform
+from examples.perception.color_blob import ColorBlobCentroidTransform, _camera_to_world, _quat_rotate_wxyz
 from robodeploy.core.types import Observation
 
 try:
@@ -39,6 +39,22 @@ class ColorBlobTransformTests(unittest.TestCase):
         self.assertIn("source", out.objects)
         pos, _ = out.objects["source"]
         self.assertGreater(pos[2], 0.0)
+
+    def test_quat_rotate_identity(self):
+        out = _quat_rotate_wxyz((1.0, 0.0, 0.0, 0.0), (0.1, 0.2, 0.3))
+        self.assertAlmostEqual(out[0], 0.1, places=5)
+        self.assertAlmostEqual(out[1], 0.2, places=5)
+        self.assertAlmostEqual(out[2], 0.3, places=5)
+
+    def test_camera_to_world_with_extrinsics(self):
+        pos = _camera_to_world(
+            (0.1, 0.0, 0.5),
+            {"position": (1.0, 0.0, 0.0), "orientation": (1.0, 0.0, 0.0, 0.0)},
+            fallback_origin=(0.0, 0.0, 0.0),
+            fallback_scale=(1.0, 1.0, 1.0),
+            default_z=0.38,
+        )
+        self.assertAlmostEqual(pos[0], 1.1, places=5)
 
     def test_uses_camera_extrinsics_mount_position(self):
         rgb = np.zeros((48, 64, 3), dtype=np.uint8)
