@@ -58,6 +58,39 @@ kuka_sensor_pick_mujoco:
     - examples.sensors
     - examples.policies
 
+kuka_vision_pick_mujoco:
+  robot: kuka
+  backend: mujoco
+  task: pick_place
+  policy: example_sensor_reach_pick
+  task_kwargs:
+    require_objects: true
+  backend_kwargs:
+    config:
+      allow_actuator_name_fallback: true
+      enable_viewer: false
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      prop_pose:
+        prop_names: [target]
+      wrist_rgbd:
+        width: 64
+        height: 48
+        depth: true
+        allow_camera_fallback: true
+  obs_pipeline:
+    transforms:
+      - module: examples.perception.color_blob
+        class: ColorBlobCentroidTransform
+        kwargs:
+          camera: wrist_camera
+          object_name: source
+  custom_modules:
+    - examples.tasks
+    - examples.sensors
+    - examples.policies
+
 kuka_sensor_ros2_rviz:
   robot: kuka
   backend: ros2_rviz

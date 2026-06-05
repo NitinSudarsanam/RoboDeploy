@@ -110,6 +110,9 @@ class ReachPickPlacePolicy(PolicyBase):
             _Phase.HOLD: tgt + np.array([0.0, 0.0, 0.12], dtype=np.float32),
         }
 
+    def bind_runtime(self, backend, description=None) -> None:
+        self.attach_mujoco(backend, description)
+
     def attach_mujoco(self, backend, description=None) -> None:
         desc = description or self._description
         if desc is None:
@@ -121,7 +124,7 @@ class ReachPickPlacePolicy(PolicyBase):
                 src_pos, _ = backend.get_prop_pose("source")
                 tgt_pos, _ = backend.get_prop_pose("target")
                 self._set_ee_targets(np.array(src_pos, dtype=np.float32), np.array(tgt_pos, dtype=np.float32))
-            except KeyError:
+            except (KeyError, NotImplementedError, RuntimeError):
                 pass
 
     def _reset_impl(self) -> None:

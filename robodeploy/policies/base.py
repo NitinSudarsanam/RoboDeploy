@@ -81,6 +81,10 @@ class PolicyBase(IPolicy):
         """Hook for sequence policies to stay in sync after rejected actions."""
         return
 
+    def bind_runtime(self, backend, description=None) -> None:
+        """Optional hook after backend/sensors initialize (e.g. bind sim IK solvers)."""
+        return
+
     # ------------------------------------------------------------------
     # Subclass hooks
     # ------------------------------------------------------------------

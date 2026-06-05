@@ -45,12 +45,11 @@ class ExampleEnvTests(unittest.TestCase):
             import mujoco  # noqa: F401
         except ImportError:
             self.skipTest("mujoco not installed")
-        from examples.env_from_preset import env_from_preset, wire_mujoco_pick_policies
+        from examples.env_from_preset import env_from_preset
 
         env = env_from_preset("kuka_pick_mujoco")
         try:
             _, info = env.reset()
-            wire_mujoco_pick_policies(env)
             env.step()
             self.assertEqual(info.episode_id, 1)
         finally:
@@ -80,12 +79,11 @@ class ExampleEnvTests(unittest.TestCase):
             import mujoco  # noqa: F401
         except ImportError:
             self.skipTest("mujoco not installed")
-        from examples.env_from_preset import env_from_preset, wire_mujoco_pick_policies
+        from examples.env_from_preset import env_from_preset
 
         env = env_from_preset("kuka_sensor_pick_mujoco", max_episode_steps=1500)
         try:
             env.reset()
-            wire_mujoco_pick_policies(env)
             self.assertEqual(len(env.robots[0].sensors), 1)
             info = None
             for _ in range(1500):

@@ -465,7 +465,16 @@ class RoboEnv:
                     continue
                 robot.warmup(obs)
 
+        self._bind_policy_runtime()
         self._initialized = True
+
+    def _bind_policy_runtime(self) -> None:
+        for robot in self._robots:
+            for robot_task in robot.tasks.values():
+                for policy in robot_task.policies.values():
+                    bind = getattr(policy, "bind_runtime", None)
+                    if callable(bind):
+                        bind(self._backend, robot.description)
 
     def _all_sensors(self) -> list[ISensor]:
         sensors: list[ISensor] = []
