@@ -101,16 +101,20 @@ class SensorRig:
                 {**spec.config, "name": logical},
                 backend_name=backend_name,
             )
-            if spec.mount is not None:
+            mount_obj = spec.mount
+            if mount_obj is not None:
                 cfg.setdefault("mount", {
-                    "parent_link": spec.mount.parent_link,
-                    "position": spec.mount.position,
-                    "orientation": spec.mount.orientation,
+                    "parent_link": mount_obj.parent_link,
+                    "position": mount_obj.position,
+                    "orientation": mount_obj.orientation,
                 })
             try:
-                out.append(SensorClass(config=cfg))
+                out.append(SensorClass(config=cfg, mount=mount_obj))
             except TypeError:
-                out.append(SensorClass(logical, config=cfg))
+                try:
+                    out.append(SensorClass(config=cfg))
+                except TypeError:
+                    out.append(SensorClass(logical, config=cfg))
         return out
 
 

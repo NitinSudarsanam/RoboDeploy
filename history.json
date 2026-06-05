@@ -1579,6 +1579,27 @@
       },
       "verification": ["pytest: 133 passed, 3 skipped"],
       "next_subtask": { "id": "goal27-subtask1", "title": "Live Gazebo sensor rig smoke test" }
+    },
+    {
+      "subtask_id": "goal27-subtask1",
+      "title": "Live Gazebo sensor rig smoke test",
+      "timestamp": "2026-06-04T15:30:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "tests/test_gazebo_sensor_rig_smoke.py: from_config ros2_gazebo sensor_rigs → ROS2 ISensors.",
+          "Mocked initialize_multi verifies URDF patch + ros_gz_bridge rules for wrist camera/FT.",
+          "urdf_sensors._resolve_mount reads config.mount when SensorBase.mount is empty.",
+          "registry resolve_sensor_class rejects non-type pair entries with clear TypeError.",
+          "CI sensor-e2e-linux includes gazebo sensor rig smoke tests."
+        ],
+        "known_gaps": [
+          "Smoke test mocks GazeboLauncher; not validated against live Gazebo Harmonic launch.",
+          "True contact/weld physics grasp not implemented yet."
+        ]
+      },
+      "verification": ["pytest: 136 passed, 3 skipped"],
+      "next_subtask": { "id": "goal27-subtask2", "title": "True contact-based physics grasp" }
     }
   ]
 }

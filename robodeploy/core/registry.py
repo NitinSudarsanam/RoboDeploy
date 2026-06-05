@@ -246,6 +246,16 @@ def get_sensor_pair(name: str) -> SensorPairSpec:
     return _SENSOR_PAIRS[name]
 
 
+def _ensure_sensor_class_type(cls: object, *, context: str) -> type:
+    """Reject corrupted pair entries (e.g. a string placeholder) before instantiation."""
+    if isinstance(cls, type):
+        return cls
+    raise TypeError(
+        f"{context}: expected a sensor class type, got {type(cls).__name__!r} ({cls!r}). "
+        "Check register_sensor_pair by_backend entries."
+    )
+
+
 def normalize_sensor_backend_name(name: str | None) -> str | None:
     if not name:
         return None
@@ -273,13 +283,19 @@ def resolve_sensor_class(name: str, *, is_real: bool, backend_name: str | None =
                 raise KeyError(
                     f"Sensor pair '{name}' has no implementation for backend '{normalized_backend}'."
                 )
-            return cls
+            return _ensure_sensor_class_type(
+                cls,
+                context=f"Sensor pair '{name}' backend '{normalized_backend}'",
+            )
         cls = pair.real if is_real else pair.sim
         if cls is None:
             side = "real" if is_real else "sim"
             detail = f" backend '{normalized_backend}'" if normalized_backend is not None else ""
             raise KeyError(f"Sensor pair '{name}' has no {side} implementation for{detail}.")
-        return cls
+        return _ensure_sensor_class_type(
+            cls,
+            context=f"Sensor pair '{name}' ({'real' if is_real else 'sim'})",
+        )
     suffix = "_real" if is_real else "_sim"
     return get_sensor(name + suffix)
 

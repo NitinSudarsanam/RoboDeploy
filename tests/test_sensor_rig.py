@@ -146,7 +146,7 @@ class SensorRigTests(unittest.TestCase):
 
         import_builtins()
         rig = SensorRig.robot_mounted(wrist_rgbd={"width": 64}, wrist_ft={})
-        sensors = rig.materialize(is_real=True, backend_name="gazebo")
+        sensors = rig.materialize(is_real=False, backend_name="gazebo")
         self.assertEqual(len(sensors), 2)
         cam_cfg = sensors[0].config
         self.assertEqual(cam_cfg.get("rgb"), "image_raw")

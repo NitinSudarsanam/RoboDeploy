@@ -34,7 +34,7 @@ jobs:
       - name: MuJoCo sensor e2e (Linux)
         env:
           MUJOCO_GL: egl
-        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py tests/test_example_envs.py -q
+        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py tests/test_gazebo_urdf_mount.py tests/test_gazebo_sensor_rig_smoke.py tests/test_example_envs.py -q
 
   mujoco-smoke:
     runs-on: ubuntu-latest

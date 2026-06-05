@@ -33,11 +33,13 @@ def _quat_to_rpy(quat: tuple[float, float, float, float]) -> tuple[float, float,
 
 def _resolve_mount(sensor: "ISensor") -> SensorMount | None:
     mount = getattr(sensor, "mount", None)
-    if mount is not None:
+    if isinstance(mount, SensorMount) and mount.parent_link:
         return mount
     cfg = dict(getattr(sensor, "config", {}) or {})
     raw = cfg.get("mount")
-    if isinstance(raw, dict):
+    if isinstance(raw, SensorMount) and raw.parent_link:
+        return raw
+    if isinstance(raw, dict) and raw.get("parent_link"):
         return SensorMount(**raw)
     return None
 

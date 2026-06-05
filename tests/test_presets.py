@@ -17,6 +17,8 @@ class PresetsTests(unittest.TestCase):
     def test_list_presets_includes_known_names(self):
         names = list_example_presets()
         self.assertIn("kuka_pick_mujoco", names)
+        self.assertIn("kuka_sensor_pick_mujoco", names)
+        self.assertIn("kuka_sensor_ros2_rviz", names)
 
     def test_load_preset_returns_required_keys(self):
         preset = load_example_preset("kuka_pick_mujoco")
