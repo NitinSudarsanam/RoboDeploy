@@ -112,6 +112,37 @@ class ExampleEnvTests(unittest.TestCase):
         finally:
             env.close()
 
+    def test_vision_preset_pick_succeeds_when_mujoco_installed(self):
+        import sys
+
+        if sys.platform == "win32":
+            self.skipTest("MuJoCo GLFW Renderer unstable on Windows")
+        try:
+            import mujoco  # noqa: F401
+        except ImportError:
+            self.skipTest("mujoco not installed")
+        from robodeploy.sensors.camera.sim.mujoco_gl import ensure_mujoco_gl_backend
+        from examples.env_from_preset import env_from_preset
+
+        ensure_mujoco_gl_backend()
+        try:
+            env = env_from_preset("kuka_vision_pick_mujoco", max_episode_steps=1500)
+        except OSError as exc:
+            self.skipTest(f"MuJoCo Renderer unavailable headless: {exc}")
+        try:
+            try:
+                env.reset()
+            except OSError as exc:
+                self.skipTest(f"MuJoCo Renderer unavailable headless: {exc}")
+            info = None
+            for _ in range(1500):
+                _, _, done, info = env.step()
+                if done:
+                    break
+            self.assertTrue(bool(info.success))
+        finally:
+            env.close()
+
     def test_kuka_pick_mujoco_builds_when_mujoco_installed(self):
         try:
             import mujoco  # noqa: F401

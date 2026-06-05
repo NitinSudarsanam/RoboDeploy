@@ -80,6 +80,8 @@ class MuJoCoBackend(BackendBase):
             builder.ensure_compiler_meshdir(str(Path(mjcf_path).resolve().parent))
             builder.ensure_world_defaults(add_camera=not bool(world.cameras or has_sensor_camera))
             builder.attach_world(world)
+            if bool(self.config.get("enable_grasp_welds", False)):
+                builder.attach_grasp_welds(description.ee_link_name, world.props)
             builder.attach_sensors(sensors)
             self._model = mujoco.MjModel.from_xml_string(builder.emit())
         else:
@@ -108,6 +110,7 @@ class MuJoCoBackend(BackendBase):
                 joint_names=list(description.joint_names),
                 meshdir=str(Path(urdf_path).resolve().parent),
                 scene=scene,
+                ee_link=description.ee_link_name,
             )
 
             # Step 3: recompile the augmented MJCF into the actual runtime model.
@@ -168,7 +171,15 @@ class MuJoCoBackend(BackendBase):
 
         self._ee_body_id = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_BODY, description.ee_link_name)
         self._grasp_prop: str | None = None
+        self._grasp_mode: str = "follow"
         self._grasp_offset: tuple[float, float, float] = (0.0, 0.0, 0.03)
+        self._grasp_eq_ids: dict[str, int] = {}
+        if bool(self.config.get("enable_grasp_welds", False)):
+            for prop_name in self._prop_body_ids:
+                eq_name = f"grasp_{prop_name}"
+                eid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_EQUALITY, eq_name)
+                if eid >= 0:
+                    self._grasp_eq_ids[prop_name] = int(eid)
         if self._ee_body_id < 0:
             raise KeyError(f"MuJoCo body not found for ee_link_name '{description.ee_link_name}'")
 
@@ -213,6 +224,7 @@ class MuJoCoBackend(BackendBase):
         joint_names: list[str],
         meshdir: str | None = None,
         scene: SceneSpec | None = None,
+        ee_link: str | None = None,
     ) -> str:
         """Return MJCF XML with `<actuator><position joint=.../></actuator>` for each joint.
 
@@ -226,12 +238,17 @@ class MuJoCoBackend(BackendBase):
         builder.ensure_world_defaults(add_camera=not bool(world.cameras or getattr(self, "_sensors", [])))
         builder.attach_actuators(joint_names)
         builder.attach_world(world)
+        if ee_link and bool(self.config.get("enable_grasp_welds", False)):
+            builder.attach_grasp_welds(ee_link, world.props)
         builder.attach_sensors(list(getattr(self, "_sensors", [])))
         return builder.emit()
 
     def _reset_impl(self) -> Observation:
         mujoco = self._mujoco
         mujoco.mj_resetData(self._model, self._data)
+        self._grasp_prop = None
+        for eq_id in self._grasp_eq_ids.values():
+            self._data.eq_active[eq_id] = 0
         self._set_home_qpos()
         mujoco.mj_forward(self._model, self._data)
         obs = self._merge_sensor_data(self._build_obs(), self._sensors)
@@ -297,19 +314,71 @@ class MuJoCoBackend(BackendBase):
             except Exception:
                 return
 
+    def has_prop_contact(self, prop_name: str) -> bool:
+        """Return True when MuJoCo reports contact between a prop and the EE body."""
+        prop_bid = self._prop_body_ids.get(prop_name)
+        if prop_bid is None or self._ee_body_id < 0:
+            return False
+        for i in range(int(self._data.ncon)):
+            con = self._data.contact[i]
+            g1 = int(con.geom1)
+            g2 = int(con.geom2)
+            b1 = int(self._model.geom_bodyid[g1])
+            b2 = int(self._model.geom_bodyid[g2])
+            if prop_bid in (b1, b2) and self._ee_body_id in (b1, b2):
+                return True
+        return False
+
+    def prop_near_ee(self, prop_name: str, *, threshold: float = 0.06) -> bool:
+        """Distance-based grasp proxy when explicit contacts are absent in sim."""
+        if prop_name not in self._prop_body_ids or self._ee_body_id < 0:
+            return False
+        prop_pos = self._data.xpos[self._prop_body_ids[prop_name]]
+        ee_pos = self._data.xpos[self._ee_body_id]
+        dx = float(prop_pos[0] - ee_pos[0])
+        dy = float(prop_pos[1] - ee_pos[1])
+        dz = float(prop_pos[2] - ee_pos[2])
+        return (dx * dx + dy * dy + dz * dz) ** 0.5 <= float(threshold)
+
     def set_grasp_prop(
         self,
         prop_name: str | None,
         *,
         offset: tuple[float, float, float] | None = None,
+        mode: str | None = None,
     ) -> None:
-        """Track a prop against the EE each physics step (sim grasp helper)."""
+        """Grasp helper: ``follow`` (kinematic EE tracking) or ``weld`` (physics equality)."""
+        mujoco = self._mujoco
+        if self._grasp_prop and self._grasp_prop in self._grasp_eq_ids:
+            self._data.eq_active[self._grasp_eq_ids[self._grasp_prop]] = 0
         self._grasp_prop = str(prop_name) if prop_name else None
         if offset is not None:
             self._grasp_offset = (float(offset[0]), float(offset[1]), float(offset[2]))
+        if mode is not None:
+            self._grasp_mode = str(mode).lower()
+        if not self._grasp_prop:
+            mujoco.mj_forward(self._model, self._data)
+            return
+        if (
+            self._grasp_mode == "weld"
+            and self._grasp_prop in self._grasp_eq_ids
+        ):
+            self._snap_prop_to_ee(self._grasp_prop)
+            self._data.eq_active[self._grasp_eq_ids[self._grasp_prop]] = 1
+            mujoco.mj_forward(self._model, self._data)
+
+    def _snap_prop_to_ee(self, prop_name: str) -> None:
+        ee_pos = self._data.xpos[self._ee_body_id]
+        pos = (
+            float(ee_pos[0]) + self._grasp_offset[0],
+            float(ee_pos[1]) + self._grasp_offset[1],
+            float(ee_pos[2]) + self._grasp_offset[2],
+        )
+        _, quat = self.get_prop_pose(prop_name)
+        self.set_prop_pose(prop_name, pos, quat)
 
     def _sync_grasped_prop(self) -> None:
-        if not self._grasp_prop or self._grasp_prop not in self._prop_body_ids:
+        if self._grasp_mode == "weld" or not self._grasp_prop or self._grasp_prop not in self._prop_body_ids:
             return
         ee_pos = self._data.xpos[self._ee_body_id]
         pos = (

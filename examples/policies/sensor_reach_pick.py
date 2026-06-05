@@ -14,6 +14,9 @@ from examples.policies.reach_pick_place import ReachPickPlacePolicy, _Phase
 class SensorReachPickPlacePolicy(ReachPickPlacePolicy):
     """Reach pick-place using prop poses published by sensors into ``obs.objects``."""
 
+    def __init__(self, *args, carry_mode: str = "follow", **kwargs) -> None:
+        super().__init__(*args, carry_mode=carry_mode, **kwargs)
+
     def _update_targets_from_obs(self, obs: Observation) -> None:
         objects = getattr(obs, "objects", None) or {}
         if "source" not in objects or "target" not in objects:

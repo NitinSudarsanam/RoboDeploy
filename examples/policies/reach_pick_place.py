@@ -102,6 +102,9 @@ class ReachPickPlacePolicy(PolicyBase):
         self._carry_mode = mode
         self._kinematic_carry = mode == "kinematic"
         self._backend_follow_carry = mode == "follow"
+        self._backend_weld_carry = mode == "weld"
+        self._contact_carry = mode == "contact"
+        self._grasp_contact_dist = float(self.config.get("grasp_contact_dist", 0.06))
 
     def set_ik_solver(self, solver: MujocoIkSolver) -> None:
         self._ik = solver
@@ -209,6 +212,22 @@ class ReachPickPlacePolicy(PolicyBase):
 
         if self._phase is _Phase.GRASP and dist < self._settle_dist * 1.5:
             self._carrying = True
+            if self._backend is not None and hasattr(self._backend, "set_grasp_prop"):
+                offset = tuple(float(v) for v in self._carry_offset)
+                engage = True
+                if self._contact_carry:
+                    has_contact = bool(getattr(self._backend, "has_prop_contact", lambda _n: False)("source"))
+                    near = bool(
+                        getattr(self._backend, "prop_near_ee", lambda _n, **_: False)(
+                            "source",
+                            threshold=self._grasp_contact_dist,
+                        )
+                    )
+                    engage = has_contact or near
+                if engage and self._backend_weld_carry:
+                    self._backend.set_grasp_prop("source", offset=offset, mode="weld")
+                elif engage and (self._backend_follow_carry or self._contact_carry):
+                    self._backend.set_grasp_prop("source", offset=offset, mode="follow")
 
         if self._carrying and self._phase in (
             _Phase.LIFT,

@@ -133,6 +133,28 @@ class MjcfSceneBuilder:
             self._attach_prop(prop)
         self._attach_cameras(world)
 
+    def attach_grasp_welds(self, ee_link: str, props: list[PropConfig]) -> None:
+        """Add inactive weld equalities between EE and movable props (activated at grasp time)."""
+        if not ee_link:
+            return
+        movable = [p.name for p in props if not p.is_fixed]
+        if not movable:
+            return
+        equality = self._child("equality")
+        for prop_name in movable:
+            ET.SubElement(
+                equality,
+                "weld",
+                {
+                    "name": f"grasp_{prop_name}",
+                    "body1": str(ee_link),
+                    "body2": str(prop_name),
+                    "active": "false",
+                    "solref": "0.02 1",
+                    "solimp": "0.9 0.95 0.001",
+                },
+            )
+
     def attach_sensors(self, sensors: list) -> None:
         """Emit MuJoCo camera/site/sensor XML for mounted RoboDeploy sensors."""
 

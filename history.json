@@ -1600,6 +1600,44 @@
       },
       "verification": ["pytest: 136 passed, 3 skipped"],
       "next_subtask": { "id": "goal27-subtask2", "title": "True contact-based physics grasp" }
+    },
+    {
+      "subtask_id": "goal27-subtask2",
+      "title": "True contact-based physics grasp",
+      "timestamp": "2026-06-04T16:00:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "MuJoCoBackend.has_prop_contact() and prop_near_ee() for contact-gated grasp.",
+          "carry_mode: contact|follow|weld|kinematic|none on ReachPickPlacePolicy.",
+          "Optional enable_grasp_welds MJCF equalities (off by default; inactive weld XML breaks kinematic carry).",
+          "SensorReachPickPlacePolicy defaults carry_mode=follow; vision pick e2e test (Linux CI, skip Windows).",
+          "Restored get_prop_pose waypoint sync on example_reach_pick attach_mujoco for MJCF pick success."
+        ],
+        "known_gaps": [
+          "MuJoCo weld equalities do not reliably track free-joint props; contact mode uses follow assist after gating.",
+          "No live Gazebo launch validation yet.",
+          "No TF-tree camera extrinsics lookup."
+        ]
+      },
+      "verification": ["pytest: 139 passed, 4 skipped"],
+      "next_subtask": { "id": "goal27-subtask3", "title": "Depth-based vision pick e2e on Linux CI" }
+    },
+    {
+      "subtask_id": "goal27-subtask3",
+      "title": "Depth-based vision pick e2e on Linux CI",
+      "timestamp": "2026-06-04T16:30:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "ColorBlobCentroidTransform already unprojects depth from obs.depths[camera] with intrinsics.",
+          "tests/test_color_blob.py depth median test; test_vision_preset_pick in sensor-e2e-linux (skip Windows).",
+          "kuka_vision_pick_mujoco preset: wrist_rgbd depth + color blob source + prop_pose target."
+        ],
+        "known_gaps": ["TF-tree live extrinsics not implemented."]
+      },
+      "verification": ["pytest: 140 passed, 4 skipped"],
+      "next_subtask": { "id": "goal28-subtask1", "title": "TF-tree camera extrinsics lookup" }
     }
   ]
 }

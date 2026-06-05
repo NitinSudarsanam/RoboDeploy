@@ -56,6 +56,29 @@ class ColorBlobTransformTests(unittest.TestCase):
         )
         self.assertAlmostEqual(pos[0], 1.1, places=5)
 
+    def test_uses_depth_map_for_z_when_present(self):
+        rgb = np.zeros((48, 64, 3), dtype=np.uint8)
+        rgb[20:28, 30:38] = (255, 0, 0)
+        depth = np.full((48, 64), 0.55, dtype=np.float32)
+        obs = _base_obs(
+            images={"wrist_camera": rgb},
+            depths={"wrist_camera": depth},
+            camera_intrinsics={"wrist_camera": {"fx": 64.0, "fy": 48.0, "cx": 32.0, "cy": 24.0}},
+            camera_extrinsics={
+                "wrist_camera": {
+                    "position": (0.0, 0.0, 0.0),
+                    "orientation": (1.0, 0.0, 0.0, 0.0),
+                }
+            },
+        )
+        out = ColorBlobCentroidTransform(
+            camera="wrist_camera",
+            object_name="source",
+            default_z=0.38,
+        ).forward(obs)
+        pos, _ = out.objects["source"]
+        self.assertAlmostEqual(pos[2], 0.55, delta=0.05)
+
     def test_uses_camera_extrinsics_mount_position(self):
         rgb = np.zeros((48, 64, 3), dtype=np.uint8)
         rgb[20:28, 30:38] = (255, 0, 0)
