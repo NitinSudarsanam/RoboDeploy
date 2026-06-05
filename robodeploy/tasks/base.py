@@ -180,6 +180,25 @@ class TaskBase(ITask):
                 return None
         return None
 
+    def object_pose(
+        self,
+        name: str,
+        obs: Observation | None = None,
+        *,
+        prefer_obs: bool | None = None,
+    ):
+        """Resolve an object pose from sensor observations or backend state."""
+        use_obs = (
+            prefer_obs
+            if prefer_obs is not None
+            else bool(self.config.get("require_objects") or self.config.get("prefer_obs_objects"))
+        )
+        if use_obs and obs is not None:
+            objects = getattr(obs, "objects", None) or {}
+            if name in objects:
+                return objects[name]
+        return self.prop_pose(name)
+
     def _domain_randomizer(self) -> DomainRandomizer | None:
         """Build a randomizer from task config, if enabled."""
         dr_cfg = self.config.get("domain_randomization")

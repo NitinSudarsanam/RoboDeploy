@@ -42,6 +42,8 @@ kuka_sensor_pick_mujoco:
   backend: mujoco
   task: pick_place
   policy: example_sensor_reach_pick
+  task_kwargs:
+    require_objects: true
   backend_kwargs:
     config:
       allow_actuator_name_fallback: true

@@ -217,6 +217,8 @@ class BackendBase(IBackend):
         timestamp_recv = obs.timestamp_recv
         objects = dict(getattr(obs, "objects", {}) or {})
         sensor_status = dict(getattr(obs, "sensor_status", {}) or {})
+        camera_frames = dict(getattr(obs, "camera_frames", {}) or {})
+        camera_intrinsics = dict(getattr(obs, "camera_intrinsics", {}) or {})
 
         for sensor in sensors:
             name = str(getattr(sensor, "name", type(sensor).__name__))
@@ -245,6 +247,10 @@ class BackendBase(IBackend):
             imu_angular_velocity = sd.imu_angular_velocity if sd.imu_angular_velocity is not None else imu_angular_velocity
             if getattr(sd, "objects", None):
                 objects.update(sd.objects)
+            if getattr(sd, "frame_id", None):
+                camera_frames[name] = str(sd.frame_id)
+            if getattr(sd, "intrinsics", None):
+                camera_intrinsics[name] = dict(sd.intrinsics)
             timestamp_hw = max(float(timestamp_hw), float(sd.timestamp_hw or 0.0))
             timestamp_recv = max(float(timestamp_recv), float(sd.timestamp_recv or 0.0))
 
@@ -260,6 +266,8 @@ class BackendBase(IBackend):
             imu_angular_velocity=imu_angular_velocity,
             objects=objects,
             sensor_status=sensor_status,
+            camera_frames=camera_frames,
+            camera_intrinsics=camera_intrinsics,
             timestamp_hw=timestamp_hw,
             timestamp_recv=timestamp_recv,
         )

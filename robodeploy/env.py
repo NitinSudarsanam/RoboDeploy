@@ -177,6 +177,7 @@ class RoboEnv:
                 robots=robots,
                 shared_sensors=cfg.get("shared_sensors"),
                 max_episode_steps=cfg.get("max_episode_steps"),
+                obs_spec_policy=str(cfg.get("obs_spec_policy", "warn")),
             )
 
         robot_value = cfg["robot"]
@@ -227,6 +228,7 @@ class RoboEnv:
                 backend_name=sensor_backend_name,
             )
 
+        pipeline = obs_pipeline or cls._coerce_obs_pipeline(cfg.get("obs_pipeline"))
         robot_obj = Robot(
             robot_id=str(cfg.get("robot_id", "robot0")),
             description=description_obj,
@@ -238,13 +240,14 @@ class RoboEnv:
                 ),
             },
             sensors=sensor_objs,
-            obs_pipeline=obs_pipeline or ObsPipeline(),
+            obs_pipeline=pipeline,
         )
         return cls(
             backend=backend_obj,
             robots=[robot_obj],
             shared_sensors=cfg.get("shared_sensors"),
             max_episode_steps=cfg.get("max_episode_steps"),
+            obs_spec_policy=str(cfg.get("obs_spec_policy", "warn")),
         )
 
     @staticmethod
@@ -281,11 +284,34 @@ class RoboEnv:
     def _coerce_task(cls, value: Any, kwargs: Optional[dict]) -> ITask:
         if isinstance(value, str):
             TaskClass = get_task(value)
-            return TaskClass(**(kwargs or {}))
+            kw = dict(kwargs or {})
+            try:
+                return TaskClass(**kw)
+            except TypeError:
+                return TaskClass(config=kw)
         obj = cls._instantiate_component(value, kwargs)
         if not isinstance(obj, ITask):
             raise TypeError("task must be a registry name, task class, or ITask instance.")
         return obj
+
+    @classmethod
+    def _coerce_obs_pipeline(cls, spec: Any) -> ObsPipeline:
+        if spec is None:
+            return ObsPipeline()
+        if isinstance(spec, ObsPipeline):
+            return spec
+        if not isinstance(spec, dict):
+            raise TypeError("obs_pipeline must be an ObsPipeline instance or dict spec.")
+        import importlib
+
+        transforms = []
+        for entry in spec.get("transforms", []):
+            if not isinstance(entry, dict):
+                raise TypeError("obs_pipeline.transforms entries must be dicts.")
+            module = importlib.import_module(str(entry["module"]))
+            transform_cls = getattr(module, str(entry["class"]))
+            transforms.append(transform_cls(**dict(entry.get("kwargs") or {})))
+        return ObsPipeline(transforms)
 
     @classmethod
     def _coerce_policy(cls, value: Any, kwargs: Optional[dict]) -> IPolicy:

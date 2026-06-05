@@ -14,6 +14,8 @@ class PickPlaceTask(TaskBase):
     """Pick-and-place task (minimal example)."""
 
     def obs_spec(self) -> ObsSpec:
+        if self.config.get("require_objects"):
+            return ObsSpec(rgb=False, depth=False, objects=True)
         return ObsSpec(rgb=False, depth=False)
 
     def scene_spec(self) -> SceneSpec:
@@ -49,7 +51,7 @@ class PickPlaceTask(TaskBase):
     def reward_fn(self, obs: Observation, action: Action) -> float:
         del action
         source_goal = self._placement_goal()
-        source_pose = self.prop_pose("source")
+        source_pose = self.object_pose("source", obs)
         if source_pose is None:
             return -self._distance3(tuple(float(v) for v in obs.ee_position), source_goal)
         source_pos, _ = source_pose
@@ -59,7 +61,7 @@ class PickPlaceTask(TaskBase):
         return -(0.35 * ee_dist + source_dist) + min(lift_bonus, 0.1)
 
     def success_fn(self, obs: Observation) -> bool:
-        source_pose = self.prop_pose("source")
+        source_pose = self.object_pose("source", obs)
         if source_pose is None:
             return self._distance3(tuple(float(v) for v in obs.ee_position), self._placement_goal()) < 0.05
         source_pos, _ = source_pose

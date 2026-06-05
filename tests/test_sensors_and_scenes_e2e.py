@@ -118,7 +118,7 @@ MJCF = """<mujoco model="tiny">
 class MuJoCoSensorSceneE2ETests(unittest.TestCase):
     def test_sensor_and_scene_capabilities_on_mujoco(self) -> None:
         if sys.platform == "win32":
-            self.skipTest("MuJoCo Renderer (GLFW) is unstable in headless Windows tests")
+            self.skipTest("MuJoCo Renderer crashes in headless Windows tests (GLFW access violation)")
         try:
             import mujoco  # noqa: F401
         except Exception as exc:
@@ -146,6 +146,8 @@ class MuJoCoSensorSceneE2ETests(unittest.TestCase):
                 self.assertIn("wrist", obs.images)
                 self.assertEqual(tuple(obs.images["wrist"].shape), (24, 32, 3))
                 self.assertIn("wrist", obs.depths)
+                self.assertIn("wrist", obs.camera_intrinsics)
+                self.assertIn("fx", obs.camera_intrinsics["wrist"])
                 self.assertIsNotNone(obs.ft_force)
                 self.assertGreaterEqual(obs.timestamp_hw, 0.0)
 

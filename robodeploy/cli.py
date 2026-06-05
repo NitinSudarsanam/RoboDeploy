@@ -85,20 +85,9 @@ def _make_env(
     import_builtins()
     cfg = load_preset(preset, presets_file=path)
     merged_modules = list(custom_modules) + [str(m) for m in (cfg.get("custom_modules") or [])]
-    _import_custom_modules(merged_modules)
-    return RoboEnv.make(
-        robot=str(cfg["robot"]),
-        backend=str(cfg["backend"]),
-        task=str(cfg["task"]),
-        policy=str(cfg["policy"]),
-        robot_id=str(cfg.get("robot_id", "robot0")),
-        task_id=str(cfg.get("task_id", "task0")),
-        policy_id=str(cfg.get("policy_id", "policy0")),
-        backend_kwargs=cfg.get("backend_kwargs"),
-        task_kwargs=cfg.get("task_kwargs"),
-        policy_kwargs=cfg.get("policy_kwargs"),
-        sensor_kwargs=cfg.get("sensor_kwargs"),
-    )
+    if merged_modules:
+        cfg = {**cfg, "custom_modules": merged_modules}
+    return RoboEnv.from_config(cfg)
 
 
 def _close_quietly(env) -> None:  # noqa: ANN001

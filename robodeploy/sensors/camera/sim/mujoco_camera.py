@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import math
 import time
 
 from robodeploy.core.registry import register_sensor, register_sensor_pair
+from robodeploy.sensors.camera.sim.mujoco_gl import ensure_mujoco_gl_backend
 from robodeploy.core.types import SensorData, SensorMount
 from robodeploy.sensors.base import SensorBase
 from robodeploy.sensors.camera.sim.isaacsim_camera import (
@@ -49,7 +51,10 @@ class MuJoCoCameraRenderer(SensorBase):
         if camera_id < 0:
             raise KeyError(f"MuJoCo camera '{requested}' not found.")
         self._camera_name = requested
+        self._camera_id = int(camera_id)
+        ensure_mujoco_gl_backend()
         self._renderer = self._mujoco.Renderer(self._model, height=self._height, width=self._width)
+        self._intrinsics = self._camera_intrinsics()
 
     def _read_impl(self) -> SensorData:
         self._renderer.update_scene(self._data, camera=self._camera_name)
@@ -64,11 +69,28 @@ class MuJoCoCameraRenderer(SensorBase):
         return SensorData(
             rgb=rgb,
             depth=depth,
+            frame_id=self._camera_name,
+            intrinsics=self._intrinsics,
             timestamp=sim_time,
             timestamp_hw=sim_time,
             timestamp_recv=time.monotonic(),
             timestamp_source="sim",
         )
+
+    def _camera_intrinsics(self) -> dict[str, float]:
+        fovy_deg = float(self._model.cam_fovy[self._camera_id])
+        fovy_rad = math.radians(fovy_deg)
+        fy = (0.5 * self._height) / math.tan(0.5 * fovy_rad)
+        fx = fy
+        return {
+            "width": float(self._width),
+            "height": float(self._height),
+            "fx": float(fx),
+            "fy": float(fy),
+            "cx": float(self._width) * 0.5,
+            "cy": float(self._height) * 0.5,
+            "fovy_deg": fovy_deg,
+        }
 
     def _close_impl(self) -> None:
         renderer = getattr(self, "_renderer", None)

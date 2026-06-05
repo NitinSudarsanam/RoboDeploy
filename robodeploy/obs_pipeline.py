@@ -62,6 +62,8 @@ class SensorSampleBuffer:
         ft_torque = obs.ft_torque
         objects = dict(getattr(obs, "objects", {}) or {})
         sensor_status = dict(getattr(obs, "sensor_status", {}) or {})
+        camera_frames = dict(getattr(obs, "camera_frames", {}) or {})
+        camera_intrinsics = dict(getattr(obs, "camera_intrinsics", {}) or {})
         for name, sample in self._latest.items():
             ts = float(sample.timestamp_hw or sample.timestamp)
             if abs(ts - anchor) > self.window_s:
@@ -80,6 +82,10 @@ class SensorSampleBuffer:
             ft_torque = sample.ft_torque if sample.ft_torque is not None else ft_torque
             if getattr(sample, "objects", None):
                 objects.update(sample.objects)
+            if getattr(sample, "frame_id", None):
+                camera_frames[name] = str(sample.frame_id)
+            if getattr(sample, "intrinsics", None):
+                camera_intrinsics[name] = dict(sample.intrinsics)
         return replace(
             obs,
             rgb=rgb,
@@ -90,6 +96,8 @@ class SensorSampleBuffer:
             ft_torque=ft_torque,
             objects=objects,
             sensor_status=sensor_status,
+            camera_frames=camera_frames,
+            camera_intrinsics=camera_intrinsics,
         )
 
     def reset(self) -> None:

@@ -28,12 +28,13 @@ class PresetsTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             load_example_preset("does_not_exist_xyz")
 
-    def test_env_from_preset_delegates_to_make(self):
-        with patch("robodeploy.env.RoboEnv.make", return_value=object()) as mock_make:
+    def test_env_from_preset_delegates_to_from_config(self):
+        with patch("robodeploy.env.RoboEnv.from_config", return_value=object()) as mock_from_config:
             env_from_preset("kuka_pick_mujoco", robot_id="r0")
-        kwargs = mock_make.call_args.kwargs
-        self.assertEqual(kwargs["robot"], "kuka")
-        self.assertEqual(kwargs["policy"], "example_reach_pick")
+        cfg = mock_from_config.call_args.args[0]
+        self.assertEqual(cfg["robot"], "kuka")
+        self.assertEqual(cfg["policy"], "example_reach_pick")
+        self.assertEqual(cfg["robot_id"], "r0")
 
     def test_robodeploy_loader_requires_presets_file(self):
         from robodeploy.config import load_preset

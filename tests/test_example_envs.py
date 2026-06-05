@@ -75,6 +75,27 @@ class ExampleEnvTests(unittest.TestCase):
         finally:
             env.close()
 
+    def test_sensor_preset_pick_succeeds_when_mujoco_installed(self):
+        try:
+            import mujoco  # noqa: F401
+        except ImportError:
+            self.skipTest("mujoco not installed")
+        from examples.env_from_preset import env_from_preset, wire_mujoco_pick_policies
+
+        env = env_from_preset("kuka_sensor_pick_mujoco", max_episode_steps=1500)
+        try:
+            env.reset()
+            wire_mujoco_pick_policies(env)
+            self.assertEqual(len(env.robots[0].sensors), 1)
+            info = None
+            for _ in range(1500):
+                _, _, done, info = env.step()
+                if done:
+                    break
+            self.assertTrue(bool(info.success))
+        finally:
+            env.close()
+
     def test_kuka_pick_mujoco_builds_when_mujoco_installed(self):
         try:
             import mujoco  # noqa: F401

@@ -50,6 +50,20 @@ class TaskObjectSemanticsTests(unittest.TestCase):
         self.assertTrue(task.success_fn(make_obs((0.0, 0.0, 0.0))))
         self.assertGreater(placed_reward, far_reward)
 
+    def test_pick_place_prefers_obs_objects_when_required(self):
+        task = PickPlaceTask(config={"require_objects": True})
+        goal = task._placement_goal()
+        action = Action()
+        task.reset_fn(_FakeSceneBackend({"source": ((0.5, 0.0, 0.025), (1.0, 0.0, 0.0, 0.0))}))
+
+        far_obs = make_obs((0.0, 0.0, 0.0))
+        far_obs.objects = {"source": ((0.5, 0.0, 0.025), (1.0, 0.0, 0.0, 0.0))}
+        self.assertFalse(task.success_fn(far_obs))
+
+        placed_obs = make_obs((0.0, 0.0, 0.0))
+        placed_obs.objects = {"source": (goal, (1.0, 0.0, 0.0, 0.0))}
+        self.assertTrue(task.success_fn(placed_obs))
+
     def test_pour_uses_source_cup_pose_and_tilt(self):
         task = PourTask()
         goal = task._pour_goal()
