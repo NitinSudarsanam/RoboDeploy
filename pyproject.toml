@@ -54,3 +54,6 @@ robodeploy = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "hardware: tests that require physical robot hardware",
+]

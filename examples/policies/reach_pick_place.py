@@ -98,7 +98,10 @@ class ReachPickPlacePolicy(PolicyBase):
         self._backend = None
         self._carrying = False
         self._carry_offset = np.array([0.0, 0.0, 0.03], dtype=np.float32)
-        self._kinematic_carry = str(self.config.get("carry_mode", "kinematic")).lower() != "none"
+        mode = str(self.config.get("carry_mode", "kinematic")).lower()
+        self._carry_mode = mode
+        self._kinematic_carry = mode == "kinematic"
+        self._backend_follow_carry = mode == "follow"
 
     def set_ik_solver(self, solver: MujocoIkSolver) -> None:
         self._ik = solver
@@ -138,6 +141,8 @@ class ReachPickPlacePolicy(PolicyBase):
         self._phase_step = 0
         self._q_goal = self._home.copy()
         self._carrying = False
+        if self._backend is not None and hasattr(self._backend, "set_grasp_prop"):
+            self._backend.set_grasp_prop(None)
 
     def _sync_carried_object(self, ee: np.ndarray) -> None:
         if not self._kinematic_carry or not self._carrying or self._backend is None:
@@ -222,6 +227,8 @@ class ReachPickPlacePolicy(PolicyBase):
         if dist < self._settle_dist or self._phase_step >= self._steps_per_phase:
             if self._phase is _Phase.PLACE and self._carrying:
                 self._carrying = False
+                if self._backend is not None and hasattr(self._backend, "set_grasp_prop"):
+                    self._backend.set_grasp_prop(None)
             self._advance_phase()
             if self._phase is not _Phase.SETTLE_HOME and self._phase is not _Phase.HOLD:
                 self._q_goal = self._solve_ik(q, self._ee_targets[self._phase])

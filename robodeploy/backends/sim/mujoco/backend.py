@@ -167,6 +167,8 @@ class MuJoCoBackend(BackendBase):
             self._actuator_ids.append(aid)
 
         self._ee_body_id = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_BODY, description.ee_link_name)
+        self._grasp_prop: str | None = None
+        self._grasp_offset: tuple[float, float, float] = (0.0, 0.0, 0.03)
         if self._ee_body_id < 0:
             raise KeyError(f"MuJoCo body not found for ee_link_name '{description.ee_link_name}'")
 
@@ -253,6 +255,7 @@ class MuJoCoBackend(BackendBase):
         steps = max(1, int(round((1.0 / float(self.control_hz)) / dt)))
         for _ in range(steps):
             mujoco.mj_step(self._model, self._data)
+            self._sync_grasped_prop()
 
         if self._viewer is not None:
             try:
@@ -293,6 +296,29 @@ class MuJoCoBackend(BackendBase):
                 self._viewer.sync()
             except Exception:
                 return
+
+    def set_grasp_prop(
+        self,
+        prop_name: str | None,
+        *,
+        offset: tuple[float, float, float] | None = None,
+    ) -> None:
+        """Track a prop against the EE each physics step (sim grasp helper)."""
+        self._grasp_prop = str(prop_name) if prop_name else None
+        if offset is not None:
+            self._grasp_offset = (float(offset[0]), float(offset[1]), float(offset[2]))
+
+    def _sync_grasped_prop(self) -> None:
+        if not self._grasp_prop or self._grasp_prop not in self._prop_body_ids:
+            return
+        ee_pos = self._data.xpos[self._ee_body_id]
+        pos = (
+            float(ee_pos[0]) + self._grasp_offset[0],
+            float(ee_pos[1]) + self._grasp_offset[1],
+            float(ee_pos[2]) + self._grasp_offset[2],
+        )
+        _, quat = self.get_prop_pose(self._grasp_prop)
+        self.set_prop_pose(self._grasp_prop, pos, quat)
 
     def get_prop_names(self) -> list[str]:
         return sorted(self._prop_body_ids)

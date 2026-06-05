@@ -32,7 +32,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,sim]"
       - name: MuJoCo sensor e2e (Linux)
-        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py -q
+        env:
+          MUJOCO_GL: egl
+        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py tests/test_example_envs.py -q
 
   mujoco-smoke:
     runs-on: ubuntu-latest

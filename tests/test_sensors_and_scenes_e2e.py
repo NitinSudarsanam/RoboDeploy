@@ -13,6 +13,7 @@ except Exception:
     import numpy as jnp  # type: ignore[assignment]
 
 from robodeploy.backends.sim.mujoco.backend import MuJoCoBackend
+from robodeploy.sensors.camera.sim.mujoco_gl import ensure_mujoco_gl_backend
 from robodeploy.core.robot import Robot, RobotTask
 from robodeploy.core.spaces import ActionSpace, AssetFormat
 from robodeploy.core.types import (
@@ -142,7 +143,10 @@ class MuJoCoSensorSceneE2ETests(unittest.TestCase):
             )
             env = RoboEnv(backend=MuJoCoBackend(config={"enable_viewer": False}), robots=[robot])
             try:
-                obs, _ = env.reset()
+                try:
+                    obs, _ = env.reset()
+                except OSError as exc:
+                    self.skipTest(f"MuJoCo Renderer unavailable headless: {exc}")
                 self.assertIn("wrist", obs.images)
                 self.assertEqual(tuple(obs.images["wrist"].shape), (24, 32, 3))
                 self.assertIn("wrist", obs.depths)

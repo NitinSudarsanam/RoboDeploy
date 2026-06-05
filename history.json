@@ -1546,7 +1546,24 @@
         "known_gaps": ["Physics weld/contact grasp not implemented; carry_mode=none disables teleport only."]
       },
       "verification": ["pytest: 130 passed, 3 skipped"],
-      "next_subtask": { "id": "goal26-subtask2", "title": "MuJoCo weld/attach constraint grasp" }
+      "next_subtask": { "id": "goal26-subtask2", "title": "MuJoCo backend grasp follow + CI headless fixes" }
+    },
+    {
+      "subtask_id": "goal26-subtask2",
+      "title": "MuJoCo backend grasp follow + CI headless fixes",
+      "timestamp": "2026-06-04T14:30:00Z",
+      "status": "completed",
+      "repo_state": {
+        "implemented": [
+          "MuJoCoBackend.set_grasp_prop() tracks props against EE each physics step.",
+          "ReachPickPlacePolicy carry_mode=follow uses backend grasp instead of policy teleport.",
+          "CI sensor-e2e-linux uses MUJOCO_GL=egl; e2e skips gracefully on Renderer OSError.",
+          "Registered pytest hardware marker; added tests/test_mujoco_grasp.py."
+        ],
+        "known_gaps": ["True contact/weld physics grasp not implemented yet."]
+      },
+      "verification": ["pytest: 131 passed, 3 skipped"],
+      "next_subtask": { "id": "goal26-subtask3", "title": "SE(3) color-blob unprojection with camera extrinsics" }
     }
   ]
 }
