@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from robodeploy.backends.errors import BackendTimeoutError
+from robodeploy.safety.violation import Hazard, SafetyError
 from robodeploy.backends.base import BackendBase
 from robodeploy.core.registry import register_backend
 from robodeploy.core.spaces import ActionSpace
@@ -30,8 +31,11 @@ from .sensors.registry import make_ros2_sensor
 from .runtime import Ros2Runtime
 
 # Ensure built-in controller adapters are registered (side-effect imports).
+from .controllers import gripper as _builtin_gripper  # noqa: F401
+from .controllers import joint_effort as _builtin_joint_effort  # noqa: F401
 from .controllers import joint_position as _builtin_joint_position  # noqa: F401
 from .controllers import joint_trajectory as _builtin_joint_trajectory  # noqa: F401
+from .controllers import joint_velocity as _builtin_joint_velocity  # noqa: F401
 from .controllers import so101_feetech as _builtin_so101_feetech  # noqa: F401
 from .sensors import camera_rgbd as _builtin_rgbd_sensor  # noqa: F401
 from .sensors import wrench as _builtin_wrench_sensor  # noqa: F401
@@ -145,6 +149,8 @@ class ROS2RealBackend(BackendBase):
         self._diagnostics: dict = {"backend": "ros2", "robots": {}, "warnings": []}
         self._rsp_launchers: list = []
         self._fake_sims: list[FakeJointPosSim] = []
+        self._perception_source = self._resolve_perception_source()
+        self._recovery_managers: dict[str, object] = {}
 
         fake_sim_cfg_raw = self.config.get("dev_fake_sim")
         if fake_sim_cfg_raw is not None:
@@ -304,6 +310,14 @@ class ROS2RealBackend(BackendBase):
             self._rviz.start()
             self._rviz.publish_scene(scene)
 
+        action_spaces: set[ActionSpace] = set()
+        for driver in self._drivers.values():
+            for space in getattr(driver, "supported_action_spaces", []) or []:
+                action_spaces.add(space)
+        if not action_spaces:
+            action_spaces.add(ActionSpace.JOINT_POS)
+        self.supported_action_spaces = sorted(action_spaces, key=lambda s: s.name)
+
         self._initialized = True
 
     def reset_multi(self, robot_ids: list[str] | None = None) -> list[Observation]:
@@ -323,6 +337,7 @@ class ROS2RealBackend(BackendBase):
             ])
             self._latest_obs[rid] = obs
             out.append(obs)
+            self._update_perception_source(obs)
             self._capture_driver_diagnostics(rid)
             if self._rviz is not None:
                 self._rviz.publish_robot_state(rid, obs)
@@ -355,6 +370,7 @@ class ROS2RealBackend(BackendBase):
             ])
             self._latest_obs[rid] = obs
             out.append(obs)
+            self._update_perception_source(obs)
             self._capture_driver_diagnostics(rid)
             if self._rviz is not None:
                 self._rviz.publish_robot_state(rid, obs)
@@ -370,9 +386,53 @@ class ROS2RealBackend(BackendBase):
         return list(getattr(self, "_scene_prop_names", []))
 
     def get_prop_pose(self, name: str):
-        raise NotImplementedError(
-            f"ROS2RealBackend cannot infer pose for physical prop '{name}' without a configured perception source."
-        )
+        perception = getattr(self, "_perception_source", None)
+        if perception is None:
+            raise NotImplementedError(
+                "ROS2RealBackend cannot infer pose for prop without a perception source. "
+                "Inject via config: perception_source = 'dict' | object with get_pose()."
+            )
+        return perception.get_pose(name)
+
+    def _resolve_perception_source(self):
+        raw = self.config.get("perception_source")
+        if raw is None:
+            return None
+        if hasattr(raw, "get_pose"):
+            return raw
+        if isinstance(raw, dict):
+            kind = str(raw.get("kind", "dict"))
+            if kind == "dict":
+                from .perception import DictPerceptionSource
+
+                return DictPerceptionSource(raw.get("poses", {}))
+            if kind == "tf":
+                from .perception import TFPerceptionSource
+
+                return TFPerceptionSource(
+                    tf_buffer=raw.get("tf_buffer"),
+                    frame_by_prop=dict(raw.get("frame_by_prop", {}) or {}),
+                    target_frame=str(raw.get("target_frame", "world")),
+                )
+            if kind == "color_blob":
+                from .perception import ColorBlobPerceptionSource
+
+                return ColorBlobPerceptionSource(
+                    camera=str(raw.get("camera", "wrist_camera")),
+                    object_name=str(raw.get("object_name", "source")),
+                    target_rgb=tuple(raw.get("target_rgb", (255, 0, 0))),
+                    tolerance=int(raw.get("tolerance", 90)),
+                    default_z=float(raw.get("default_z", 0.38)),
+                    world_origin=tuple(raw.get("world_origin", (0.55, 0.0, 0.38))),
+                    camera_to_world_scale=tuple(raw.get("camera_to_world_scale", (0.15, 0.15, 1.0))),
+                )
+        return None
+
+    def _update_perception_source(self, obs: Observation) -> None:
+        perception = getattr(self, "_perception_source", None)
+        updater = getattr(perception, "update_obs", None)
+        if callable(updater):
+            updater(obs)
 
     def set_prop_pose(self, name: str, position, orientation) -> None:  # noqa: ANN001
         del position, orientation
@@ -427,11 +487,62 @@ class ROS2RealBackend(BackendBase):
         self._diagnostics["robots"][robot_id] = diag
         timeout_s = float(diag.get("joint_state_timeout_s", 0.0) or 0.0)
         state_age_s = float(diag.get("last_joint_state_age_s", 0.0) or 0.0)
-        if timeout_s > 0.0 and state_age_s > timeout_s:
-            warning = str(BackendTimeoutError(robot_id, timeout_s, f"Latest ROS2 state age is {state_age_s:.3f}s; using cached observation."))
+        ack_timeouts = int(diag.get("pending_ack_timeouts", 0) or 0)
+        if ack_timeouts > 0:
+            warning = (
+                f"Robot '{robot_id}' has {ack_timeouts} command(s) without joint-state ack "
+                f"within {float(diag.get('ack_timeout_s', 0.0) or 0.0):.3f}s."
+            )
             warnings = self._diagnostics.setdefault("warnings", [])
             if warning not in warnings:
                 warnings.append(warning)
+            self._diagnostics.setdefault("safety", {})["last_hazard"] = Hazard.COMMAND_REJECTED.name
+        if timeout_s > 0.0 and state_age_s > timeout_s:
+            manager = self._recovery_manager_for(robot_id, timeout_s=timeout_s, driver=driver)
+            try:
+                manager.on_state_stale(state_age_s)
+            except SafetyError as exc:
+                self._diagnostics.setdefault("safety", {})["last_hazard"] = exc.violation.hazard.name
+                raise
+            warning = str(
+                BackendTimeoutError(
+                    robot_id,
+                    timeout_s,
+                    f"Latest ROS2 state age is {state_age_s:.3f}s; recovery in progress.",
+                )
+            )
+            warnings = self._diagnostics.setdefault("warnings", [])
+            if warning not in warnings:
+                warnings.append(warning)
+
+    def _recovery_manager_for(self, robot_id: str, *, timeout_s: float, driver) -> object:
+        from .recovery import ROS2RecoveryManager
+
+        existing = self._recovery_managers.get(robot_id)
+        if existing is not None:
+            return existing
+
+        def _reconnect() -> bool:
+            getter = getattr(driver, "get_obs", None)
+            if not callable(getter):
+                return False
+            try:
+                getter()
+                fresh = driver.get_diagnostics()
+                age = float(fresh.get("last_joint_state_age_s", 1e9) or 1e9)
+                return age <= timeout_s
+            except Exception:
+                return False
+
+        manager = ROS2RecoveryManager(
+            reconnect_fn=_reconnect,
+            state_timeout_s=timeout_s,
+            max_retries=int(self.config.get("recovery_max_retries", 5)),
+            initial_backoff_s=float(self.config.get("recovery_initial_backoff_s", 0.0)),
+            max_backoff_s=float(self.config.get("recovery_max_backoff_s", 1.0)),
+        )
+        self._recovery_managers[robot_id] = manager
+        return manager
 
     @staticmethod
     def _coerce_fake_sim_config(spec, robots) -> FakeJointPosSimConfig:

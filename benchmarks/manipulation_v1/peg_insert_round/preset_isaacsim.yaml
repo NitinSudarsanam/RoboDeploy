@@ -1,0 +1,15 @@
+robot: kuka
+backend: isaacsim
+task: peg_insertion
+policy: example_sensor_reach_pick
+task_kwargs:
+  require_objects: true
+  success_threshold: 0.04
+obs_spec_policy: raise
+backend_kwargs:
+  config:
+    headless: true
+max_episode_steps: 600
+custom_modules:
+  - examples.tasks
+  - examples.policies

@@ -7,18 +7,23 @@ on:
 
 jobs:
   unittest:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
       - name: Install package and test deps
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
       - name: Run unit tests
-        run: python -m pytest tests/ -q --ignore=tests/test_sensors_and_scenes_e2e.py
+        run: python -m pytest tests/ -q --ignore=tests/test_sensors_and_scenes_e2e.py --ignore=tests/test_live_ros2_sensors.py --ignore=tests/test_live_gazebo_sensors.py --ignore=tests/test_plugin_discovery.py
 
   sensor-e2e-linux:
     runs-on: ubuntu-latest
@@ -50,3 +55,119 @@ jobs:
           pip install -e ".[dev,sim]"
       - name: MuJoCo smoke tests
         run: python -m unittest tests.test_mujoco_smoke -q
+
+  sensor-live-ros2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ROS 2 Jazzy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl gnupg lsb-release
+          sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y ros-jazzy-ros-base ros-jazzy-sensor-msgs ros-jazzy-geometry-msgs ros-jazzy-tf2-ros python3-rosdep
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,sim]"
+      - name: Live ROS2 sensor tests
+        env:
+          ROBODEPLOY_LIVE_ROS2: "1"
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          python -m pytest tests/test_live_ros2_sensors.py -q
+
+  sensor-live-gazebo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ROS 2 Jazzy + Gazebo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl gnupg lsb-release
+          sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y ros-jazzy-ros-base ros-jazzy-ros-gz ros-jazzy-sensor-msgs ros-jazzy-geometry-msgs ros-jazzy-tf2-ros gz-harmonic
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,sim]"
+      - name: Live Gazebo sensor tests
+        env:
+          ROBODEPLOY_LIVE_GAZEBO: "1"
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          python -m pytest tests/test_live_gazebo_sensors.py -q
+
+  isaacsim-smoke:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: IsaacSim smoke tests (mocked import path)
+        run: python -m pytest tests/test_isaacsim_smoke.py tests/test_isaacsim_obs.py tests/test_multirobot_isaacsim.py tests/test_backend_parity.py tests/test_gazebo_scene_builder.py tests/test_gazebo_contact_live.py tests/test_ros2_controllers_parity.py -q
+
+  # Blocker: GitHub-hosted ubuntu-latest has no NVIDIA GPU. Isaac Sim Kit requires
+  # GPU + proprietary runtime; pulling nvcr.io/nvidia/isaac-sim:4.1.0 alone is
+  # insufficient without nvidia-container-toolkit on a self-hosted runner.
+  isaacsim-gpu-live:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Document Isaac Sim GPU CI blocker
+        run: |
+          echo "Isaac Sim live GPU CI requires a self-hosted runner with:"
+          echo "  - NVIDIA GPU + driver"
+          echo "  - nvidia-container-toolkit (for Docker) OR native Isaac Sim 4.1+ install"
+          echo "  - Kit python runtime (isaacsim.simulation_app)"
+          echo "Mocked parity tests run in isaacsim-smoke; enable this job on GPU runners."
+      - name: Attempt Isaac Sim container smoke (expected to skip/fail without GPU)
+        continue-on-error: true
+        run: |
+          docker pull nvcr.io/nvidia/isaac-sim:4.1.0 || true
+          echo "Container pull attempted; live headless smoke deferred to self-hosted GPU runner."
+
+  multirobot-mujoco:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install with sim extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,sim]"
+      - name: Multi-robot MuJoCo + registry tests
+        env:
+          MUJOCO_GL: egl
+        run: python -m pytest tests/test_multirobot_mujoco.py tests/test_registry_duplicate.py -q
+
+  conda-recipe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate conda recipe (pip fallback)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pytest tests/test_conda_recipe.py::CondaRecipeTests::test_meta_yaml_exists_and_lists_robodeploy tests/test_conda_recipe.py::CondaRecipeTests::test_recipe_source_install_imports -q

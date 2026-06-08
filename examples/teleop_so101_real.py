@@ -1,0 +1,51 @@
+"""SpaceMouse or gamepad teleop on SO-101 real preset (ROS2 backend).
+
+Run from repo root::
+
+    python -m examples.teleop_so101_real --device gamepad --record demos/so101/
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from examples.env_from_preset import env_from_preset
+from robodeploy.teleop.session import run_teleop_session
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="SO-101 real-hardware teleop demo.")
+    parser.add_argument("--preset", default="so101_real", help="YAML preset name.")
+    parser.add_argument(
+        "--device",
+        default="spacemouse",
+        choices=("spacemouse", "gamepad", "keyboard", "ros2_joy"),
+        help="Teleop input device.",
+    )
+    parser.add_argument("--record", default="", help="Output path or directory.")
+    parser.add_argument("--max-steps", type=int, default=0, help="Stop after N steps (0 = unlimited).")
+    args = parser.parse_args(argv)
+
+    env = env_from_preset(str(args.preset))
+    try:
+        saved = run_teleop_session(
+            env,
+            device=str(args.device),
+            record_path=str(args.record) if args.record else None,
+            max_steps=int(args.max_steps) if int(args.max_steps) > 0 else None,
+        )
+        for path in saved:
+            print(path)
+    finally:
+        env.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

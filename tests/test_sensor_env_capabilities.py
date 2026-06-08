@@ -617,6 +617,10 @@ class SensorEnvCapabilityTests(unittest.TestCase):
         self.assertEqual(reading.depth.dtype, np.float32)
         self.assertEqual(reading.timestamp, 1.25)
         self.assertEqual(reading.timestamp_source, "sim")
+        self.assertIsNotNone(reading.intrinsics)
+        self.assertIn("fx", reading.intrinsics)
+        self.assertIsNotNone(reading.extrinsics)
+        self.assertIn("position", reading.extrinsics)
 
     def test_isaac_ft_sensor_reads_measured_joint_forces(self):
         from robodeploy.sensors.ft_sensor.sim.isaacsim_ft import IsaacSimFTSensor
@@ -640,6 +644,9 @@ class SensorEnvCapabilityTests(unittest.TestCase):
 
         np.testing.assert_allclose(reading.ft_force, np.asarray([1.0, 2.0, 3.0], dtype=np.float32))
         np.testing.assert_allclose(reading.ft_torque, np.asarray([4.0, 5.0, 6.0], dtype=np.float32))
+        self.assertIn("wrist_ft", reading.ft_forces)
+        self.assertIn("wrist_ft", reading.ft_torques)
+        np.testing.assert_allclose(reading.ft_forces["wrist_ft"], reading.ft_force)
         self.assertEqual(reading.timestamp, 2.5)
         self.assertEqual(reading.timestamp_source, "sim")
 

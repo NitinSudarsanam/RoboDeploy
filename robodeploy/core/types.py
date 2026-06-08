@@ -75,10 +75,15 @@ class Observation:
     objects:              dict[str, tuple[tuple[float, float, float], tuple[float, float, float, float]]] = field(
         default_factory=dict
     )
+    # contact_state[sensor_name] = binary touch (ContactSensor or FT threshold)
+    contact_state:        dict[str, bool] = field(default_factory=dict)
     sensor_status:        dict[str, str] = field(default_factory=dict)
+    metadata:             dict[str, Any] = field(default_factory=dict)
     camera_frames:        dict[str, str] = field(default_factory=dict)
     camera_intrinsics:    dict[str, dict[str, float]] = field(default_factory=dict)
     camera_extrinsics:    dict[str, dict[str, object]] = field(default_factory=dict)
+    # metadata: fused scores / transform outputs (e.g. grasp_stability)
+    metadata:             dict[str, Any] = field(default_factory=dict)
 
     # --- Metadata -----------------------------------------------------------
     # timestamp:      anchor time this observation represents (sim time or wall clock)
@@ -144,6 +149,7 @@ class SensorData:
     objects: dict[str, tuple[tuple[float, float, float], tuple[float, float, float, float]]] = field(
         default_factory=dict
     )
+    contact_state: dict[str, bool] = field(default_factory=dict)
     status: str = "ok"
     frame_id: Optional[str] = None
     intrinsics: Optional[dict[str, float]] = None
@@ -164,6 +170,25 @@ class SensorData:
 # ---------------------------------------------------------------------------
 # Task specification types
 # ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Pose3D:
+    """Rigid transform in world or parent frame (metres + unit quaternion wxyz)."""
+
+    position: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    orientation: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+
+
+@dataclass
+class RobotInit:
+    """Normalized multi-robot initialization payload for backends."""
+
+    robot_id: str
+    description: Any
+    base_pose: Pose3D = field(default_factory=Pose3D)
+    namespace: str | None = None
+    sensor_rig: list[Any] = field(default_factory=list)
+
 
 @dataclass(frozen=True)
 class SensorMount:
@@ -245,7 +270,7 @@ class ObjectSpec:
 class GeomSpec:
     """Procedural or mesh-backed geometry declaration for a scene prop."""
 
-    kind: Literal["box", "cylinder", "sphere", "capsule", "mesh"]
+    kind: Literal["box", "cylinder", "sphere", "capsule", "mesh", "plane"]
     size: tuple[float, ...]
     mesh_path: Optional[str] = None
 
@@ -278,6 +303,9 @@ class PropConfig:
     asset: Optional[dict[AssetFormat, str]] = None
     parent_link: Optional[str] = None
     inertia_diag: Optional[tuple[float, float, float]] = None
+    collision_layer: int = 0
+    collision_mask: int = 0xFFFF
+    friction_dist: Optional[tuple[float, float]] = None
 
 
 @dataclass
@@ -306,9 +334,10 @@ class CameraSpec:
 class TerrainSpec:
     """Terrain declaration for simulation backends."""
 
-    kind: Literal["flat", "heightfield"] = "flat"
+    kind: Literal["flat", "heightfield", "procedural"] = "flat"
     size: tuple[float, float] = (4.0, 4.0)
     heightfield_path: Optional[str] = None
+    procedural_params: Optional[dict] = None
 
 
 @dataclass
@@ -367,6 +396,13 @@ class SceneSpec:
             terrain=self.world.terrain,
             gravity=self.world.gravity,
         )
+
+    def to_ir(self):
+        """Return backend-agnostic Scene IR for cross-backend validation."""
+        from robodeploy.core.scene_ir import world_to_ir
+
+        preset = self.lighting if self.lighting in ("minimal", "bright", "dark", "randomized") else None
+        return world_to_ir(self.to_world(), lighting_preset=preset)
 
 
 @dataclass

@@ -1,0 +1,122 @@
+# Sim/real preset pairs for transfer evaluation and deployment.
+# Requires repo root on PYTHONPATH (pip install -e . from the repo).
+
+kuka_pick:
+  sim_preset: kuka_pick_mujoco
+  real_preset: kuka_sensor_pick_mujoco
+  shared:
+    obs_spec_policy: raise
+    custom_modules:
+      - examples.tasks
+      - examples.sensors
+      - examples.policies
+  domain_randomization:
+    level: FULL
+    sensor_noise:
+      joint_pos_std: 0.001
+      ee_pos_std: 0.001
+  transfer_notes: >
+    Use kuka_sensor_pick_mujoco as a ROS2/real proxy until hardware preset exists.
+    Tune sensor_noise_scale in DR sweep before deploy.
+
+franka_pick:
+  sim_preset: franka_pick_mujoco
+  real_preset: franka_pick_mujoco
+  shared:
+    obs_spec_policy: raise
+  domain_randomization:
+    level: LIGHT
+  transfer_notes: Sim-only pair for CI transfer-eval proxy tests.
+
+# --- sim2real benchmark suite (benchmarks/sim2real/* preset metadata) ---
+
+kuka_reach_dummy:
+  sim_preset: kuka_pick_mujoco
+  real_preset: kuka_sensor_pick_mujoco
+  shared:
+    obs_spec_policy: warn
+  domain_randomization:
+    level: LIGHT
+  transfer_notes: Dummy-backend CI proxy for reach_to_target benchmark.
+
+kuka_reach_mujoco:
+  sim_preset: kuka_pick_mujoco
+  real_preset: kuka_sensor_pick_mujoco
+  shared:
+    obs_spec_policy: raise
+    custom_modules:
+      - benchmarks.manipulation_v1.reach_target.task
+  domain_randomization:
+    level: FULL
+    sensor_noise:
+      joint_pos_std: 0.001
+  transfer_notes: MuJoCo sim vs sensor proxy for reach transfer.
+
+kuka_reach_real:
+  sim_preset: kuka_pick_mujoco
+  real_preset: kuka_ft_imu_multimodal_real
+  shared:
+    obs_spec_policy: raise
+    custom_modules:
+      - benchmarks.manipulation_v1.reach_target.task
+  transfer_notes: MuJoCo train to ROS2 real deploy for reach tasks.
+
+kuka_pick_dummy:
+  sim_preset: kuka_pick_mujoco
+  real_preset: kuka_sensor_pick_mujoco
+  shared:
+    obs_spec_policy: warn
+  domain_randomization:
+    level: LIGHT
+  transfer_notes: Dummy-backend CI proxy for pick_place_cube benchmark.
+
+kuka_pick_mujoco:
+  sim_preset: kuka_pick_mujoco
+  real_preset: kuka_sensor_pick_mujoco
+  shared:
+    obs_spec_policy: raise
+    custom_modules:
+      - examples.tasks
+      - examples.policies.sensor_reach_pick
+  domain_randomization:
+    level: FULL
+  transfer_notes: MuJoCo pick-place vs sensor-heavy proxy.
+
+kuka_pick_real:
+  sim_preset: kuka_pick_mujoco
+  real_preset: kuka_ft_imu_multimodal_real
+  shared:
+    obs_spec_policy: raise
+    custom_modules:
+      - examples.tasks
+      - examples.policies.sensor_reach_pick
+  transfer_notes: MuJoCo pick-place to ROS2 real deploy.
+
+kuka_peg_dummy:
+  sim_preset: kuka_pick_mujoco
+  real_preset: kuka_sensor_pick_mujoco
+  shared:
+    obs_spec_policy: warn
+  domain_randomization:
+    level: LIGHT
+  transfer_notes: Dummy-backend CI proxy for peg_insert benchmark.
+
+kuka_peg_mujoco:
+  sim_preset: kuka_pick_mujoco
+  real_preset: kuka_sensor_pick_mujoco
+  shared:
+    obs_spec_policy: raise
+    custom_modules:
+      - examples.tasks
+  domain_randomization:
+    level: FULL
+  transfer_notes: MuJoCo peg-insert vs sensor proxy.
+
+kuka_peg_real:
+  sim_preset: kuka_pick_mujoco
+  real_preset: kuka_ft_imu_multimodal_real
+  shared:
+    obs_spec_policy: raise
+    custom_modules:
+      - examples.tasks
+  transfer_notes: MuJoCo peg-insert to ROS2 real deploy.

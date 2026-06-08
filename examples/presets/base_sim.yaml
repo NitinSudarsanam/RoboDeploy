@@ -1,0 +1,22 @@
+# Base simulation preset — include from examples/config/presets.yaml
+_base_sim: &base_sim
+  backend: mujoco
+  obs_spec_policy: raise
+  backend_kwargs:
+    config:
+      allow_actuator_name_fallback: true
+      enable_viewer: false
+
+_base_kuka: &base_kuka
+  <<: *base_sim
+  robot: kuka
+
+_base_franka: &base_franka
+  <<: *base_sim
+  robot: example_franka_mujoco
+
+_manipulate_modules: &manipulate_modules
+  custom_modules:
+    - examples.tasks
+    - examples.sensors
+    - examples.policies

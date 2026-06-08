@@ -33,8 +33,8 @@ class JointTrackPolicy(PolicyBase):
         self._target = target
         self._max_delta = float(max_delta)
 
-    def _reset_impl(self) -> None:
-        pass
+    def _reset_impl(self, *, seed: int | None = None) -> None:
+        del seed
 
     def get_action(self, obs: Observation) -> Action:
         q = np.asarray(obs.joint_positions, dtype=np.float32).reshape(-1)

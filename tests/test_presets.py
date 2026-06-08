@@ -19,12 +19,27 @@ class PresetsTests(unittest.TestCase):
         self.assertIn("kuka_pick_mujoco", names)
         self.assertIn("kuka_sensor_pick_mujoco", names)
         self.assertIn("kuka_sensor_ros2_rviz", names)
+        self.assertIn("mujoco_showcase_kuka", names)
+        self.assertIn("mujoco_showcase_franka", names)
+        self.assertIn("mujoco_pick_kuka", names)
 
     def test_load_preset_returns_required_keys(self):
         preset = load_example_preset("kuka_pick_mujoco")
         self.assertEqual(preset["robot"], "kuka")
         self.assertEqual(preset["backend"], "mujoco")
-        self.assertEqual(preset["policy"], "example_reach_pick")
+        self.assertEqual(preset["policy"], "example_sensor_reach_pick")
+
+    def test_mujoco_showcase_kuka_preset_keys(self):
+        preset = load_example_preset("mujoco_showcase_kuka")
+        self.assertEqual(preset["robot"], "kuka")
+        self.assertEqual(preset["task"], "showcase_scene")
+        self.assertEqual(preset["policy"], "example_joint_track")
+        rig = preset["sensor_rigs"][0]
+        self.assertIn("wrist_rgbd", rig)
+        self.assertIn("wrist_imu", rig)
+        self.assertIn("overhead_rgbd", rig)
+        self.assertIn("wrist_ft", rig)
+        self.assertEqual(len(rig["prop_pose"]["prop_names"]), 4)
 
     def test_load_preset_unknown_raises(self):
         with self.assertRaises(KeyError):
@@ -35,14 +50,20 @@ class PresetsTests(unittest.TestCase):
             env_from_preset("kuka_pick_mujoco", robot_id="r0")
         cfg = mock_from_config.call_args.args[0]
         self.assertEqual(cfg["robot"], "kuka")
-        self.assertEqual(cfg["policy"], "example_reach_pick")
+        self.assertEqual(cfg["policy"], "example_sensor_reach_pick")
         self.assertEqual(cfg["robot_id"], "r0")
 
-    def test_robodeploy_loader_requires_presets_file(self):
-        from robodeploy.config import load_preset
+    def test_load_preset_requires_keys(self):
+        from unittest.mock import patch
 
-        with self.assertRaises(TypeError):
-            load_preset("kuka_pick_mujoco")
+        from examples.config import load_preset
+
+        with patch(
+            "examples.config._load_all_presets",
+            return_value={"bad": {"robot": "kuka"}},
+        ):
+            with self.assertRaises(ValueError):
+                load_preset("bad", presets_file=PRESETS_FILE)
 
 
 if __name__ == "__main__":

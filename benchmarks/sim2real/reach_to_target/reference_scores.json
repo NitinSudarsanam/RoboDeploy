@@ -1,0 +1,21 @@
+{
+  "benchmark": "sim2real/reach_to_target",
+  "version": "1.0",
+  "transfer_targets": {
+    "sim_success_rate": 0.95,
+    "real_success_rate": 0.80,
+    "max_acceptable_gap": 0.20
+  },
+  "baselines": [
+    {
+      "policy": "benchmark_reach_scripted",
+      "sim_success_rate": 0.95,
+      "real_success_rate": 0.80,
+      "backend_sim": "dummy",
+      "backend_real": "dummy",
+      "n_episodes": 50,
+      "seed_base": 0
+    }
+  ],
+  "evaluated_at": "2026-06-08T00:00:00Z"
+}

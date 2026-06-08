@@ -1,0 +1,120 @@
+"""Live Gazebo + ROS2 sensor integration (sensor-live-gazebo CI job)."""
+
+from __future__ import annotations
+
+import os
+import sys
+import time
+import unittest
+from pathlib import Path
+
+import numpy as np
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+_TESTS_DIR = REPO_ROOT / "tests"
+for _p in (str(REPO_ROOT), str(_TESTS_DIR)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from live_sensor_fixtures import LiveRos2SensorPublishers, gazebo_binary_available, rclpy_available
+
+LIVE = os.environ.get("ROBODEPLOY_LIVE_GAZEBO", "").strip() in {"1", "true", "yes"}
+EMPTY_WORLD = REPO_ROOT / "tests" / "fixtures" / "gazebo_empty.sdf"
+CAMERA_FT_WORLD = REPO_ROOT / "tests" / "fixtures" / "gazebo_camera_ft.sdf"
+MINIMAL_URDF = REPO_ROOT / "tests" / "fixtures" / "gazebo_minimal_arm.urdf"
+
+
+def _gazebo_sim_cfg(
+    *,
+    world: Path,
+    robot_urdf: Path | None = None,
+    wait_for_topics: list[str] | None = None,
+) -> dict:
+    sim: dict = {
+        "kind": "gazebo",
+        "world": str(world),
+        "headless": True,
+        "readiness_timeout_s": 60.0,
+        "wait_for_topics": wait_for_topics or [],
+    }
+    if robot_urdf is not None:
+        sim["robot_urdf"] = str(robot_urdf)
+        sim["robot_name"] = "robot0"
+    return sim
+
+
+@unittest.skipUnless(LIVE, "set ROBODEPLOY_LIVE_GAZEBO=1 to run live Gazebo sensor tests")
+@unittest.skipUnless(gazebo_binary_available(), "gz binary not on PATH")
+@unittest.skipUnless(rclpy_available(), "rclpy not available")
+class LiveGazeboSensorTests(unittest.TestCase):
+    def test_ros2_gazebo_sensor_rig_populates_observation(self):
+        """Fast fallback: synthetic ROS publishers feed bridged topic names."""
+        from examples.config import load_example_preset
+        from robodeploy.env import RoboEnv
+
+        pubs = LiveRos2SensorPublishers(robot_id="robot0")
+        time.sleep(0.3)
+
+        cfg = load_example_preset("kuka_sensor_gazebo")
+        cfg = {
+            **cfg,
+            "max_episode_steps": 20,
+            "backend_kwargs": {"config": {"sim": _gazebo_sim_cfg(world=EMPTY_WORLD)}},
+        }
+        env = RoboEnv.from_config(cfg)
+        try:
+            obs, _ = env.reset()
+            deadline = time.monotonic() + 20.0
+            while time.monotonic() < deadline:
+                if obs.images.get("wrist_camera") is not None and obs.ft_forces.get("wrist_ft") is not None:
+                    break
+                obs, _, _, _ = env.step()
+            self.assertIsNotNone(obs.images.get("wrist_camera"))
+            self.assertIsNotNone(obs.ft_forces.get("wrist_ft"))
+        finally:
+            env.close()
+            pubs.close()
+
+    def test_gz_rendered_camera_populates_observation(self):
+        """End-to-end: gz sim renders camera frames bridged to ROS (no synthetic image pub)."""
+        from examples.config import load_example_preset
+        from robodeploy.env import RoboEnv
+
+        cfg = load_example_preset("kuka_sensor_gazebo")
+        cfg = {
+            **cfg,
+            "max_episode_steps": 20,
+            "backend_kwargs": {
+                "config": {
+                    "sim": _gazebo_sim_cfg(
+                        world=CAMERA_FT_WORLD,
+                        robot_urdf=MINIMAL_URDF,
+                        wait_for_topics=[
+                            "/wrist_camera/image_raw",
+                            "/wrist_camera/camera_info",
+                        ],
+                    )
+                }
+            },
+        }
+        env = RoboEnv.from_config(cfg)
+        try:
+            obs, _ = env.reset()
+            deadline = time.monotonic() + 45.0
+            while time.monotonic() < deadline:
+                img = obs.images.get("wrist_camera")
+                intrinsics = obs.camera_intrinsics.get("wrist_camera")
+                if img is not None and intrinsics and float(np.sum(img)) > 0.0:
+                    break
+                obs, _, _, _ = env.step()
+            img = obs.images.get("wrist_camera")
+            self.assertIsNotNone(img, msg=f"sensor_status={getattr(obs, 'sensor_status', {})}")
+            assert img is not None
+            self.assertGreater(float(np.sum(img)), 0.0)
+            self.assertIn("wrist_camera", obs.camera_intrinsics)
+        finally:
+            env.close()
+
+
+if __name__ == "__main__":
+    unittest.main()

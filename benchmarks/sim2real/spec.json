@@ -1,0 +1,15 @@
+{
+  "name": "sim2real",
+  "version": "1.0",
+  "description": "Reality-gap benchmarks with sim/real preset pairs and transfer targets.",
+  "imports_from": "manipulation_v1",
+  "tasks": [
+    {"name": "reach_to_target", "tier": 1, "max_steps": 300, "expected_success": 0.875, "weight": 1.0},
+    {"name": "pick_place_cube", "tier": 2, "max_steps": 500, "expected_success": 0.725, "weight": 1.5},
+    {"name": "peg_insert", "tier": 3, "max_steps": 600, "expected_success": 0.55, "weight": 2.0}
+  ],
+  "scoring": {
+    "method": "weighted_success_rate",
+    "tie_breaker": "transfer_gap"
+  }
+}

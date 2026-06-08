@@ -101,6 +101,10 @@ class ISensor(ABC):
     # Optional override
     # ------------------------------------------------------------------
 
+    def seed(self, seed: int) -> None:
+        """Re-seed sensor noise generators (sim sensors with synthetic noise)."""
+        pass
+
     def warmup(self, n_frames: int = 30) -> None:
         """Discard initial unstable frames and prime the last-valid cache.
 

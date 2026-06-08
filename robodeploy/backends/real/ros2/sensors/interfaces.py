@@ -26,6 +26,7 @@ class Ros2SensorConfig:
     # Optional generic knobs.
     qos_depth: int = 10
     frame_id: Optional[str] = None
+    target_frame: Optional[str] = None
     encoding: Optional[str] = None
 
     def __post_init__(self) -> None:

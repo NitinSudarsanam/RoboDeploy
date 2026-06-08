@@ -36,7 +36,15 @@ class ATIFTSensor(SensorBase):
         packet, _ = self._sock.recvfrom(1024)
         if len(packet) < 36:
             raise RuntimeError(f"ATI NetFT packet too short: {len(packet)} bytes.")
-        counts = np.asarray(struct.unpack("!6i", packet[-24:]), dtype=np.float32)
+        header, msg_type, _sample_count, status = struct.unpack("!HHII", packet[:12])
+        if header != 0x1234:
+            raise RuntimeError(f"ATI NetFT invalid header: 0x{header:04x} (expected 0x1234).")
+        if msg_type != 2:
+            raise RuntimeError(f"ATI NetFT unexpected message type: {msg_type} (expected 2).")
+        # Status bit 0x01 = force/torque overload per ATI NetFT RDT specification.
+        if status & 0x01:
+            raise RuntimeError("ATI NetFT force/torque overflow flag set.")
+        counts = np.asarray(struct.unpack("!6i", packet[12:36]), dtype=np.float32)
         wrench = counts * self._scale
         now = time.monotonic()
         return SensorData(
@@ -46,6 +54,7 @@ class ATIFTSensor(SensorBase):
             timestamp_hw=now,
             timestamp_recv=now,
             timestamp_source="hardware",
+            status="ok",
         )
 
     def _close_impl(self) -> None:
@@ -62,8 +71,8 @@ class ATIFTSensor(SensorBase):
 @register_sensor_pair(
     "wrist_ft",
     real=ATIFTSensor,
-    by_backend={"ros2": ATIFTSensor},
 )
 class AtiWristFTPair:
+    """ATI UDP hardware (``real`` default). ROS2/Gazebo topic FT uses ``Ros2WrenchISensor``."""
     pass
 

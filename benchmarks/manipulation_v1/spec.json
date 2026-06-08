@@ -1,0 +1,18 @@
+{
+  "name": "manipulation_v1",
+  "version": "1.0",
+  "tasks": [
+    {"name": "reach_target", "tier": 1, "max_steps": 300, "expected_success": 0.95, "weight": 1.0},
+    {"name": "pick_place_cube", "tier": 2, "max_steps": 500, "expected_success": 0.85, "weight": 1.5},
+    {"name": "stacking_3blocks", "tier": 3, "max_steps": 800, "expected_success": 0.70, "weight": 2.0},
+    {"name": "pour_into_cup", "tier": 4, "max_steps": 800, "expected_success": 0.60, "weight": 2.5},
+    {"name": "peg_insert_round", "tier": 5, "max_steps": 600, "expected_success": 0.55, "weight": 3.0},
+    {"name": "peg_insert_square", "tier": 6, "max_steps": 600, "expected_success": 0.40, "weight": 3.5},
+    {"name": "cloth_fold", "tier": 7, "max_steps": 1500, "expected_success": 0.30, "weight": 4.0},
+    {"name": "tools_use_screw", "tier": 8, "max_steps": 2000, "expected_success": 0.20, "weight": 5.0}
+  ],
+  "scoring": {
+    "method": "weighted_success_rate",
+    "tie_breaker": "mean_reward"
+  }
+}

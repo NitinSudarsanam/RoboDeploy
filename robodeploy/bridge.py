@@ -16,6 +16,53 @@ from robodeploy.env import RoboEnv
 EnvFactory = Callable[[], RoboEnv]
 
 
+class LatencyModel:
+    """Models comm + execution delay for control-process action interpolation."""
+
+    def __init__(
+        self,
+        *,
+        mean_delay_s: float = 0.02,
+        jitter_std_s: float = 0.005,
+        max_buffer: int = 32,
+        seed: int | None = None,
+    ) -> None:
+        import numpy as np
+
+        self.mean_delay_s = float(mean_delay_s)
+        self.jitter_std_s = float(jitter_std_s)
+        self.max_buffer = max(1, int(max_buffer))
+        self._rng = np.random.default_rng(seed)
+
+    def predict_execution_time(self, command_time: float) -> float:
+        jitter = float(self._rng.normal(0.0, self.jitter_std_s))
+        return float(command_time) + self.mean_delay_s + jitter
+
+    def interpolate_command(self, buffer: list[tuple[float, Action]], now: float) -> Action | None:
+        """Linearly interpolate between buffered (timestamp, action) pairs."""
+        if not buffer:
+            return None
+        target_t = now - self.mean_delay_s
+        if target_t <= buffer[0][0]:
+            return buffer[0][1]
+        if target_t >= buffer[-1][0]:
+            return buffer[-1][1]
+        for i in range(1, len(buffer)):
+            t0, a0 = buffer[i - 1]
+            t1, a1 = buffer[i]
+            if t0 <= target_t <= t1:
+                if a0.joint_positions is None or a1.joint_positions is None:
+                    return a1
+                import numpy as np
+
+                alpha = (target_t - t0) / max(1e-9, t1 - t0)
+                q0 = np.asarray(a0.joint_positions, dtype=np.float32)
+                q1 = np.asarray(a1.joint_positions, dtype=np.float32)
+                q = q0 + alpha * (q1 - q0)
+                return Action(joint_positions=q, gripper=a1.gripper)
+        return buffer[-1][1]
+
+
 class EStopFlag:
     """Shared e-stop/pause flag for bridge processes."""
 
@@ -52,6 +99,7 @@ class RoboBridge:
         env_factory: EnvFactory | None = None,
         control_hz: Optional[float] = None,
         verbose: bool = False,
+        latency_model: LatencyModel | None = None,
     ) -> None:
         if not env.is_real:
             raise ValueError(
@@ -63,6 +111,8 @@ class RoboBridge:
         self._env_factory = env_factory
         self._verbose = verbose
         self._control_hz = float(control_hz or env.backend.control_hz)
+        self._latency_model = latency_model or LatencyModel()
+        self._action_buffer: list[tuple[float, Action]] = []
         self._trajectory: Optional[ActionTrajectory] = None
         self._control_proc: Optional[mp.Process] = None
         self._obs_queue = None
@@ -103,9 +153,14 @@ class RoboBridge:
                 for robot in self._env.robots
                 if robot.robot_id in obs_by_robot
             }
+            now = time.perf_counter()
             for rid, act in actions.items():
                 assert self._trajectory is not None
-                self._trajectory.write(rid, act)
+                self._action_buffer.append((now, act))
+                if len(self._action_buffer) > self._latency_model.max_buffer:
+                    self._action_buffer.pop(0)
+                delayed = self._latency_model.interpolate_command(self._action_buffer, now)
+                self._trajectory.write(rid, delayed if delayed is not None else act)
 
             step += 1
             if step >= limit:

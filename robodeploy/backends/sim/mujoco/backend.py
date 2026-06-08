@@ -7,19 +7,35 @@ and keep tasks/policies backend-agnostic.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from robodeploy.backends.base import BackendBase
 from robodeploy.core.registry import register_backend
 from robodeploy.core.spaces import ActionSpace, AssetFormat
-from robodeploy.core.types import Action, Observation, SceneSpec
+from robodeploy.core.types import Action, Observation, Pose3D, SceneSpec
 
+from .multi_robot_builder import MultiRobotMjcfBuilder
 from .scene_builder import MjcfSceneBuilder
 
 if TYPE_CHECKING:
     from robodeploy.core.interfaces.sensor import ISensor
+    from robodeploy.core.robot import Robot
     from robodeploy.description.base import RobotDescription
+
+
+@dataclass
+class _RobotRuntimeState:
+    robot_id: str
+    joint_names: list[str]
+    ee_link_name: str
+    home_qpos: list[float] = field(default_factory=list)
+    joint_ids: list[int] = field(default_factory=list)
+    qpos_addr: list[int] = field(default_factory=list)
+    dof_addr: list[int] = field(default_factory=list)
+    actuator_ids: list[int] = field(default_factory=list)
+    ee_body_id: int = -1
 
 
 @register_backend("mujoco")
@@ -31,24 +47,86 @@ class MuJoCoBackend(BackendBase):
     control_hz = 100.0
     supported_action_spaces = [ActionSpace.JOINT_POS, ActionSpace.JOINT_TORQUE]
 
-    def initialize_multi(self, robots, scene: SceneSpec, shared_sensors) -> None:  # type: ignore[override]
-        if len(robots) != 1:
-            raise NotImplementedError("MuJoCoBackend currently supports a single robot per backend instance.")
-        robot = robots[0]
-        self._robot_id = str(robot.robot_id or "robot0")
-        super().initialize(robot.description, scene, [*robot.sensors, *shared_sensors])
+    def initialize_multi(self, robots: list["Robot"], scene: SceneSpec, shared_sensors) -> None:  # type: ignore[override]
+        if len(robots) == 1:
+            robot = robots[0]
+            self._robot_id = str(robot.robot_id or "robot0")
+            self._multi_mode = False
+            super().initialize(robot.description, scene, [*robot.sensors, *shared_sensors])
+            return
+        self._multi_mode = True
+        self._description = robots[0].description
+        self._scene = scene
+        sensors: list[ISensor] = []
+        seen: set[int] = set()
+        for robot in robots:
+            for sensor in robot.sensors:
+                if id(sensor) not in seen:
+                    sensors.append(sensor)
+                    seen.add(id(sensor))
+        for sensor in shared_sensors or []:
+            if id(sensor) not in seen:
+                sensors.append(sensor)
+                seen.add(id(sensor))
+        self._sensors = sensors
+        self._asset_selections.clear()
+        self._load_multi(robots, scene, sensors)
+        self._initialized = True
 
     def reset_multi(self, robot_ids: list[str] | None = None) -> list[Observation]:
         del robot_ids
-        return [self.reset()]
+        if not getattr(self, "_multi_mode", False):
+            return [self.reset()]
+        self._require_initialized("reset_multi")
+        mujoco = self._mujoco
+        mujoco.mj_resetData(self._model, self._data)
+        self._grasp_prop = None
+        for eq_id in getattr(self, "_grasp_eq_ids", {}).values():
+            self._data.eq_active[eq_id] = 0
+        self._set_home_qpos_multi()
+        mujoco.mj_forward(self._model, self._data)
+        obs_list = [self._obs_for_robot(rid) for rid in self._robot_order]
+        self._episode_count += 1
+        self._step_count = 0
+        return obs_list
 
     def step_multi(self, actions: list[Action]) -> list[Observation]:
-        if len(actions) != 1:
-            raise ValueError(f"MuJoCoBackend.step_multi expected 1 action, got {len(actions)}.")
-        return [self.step(actions[0])]
+        if not getattr(self, "_multi_mode", False):
+            if len(actions) != 1:
+                raise ValueError(f"MuJoCoBackend.step_multi expected 1 action, got {len(actions)}.")
+            return [self.step(actions[0])]
+        self._require_initialized("step_multi")
+        if len(actions) != len(self._robot_order):
+            raise ValueError(
+                f"MuJoCoBackend.step_multi expected {len(self._robot_order)} actions, got {len(actions)}."
+            )
+        mujoco = self._mujoco
+        for rid, action in zip(self._robot_order, actions):
+            state = self._robot_states[rid]
+            if action.joint_positions is None:
+                continue
+            q = action.joint_positions
+            for i, aid in enumerate(state.actuator_ids):
+                self._data.ctrl[aid] = float(q[i])
+        dt = float(self._model.opt.timestep)
+        steps = max(1, int(round((1.0 / float(self.control_hz)) / dt)))
+        for _ in range(steps):
+            mujoco.mj_step(self._model, self._data)
+            self._sync_grasped_prop()
+        if self._viewer is not None:
+            try:
+                self._viewer.sync()
+            except Exception:
+                pass
+        obs_list = [self._obs_for_robot(rid) for rid in self._robot_order]
+        self._step_count += 1
+        return obs_list
 
     def get_obs_multi(self) -> list[Observation]:
-        return [self.get_obs()]
+        if not getattr(self, "_multi_mode", False):
+            return [self.get_obs()]
+        self._require_initialized("get_obs_multi")
+        return [self._obs_for_robot(rid) for rid in self._robot_order]
 
     def _load(
         self,
@@ -216,6 +294,138 @@ class MuJoCoBackend(BackendBase):
             except Exception:
                 pass
 
+    def _load_multi(self, robots: list["Robot"], scene: SceneSpec, sensors: list[ISensor]) -> None:
+        try:
+            import mujoco
+        except Exception as exc:
+            raise ImportError(
+                "MuJoCoBackend requires the `mujoco` Python package.\n"
+                "Install with:\n"
+                "  pip install mujoco\n"
+                f"Original error: {exc}"
+            ) from exc
+
+        self._mujoco = mujoco
+        builder = MultiRobotMjcfBuilder(scene, config=self.config)
+        for robot in robots:
+            rid = str(robot.robot_id)
+            desc = robot.description
+            try:
+                mjcf_path = self._resolve_asset_path(rid, desc, AssetFormat.MJCF, variant="sim")
+            except FileNotFoundError as exc:
+                raise FileNotFoundError(
+                    f"MuJoCo multi-robot mode requires MJCF assets for robot '{rid}'."
+                ) from exc
+            mjcf_path = Path(mjcf_path)
+            builder.add_robot(
+                rid,
+                desc,
+                mjcf_path.read_text(encoding="utf-8"),
+                base_pose=robot.base_pose,
+                meshdir=str(mjcf_path.resolve().parent),
+            )
+
+        xml_text = builder.finalize(sensors)
+        self._model = mujoco.MjModel.from_xml_string(xml_text)
+        self._data = mujoco.MjData(self._model)
+
+        world = scene.to_world()
+        self._prop_body_ids: dict[str, int] = {}
+        self._prop_qpos_addr: dict[str, int] = {}
+        for prop in world.props:
+            bid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_BODY, prop.name)
+            if bid >= 0:
+                self._prop_body_ids[prop.name] = int(bid)
+            jid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, f"{prop.name}_freejoint")
+            if jid >= 0:
+                self._prop_qpos_addr[prop.name] = int(self._model.jnt_qposadr[jid])
+
+        self._robot_order = [str(robot.robot_id) for robot in robots]
+        self._robot_states: dict[str, _RobotRuntimeState] = {}
+        for rid, sl in builder.robot_slices.items():
+            state = _RobotRuntimeState(
+                robot_id=rid,
+                joint_names=list(sl.joint_names),
+                ee_link_name=sl.ee_link_name,
+                home_qpos=list(sl.home_qpos),
+            )
+            for jname in state.joint_names:
+                jid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, jname)
+                if jid < 0:
+                    raise KeyError(f"MuJoCo joint not found in multi-robot model: '{jname}'")
+                state.joint_ids.append(jid)
+                state.qpos_addr.append(int(self._model.jnt_qposadr[jid]))
+                state.dof_addr.append(int(self._model.jnt_dofadr[jid]))
+                aid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_ACTUATOR, jname)
+                if aid < 0 and bool(self.config.get("allow_actuator_name_fallback", False)):
+                    idx = len(state.actuator_ids) + 1
+                    aid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_ACTUATOR, f"{rid}/act{idx}")
+                if aid < 0:
+                    raise KeyError(f"MuJoCo actuator not found for joint '{jname}'")
+                state.actuator_ids.append(aid)
+            state.ee_body_id = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_BODY, state.ee_link_name)
+            if state.ee_body_id < 0:
+                raise KeyError(f"MuJoCo body not found for ee_link '{state.ee_link_name}'")
+            self._robot_states[rid] = state
+
+        self._robot_id = self._robot_order[0]
+        self._ee_body_id = self._robot_states[self._robot_id].ee_body_id
+        self._grasp_prop: str | None = None
+        self._grasp_mode: str = "follow"
+        self._grasp_offset: tuple[float, float, float] = (0.0, 0.0, 0.03)
+        self._grasp_eq_ids: dict[str, int] = {}
+        self._viewer: Optional[object] = None
+        self._enable_viewer = bool(self.config.get("enable_viewer", False))
+        if self._enable_viewer:
+            try:
+                import mujoco.viewer
+                self._viewer = mujoco.viewer.launch_passive(self._model, self._data)
+            except Exception as exc:
+                self._viewer = None
+                raise RuntimeError(f"Failed to launch MuJoCo viewer: {exc}") from exc
+        self._set_home_qpos_multi()
+        mujoco.mj_forward(self._model, self._data)
+        self._rviz_bridge = None
+        self._latest_viz_payload = None
+
+    def _set_home_qpos_multi(self) -> None:
+        for state in self._robot_states.values():
+            home = state.home_qpos
+            if not home:
+                continue
+            for i, addr in enumerate(state.qpos_addr):
+                self._data.qpos[addr] = float(home[i])
+
+    def _obs_for_robot(self, robot_id: str) -> Observation:
+        state = self._robot_states[robot_id]
+        obs = self._build_obs_for_state(state)
+        return self._merge_sensor_data(obs, self._sensors)
+
+    def _build_obs_for_state(self, state: _RobotRuntimeState) -> Observation:
+        try:
+            import jax.numpy as jnp
+        except Exception:
+            import numpy as jnp  # type: ignore[assignment]
+
+        dof = len(state.dof_addr)
+        qpos = jnp.asarray([self._data.qpos[a] for a in state.qpos_addr], dtype=jnp.float32)
+        qvel = jnp.asarray([self._data.qvel[a] for a in state.dof_addr], dtype=jnp.float32)
+        qfrc = jnp.asarray([self._data.qfrc_actuator[a] for a in state.dof_addr], dtype=jnp.float32)
+        ee_pos = jnp.asarray(self._data.xpos[state.ee_body_id].copy(), dtype=jnp.float32)
+        ee_quat = jnp.asarray(self._data.xquat[state.ee_body_id].copy(), dtype=jnp.float32)
+        return Observation(
+            joint_positions=qpos,
+            joint_velocities=qvel,
+            joint_torques=qfrc if qfrc.shape[0] == dof else jnp.zeros(dof, dtype=jnp.float32),
+            ee_position=ee_pos,
+            ee_orientation=ee_quat,
+            ee_velocity=jnp.zeros(3, dtype=jnp.float32),
+            ee_angular_velocity=jnp.zeros(3, dtype=jnp.float32),
+            timestamp=float(self._data.time),
+            timestamp_hw=float(self._data.time),
+            timestamp_recv=float(self._data.time),
+        )
+
     def _compile_mjcf_with_position_actuators(  # noqa: ANN001
         self,
         mujoco,
@@ -314,7 +524,8 @@ class MuJoCoBackend(BackendBase):
             except Exception:
                 return
 
-    def has_prop_contact(self, prop_name: str) -> bool:
+    def has_prop_contact(self, prop_name: str, *, other_body: str | None = None) -> bool:
+        del other_body
         """Return True when MuJoCo reports contact between a prop and the EE body."""
         prop_bid = self._prop_body_ids.get(prop_name)
         if prop_bid is None or self._ee_body_id < 0:
@@ -339,6 +550,10 @@ class MuJoCoBackend(BackendBase):
         dy = float(prop_pos[1] - ee_pos[1])
         dz = float(prop_pos[2] - ee_pos[2])
         return (dx * dx + dy * dy + dz * dz) ** 0.5 <= float(threshold)
+
+    def attach_grasp_welds(self, prop_names: list[str]) -> None:
+        """Mark props as weld-grasp candidates (welds emitted at scene build)."""
+        self._grasp_weld_props = [str(name) for name in prop_names]
 
     def set_grasp_prop(
         self,
@@ -439,6 +654,25 @@ class MuJoCoBackend(BackendBase):
             return
         for i, addr in enumerate(self._qpos_addr):
             self._data.qpos[addr] = float(home[i])
+
+    def get_sim_state(self) -> dict:
+        import numpy as np
+
+        return {
+            "qpos": np.asarray(self._data.qpos, dtype=np.float64).tolist(),
+            "qvel": np.asarray(self._data.qvel, dtype=np.float64).tolist(),
+            "ctrl": np.asarray(self._data.ctrl, dtype=np.float64).tolist(),
+            "time": float(self._data.time),
+        }
+
+    def set_sim_state(self, state: dict) -> None:
+        self._data.qpos[:] = state["qpos"]
+        self._data.qvel[:] = state["qvel"]
+        if "ctrl" in state:
+            self._data.ctrl[:] = state["ctrl"]
+        if "time" in state:
+            self._data.time = float(state["time"])
+        self._mujoco.mj_forward(self._model, self._data)
 
     def _build_obs(self) -> Observation:
         try:

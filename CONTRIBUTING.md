@@ -2,6 +2,8 @@
 
 RoboDeploy is in active development. Keep changes small enough to review and preserve the main boundary: user code builds a `Robot` and `RoboEnv`; backends adapt that contract to a simulator or real hardware.
 
+Current repo state and known gaps: [history.json](history.json). Public API contracts: [CONTRACTS.md](CONTRACTS.md).
+
 ## Architecture rules
 
 - Robot descriptions live under `robodeploy/description/*`. They should describe assets, joint names, limits, frames, and optional launch metadata. They should not open simulators, ROS nodes, or serial devices.
@@ -24,7 +26,8 @@ The codebase uses NumPy, JAX arrays, and optional PyTorch depending on the bound
 
 ## Adding components
 
-- Register importable components with the relevant `register_*` decorator when they are meant for `RoboEnv.make()` or `RoboEnv.from_config()`.
+- Register importable components with the relevant `register_*` decorator when they are meant for `RoboEnv.from_config()` (canonical) or minimal `RoboEnv.make()` smoke paths.
+- Example/demo YAML presets belong under `examples/config/`, not `robodeploy/`.
 - Registered placeholder policies and controllers should use names that make their stub status clear.
 - If a component needs optional dependencies such as `rclpy`, `mujoco`, `torch`, or Isaac Sim, import them lazily or raise an actionable `ImportError`.
 
@@ -34,7 +37,7 @@ Run the focused tests that cover your change. Useful broad checks:
 
 ```bash
 python -m compileall robodeploy tests examples
-python -m unittest discover -s tests
+python -m pytest tests/ -q
 git diff --check
 ```
 

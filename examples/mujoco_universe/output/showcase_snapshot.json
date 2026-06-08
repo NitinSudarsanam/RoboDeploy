@@ -1,0 +1,93 @@
+{
+  "objects": [
+    "showcase_box",
+    "showcase_cylinder",
+    "showcase_sphere",
+    "showcase_capsule"
+  ],
+  "sensor_status": {
+    "wrist_camera": "ok",
+    "overhead_camera": "ok",
+    "wrist_ft": "ok",
+    "wrist_imu": "ok",
+    "prop_pose": "ok"
+  },
+  "camera_intrinsics": {
+    "wrist_camera": {
+      "width": 64.0,
+      "height": 48.0,
+      "fx": 41.569219381653056,
+      "fy": 41.569219381653056,
+      "cx": 32.0,
+      "cy": 24.0,
+      "fovy_deg": 60.0
+    },
+    "overhead_camera": {
+      "width": 64.0,
+      "height": 48.0,
+      "fx": 41.569219381653056,
+      "fy": 41.569219381653056,
+      "cx": 32.0,
+      "cy": 24.0,
+      "fovy_deg": 60.0
+    }
+  },
+  "camera_extrinsics": {
+    "wrist_camera": {
+      "position": [
+        -0.3446766250216071,
+        0.45905133918622276,
+        1.0561183195847035
+      ],
+      "orientation": [
+        0.8934729344302013,
+        -0.29379414444421714,
+        -0.3251733591261293,
+        -0.09825173100564108
+      ],
+      "frame_id": "wrist_camera",
+      "source": "sim_live",
+      "parent_link": "robot0/ee_link"
+    },
+    "overhead_camera": {
+      "position": [
+        0.0,
+        -0.8,
+        0.9
+      ],
+      "orientation": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "frame_id": "overhead_camera",
+      "source": "sim_live",
+      "parent_link": "world"
+    }
+  },
+  "ft_forces": {
+    "wrist_ft": [
+      0.9443464875221252,
+      -0.3602209985256195,
+      0.4836231768131256
+    ]
+  },
+  "ft_torques": {
+    "wrist_ft": [
+      -5.2086892537772655e-05,
+      0.0001998928200919181,
+      0.00019754802633542567
+    ]
+  },
+  "imu_acceleration": [
+    10.557404518127441,
+    -4.021688938140869,
+    5.4066290855407715
+  ],
+  "imu_angular_velocity": [
+    0.17639262974262238,
+    0.041110727936029434,
+    0.039322711527347565
+  ]
+}

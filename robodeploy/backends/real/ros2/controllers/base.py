@@ -8,11 +8,31 @@ individual robot models. Robot-specific defaults live in data-only presets.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Callable, Optional, Protocol, runtime_checkable
 
 from robodeploy.core.spaces import ActionSpace
 from robodeploy.core.types import Action, Observation
+
+
+@dataclass
+class CommandAck:
+    published_at: float
+    expected_ack_within_s: float
+    sequence_id: int
+    received_at: float | None = None
+    state_response_at: float | None = None
+
+    @property
+    def acked(self) -> bool:
+        return self.received_at is not None
+
+    @property
+    def timed_out(self) -> bool:
+        if self.acked:
+            return False
+        return (time.time() - self.published_at) > self.expected_ack_within_s
 
 
 @dataclass(frozen=True)
@@ -35,6 +55,7 @@ class ControllerConfig:
 
     # Timing / reliability.
     joint_state_timeout_s: float = 1.0
+    ack_timeout_s: float = 0.5
 
     # Optional outgoing command pacing.
     command_hz: float = 0.0
@@ -85,7 +106,7 @@ class IControllerAdapter(Protocol):
     def joint_names(self) -> list[str]: ...
 
     def get_obs(self) -> Observation: ...
-    def send_action(self, action: Action) -> None: ...
+    def send_action(self, action: Action) -> CommandAck | None: ...
 
     # Optional: block until a newer JointState is received (best-effort).
     def send_action_and_wait(self, action: Action) -> None: ...

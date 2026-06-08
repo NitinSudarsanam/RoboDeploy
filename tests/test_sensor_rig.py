@@ -184,12 +184,11 @@ class SensorRigTests(unittest.TestCase):
             import mujoco  # noqa: F401
         except ImportError:
             self.skipTest("mujoco not installed")
-        from examples.kuka_sensor_pick_mujoco.run_mujoco import _attach_policy_ik, build_env
+        from examples.env_from_preset import env_from_preset
 
-        env = build_env(max_steps=1500)
+        env = env_from_preset("kuka_sensor_pick_mujoco", max_episode_steps=1500)
         try:
             env.reset()
-            _attach_policy_ik(env)
             info = None
             for _ in range(1500):
                 _, _, done, info = env.step()

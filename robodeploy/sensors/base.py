@@ -113,6 +113,10 @@ class SensorBase(ISensor):
                 return self._last_data
             raise SensorTimeoutError(self._name, timeout_s=0.0) from exc
 
+    def seed(self, seed: int) -> None:
+        """Store seed for sensor implementations that inject synthetic noise."""
+        self.config["noise_seed"] = int(seed)
+
     def warmup(self, n_frames: int = 30) -> None:
         """Prime the last-valid cache and let the sensor reach steady state.
 

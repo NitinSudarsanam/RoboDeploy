@@ -6,6 +6,8 @@ from pathlib import Path
 import tempfile
 import xml.etree.ElementTree as ET
 
+from robodeploy.core.procedural_terrain import ProceduralTerrainGenerator
+from robodeploy.core.scene_ir import SceneIR, ir_to_world, ir_to_world_spec
 from robodeploy.core.spaces import AssetFormat
 from robodeploy.core.types import GeomSpec, PropConfig, WorldSpec
 
@@ -124,7 +126,29 @@ class MjcfSceneBuilder:
                 continue
             ET.SubElement(actuator, "position", {"name": str(joint_name), "joint": str(joint_name), "kp": str(gain)})
 
+    @classmethod
+    def from_ir(
+        cls,
+        ir: SceneIR,
+        robot_mjcf_xml: str,
+        *,
+        config: dict | None = None,
+    ) -> "MjcfSceneBuilder":
+        """Build MJCF from unified SceneIR."""
+        builder = cls(robot_mjcf_xml, config=config)
+        builder.attach_world(ir_to_world_spec(ir))
+        return builder
+
+    def from_ir(self, ir: SceneIR) -> "MjcfSceneBuilder":
+        self.attach_world(ir_to_world(ir))
+        return self
+
     def attach_world(self, world: WorldSpec) -> None:
+        from dataclasses import replace
+
+        resolved_terrain = ProceduralTerrainGenerator.resolve_terrain(world.terrain)
+        if resolved_terrain is not world.terrain:
+            world = replace(world, terrain=resolved_terrain)
         opt = self._child("option")
         opt.attrib["gravity"] = _fmt(world.gravity)
         self._attach_terrain(world)
@@ -168,6 +192,8 @@ class MjcfSceneBuilder:
                 self._attach_mounted_camera(sensor, config)
             elif "ft" in cls_name or "force" in cls_name or name.lower().endswith("_ft"):
                 self._attach_mounted_ft_sensor(sensor, config)
+            elif "imu" in cls_name or name.lower().endswith("_imu"):
+                self._attach_mounted_imu_sensor(sensor, config)
 
     def emit(self) -> str:
         return ET.tostring(self.root, encoding="unicode")
@@ -246,6 +272,8 @@ class MjcfSceneBuilder:
             "type": geom.kind,
             "rgba": _fmt(prop.material.rgba),
             "friction": _fmt(prop.material.friction),
+            "contype": str(1 << int(prop.collision_layer)),
+            "conaffinity": str(int(prop.collision_mask)),
         }
         if not prop.is_fixed and prop.inertia_diag is None:
             attrs["mass"] = str(float(prop.mass))
@@ -292,6 +320,30 @@ class MjcfSceneBuilder:
                 "fovy": str(float(config.get("fov_deg", config.get("fovy", 60.0)))),
             },
         )
+
+    def _attach_mounted_imu_sensor(self, sensor, config: dict) -> None:  # noqa: ANN001
+        name = str(getattr(sensor, "name", "imu"))
+        site_name = str(config.get("site", f"{name}_site"))
+        accel_name = str(config.get("accel_sensor", f"{name}_accel"))
+        gyro_name = str(config.get("gyro_sensor", f"{name}_gyro"))
+        mount = getattr(sensor, "mount", None)
+        parent = self._parent_for_mount(mount, fallback_body=f"{name}_mount")
+        if not self._has_named("site", site_name):
+            ET.SubElement(
+                parent,
+                "site",
+                {
+                    "name": site_name,
+                    "pos": _fmt(getattr(mount, "position", (0.0, 0.0, 0.0))),
+                    "quat": _fmt(getattr(mount, "orientation", (1.0, 0.0, 0.0, 0.0))),
+                    "size": str(float(config.get("site_size", 0.01))),
+                },
+            )
+        sensor_root = self._child("sensor")
+        if not self._has_named("accelerometer", accel_name):
+            ET.SubElement(sensor_root, "accelerometer", {"name": accel_name, "site": site_name})
+        if not self._has_named("gyro", gyro_name):
+            ET.SubElement(sensor_root, "gyro", {"name": gyro_name, "site": site_name})
 
     def _attach_mounted_ft_sensor(self, sensor, config: dict) -> None:  # noqa: ANN001
         name = str(getattr(sensor, "name", "ft_sensor"))

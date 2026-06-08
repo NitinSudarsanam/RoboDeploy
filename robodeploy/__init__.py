@@ -39,8 +39,9 @@ Level 3 — config dict:
         "custom_modules": ["my_project.components"],
     })
 
-Example YAML presets (not in the installed package) live under ``examples/config/`` — use
-``examples.env_from_preset("kuka_pick_mujoco")`` after ``pip install -e .`` from the repo.
+Example YAML presets, tasks, policies, and demo CLIs live only under ``examples/`` (not
+bundled in the installed package). After ``pip install -e .`` from the repo, use
+``examples.env_from_preset("kuka_pick_mujoco")`` or ``python -m examples.cli list-presets``.
 """
 
 from robodeploy.env import RoboEnv
@@ -55,7 +56,7 @@ from robodeploy.core.selectors import (
 )
 from robodeploy.obs_pipeline import ObsPipeline
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 def __getattr__(name: str):

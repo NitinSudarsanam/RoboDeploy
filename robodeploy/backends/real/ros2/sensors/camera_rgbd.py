@@ -17,6 +17,7 @@ from robodeploy.core.types import SensorData
 from .base import LastValueCache
 from .interfaces import IRos2Sensor, Ros2SensorConfig
 from .registry import register_ros2_sensor
+from .tf_extrinsics import camera_info_to_intrinsics, lookup_camera_extrinsics
 from robodeploy.ros2 import Ros2NodeAdapter
 from robodeploy.sensors.base import SensorBase
 
@@ -99,6 +100,8 @@ class Ros2RgbdCameraSensor(Ros2NodeAdapter, IRos2Sensor):
         self._depth_cache: LastValueCache[np.ndarray] = LastValueCache()
         self._info_cache: LastValueCache[Any] = LastValueCache()
         self._last_error: str | None = None
+        self._tf_buffer = None
+        self._target_frame = str(cfg.target_frame or backend_config.get("tf_target_frame") or "world")
 
     def _on_node_ready(self, node) -> None:
         try:
@@ -130,6 +133,14 @@ class Ros2RgbdCameraSensor(Ros2NodeAdapter, IRos2Sensor):
                 self._on_info,
                 int(self._cfg.qos_depth),
             )
+        if self._target_frame:
+            try:
+                import tf2_ros
+
+                self._tf_buffer = tf2_ros.Buffer()
+                tf2_ros.TransformListener(self._tf_buffer, node)
+            except Exception:
+                self._tf_buffer = None
 
     def _on_rgb(self, msg) -> None:
         try:
@@ -159,12 +170,29 @@ class Ros2RgbdCameraSensor(Ros2NodeAdapter, IRos2Sensor):
     def read(self) -> SensorData:
         rgb_lv = self._rgb_cache.read()
         depth_lv = self._depth_cache.read()
+        info_lv = self._info_cache.read()
         recv = float(max(rgb_lv.wall_time_s, depth_lv.wall_time_s))
         hw = float(max(rgb_lv.hw_time_s, depth_lv.hw_time_s))
         stamp = hw or recv
+        intrinsics = camera_info_to_intrinsics(info_lv.value)
+        frame_id = str(self._cfg.frame_id or "").strip()
+        if not frame_id and info_lv.value is not None:
+            header = getattr(info_lv.value, "header", None)
+            hdr_frame = getattr(header, "frame_id", None) if header is not None else None
+            if hdr_frame:
+                frame_id = str(hdr_frame).strip()
+        if not frame_id:
+            ns = str(self._cfg.namespace or "").strip("/")
+            frame_id = f"{ns}/{self.name}" if ns else str(self.name)
+        extrinsics = None
+        if self._tf_buffer is not None and self._target_frame:
+            extrinsics = lookup_camera_extrinsics(self._tf_buffer, self._target_frame, frame_id)
         return SensorData(
             rgb=rgb_lv.value,
             depth=depth_lv.value,
+            frame_id=frame_id,
+            intrinsics=intrinsics,
+            extrinsics=extrinsics,
             timestamp=stamp,
             timestamp_hw=stamp,
             timestamp_recv=recv,
@@ -220,7 +248,16 @@ class Ros2RgbdCameraISensor(SensorBase):
             "info": self.config.get("info"),
         }
         topics = {k: v for k, v in topics.items() if isinstance(v, str) and v}
-        cfg = Ros2SensorConfig(robot_id=robot_id, name=self.name, namespace=namespace, topics=topics)
+        frame_id = str(self.config.get("frame_id") or "").strip() or None
+        target_frame = str(self.config.get("target_frame") or getattr(backend, "config", {}).get("tf_target_frame") or "world")
+        cfg = Ros2SensorConfig(
+            robot_id=robot_id,
+            name=self.name,
+            namespace=namespace,
+            topics=topics,
+            frame_id=frame_id,
+            target_frame=target_frame,
+        )
         self._impl = Ros2RgbdCameraSensor(cfg, getattr(backend, "config", {}))
         self._impl.start()
 

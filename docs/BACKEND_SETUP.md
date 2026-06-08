@@ -345,8 +345,68 @@ backend_kwargs={"config": {
 
 ---
 
+## Live sensor CI (GitHub Actions)
+
+Two optional jobs validate bridged ROS2 sensor topics end-to-end:
+
+| Job | Env flag | Test module |
+|-----|----------|-------------|
+| `sensor-live-ros2` | `ROBODEPLOY_LIVE_ROS2=1` | `tests/test_live_ros2_sensors.py` |
+| `sensor-live-gazebo` | `ROBODEPLOY_LIVE_GAZEBO=1` | `tests/test_live_gazebo_sensors.py` |
+
+**Local reproduction (Linux + ROS 2 Jazzy sourced):**
+
+```bash
+source /opt/ros/jazzy/setup.bash
+pip install -e ".[dev,sim]"
+
+# ROS2 RViz transport + test publishers (no external robot graph required for CI fixture)
+ROBODEPLOY_LIVE_ROS2=1 python -m pytest tests/test_live_ros2_sensors.py -q
+
+# Headless Gazebo empty world + bridged wrist camera/FT topics
+ROBODEPLOY_LIVE_GAZEBO=1 python -m pytest tests/test_live_gazebo_sensors.py -q
+```
+
+Runnable demos:
+
+- `python -m examples.kuka_sensor_ros2_rviz.run_ros2_rviz` (requires live `/robot0/joint_states` + sensor topics)
+- `python -m examples.kuka_sensor_gazebo.run_gazebo` (requires `gz` on PATH)
+- `python -m examples.sensor_diagnostics_demo.run` (no ROS; prints `sensor_status` on simulated fault)
+
+**Isaac Sim** sensors remain mock-only in CI (no NVIDIA runtime on standard `ubuntu-latest` runners). Validate Isaac camera/FT manually on a GPU workstation.
+
+### Multi-sensor showcase (MuJoCo, Linux)
+
+Demonstrates wrist + overhead camera, FT, IMU, and prop-pose sensors in one run:
+
+```bash
+pip install -e ".[sim]"
+python -m examples.sensor_showcase.run
+```
+
+Outputs `examples/sensor_showcase/sensor_showcase.json` and a montage image
+(`.png` with Pillow, else `.ppm`). Skips on Windows (headless EGL).
+
+### Gazebo sensor topic wiring
+
+Injected URDF sensors publish on namespaced topics matching ROS2 defaults:
+`/wrist_camera/image_raw`, `/wrist_ft/wrench`. `ros_gz_bridge` rules include
+`CameraInfo` and `Imu` when sensor rigs declare `info` / IMU topics.
+
+Live CI: `test_live_gazebo_sensors.py` includes a gz-rendered camera assertion
+(no synthetic image publisher) using `tests/fixtures/gazebo_camera_ft.sdf`.
+
+### Follow-up sensor modalities (planned)
+
+- Real perception: vision-based `obs.objects` (color blob → `ISensor`, ArUco).
+- Tactile, lidar, proximity: extend `Observation`/`SensorData` when hardware
+  drivers are added (see `CONTRACTS.md`).
+
+---
+
 ## Verification checklist
 
 - **MuJoCo**: example runs N steps; viewer optional; MJCF resolves.
 - **ROS2+RViz**: with your ROS graph running, example runs; RViz shows markers + per-robot EE + trace.
 - **Isaac Sim**: example launches on Isaac python; articulation initializes; no numpy/ABI mismatch.
+- **Sensors**: `kuka_pick_mujoco` uses `prop_pose` sensor → `obs.objects`; live ROS2/Gazebo jobs pass on `main`.

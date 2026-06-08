@@ -1,0 +1,27 @@
+FROM osrf/ros:jazzy-desktop AS builder
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip python3-venv git build-essential \
+    ros-jazzy-ros-gz ros-jazzy-ros-gz-bridge \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml README.md /app/
+COPY robodeploy /app/robodeploy
+RUN pip3 install --no-cache-dir --break-system-packages ".[sim,real,dev]"
+
+FROM osrf/ros:jazzy-desktop
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-ros-gz ros-jazzy-ros-gz-bridge python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local/lib/python3.12/dist-packages /usr/local/lib/python3.12/dist-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY . /app
+WORKDIR /app
+
+RUN echo 'source /opt/ros/jazzy/setup.bash' >> /etc/bash.bashrc
+CMD ["bash", "-lc", "source /opt/ros/jazzy/setup.bash && robodeploy --help"]

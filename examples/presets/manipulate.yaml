@@ -1,0 +1,13 @@
+# Manipulation task/policy defaults
+_manipulate_pick: &manipulate_pick
+  task: pick_place
+  policy: example_sensor_reach_pick
+  task_kwargs:
+    require_objects: true
+
+_arm_sensors: &arm_sensors
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      prop_pose:
+        prop_names: [source, target]

@@ -1,0 +1,14 @@
+backend: dummy
+task: pick_place
+policy: benchmark_reach_scripted
+task_kwargs:
+  require_objects: false
+  max_steps: 500
+policy_kwargs:
+  target_q: 0.4
+  ramp_rate: 0.05
+max_episode_steps: 500
+obs_spec_policy: warn
+custom_modules:
+  - examples.tasks
+  - benchmarks.manipulation_v1.reach_target.task

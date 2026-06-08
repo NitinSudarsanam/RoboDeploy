@@ -1,0 +1,11 @@
+backend: mujoco
+task: pick_place
+policy: example_sensor_reach_pick
+task_kwargs:
+  require_objects: true
+  max_steps: 500
+max_episode_steps: 500
+sim2real_pair: kuka_pick_mujoco
+custom_modules:
+  - examples.tasks
+  - examples.policies.sensor_reach_pick

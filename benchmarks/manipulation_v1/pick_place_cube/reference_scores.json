@@ -1,0 +1,15 @@
+{
+  "benchmark": "manipulation_v1/pick_place_cube",
+  "version": "1.0",
+  "baselines": [
+    {
+      "policy": "example_sensor_reach_pick",
+      "success_rate": 0.85,
+      "mean_reward": 90.0,
+      "n_episodes": 100,
+      "seed_base": 0,
+      "backend": "mujoco"
+    }
+  ],
+  "evaluated_at": "2026-06-08T00:00:00Z"
+}

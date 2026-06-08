@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plugin-robot-demo"
+version = "0.1.0"
+description = "Example third-party RoboDeploy plugin (demo_arm + demo_task)."
+requires-python = ">=3.10"
+dependencies = ["robodeploy", "numpy"]
+
+[project.entry-points."robodeploy.robots"]
+demo_arm = "plugin_robot_demo.robot:DemoArmDescription"
+
+[project.entry-points."robodeploy.tasks"]
+demo_task = "plugin_robot_demo.task:DemoTask"
+
+[tool.setuptools.packages.find]
+include = ["plugin_robot_demo*"]

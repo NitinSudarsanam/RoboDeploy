@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+  <world name="empty">
+    <physics name="default" type="ignored"/>
+    <light name="sun" type="directional">
+      <pose>0 0 10 0 0 0</pose>
+    </light>
+    <gravity>0 0 -9.8</gravity>
+  </world>
+</sdf>

@@ -50,14 +50,45 @@ class RealSenseCamera(SensorBase):
             depth = np.asanyarray(depth_frame.get_data()).astype(np.float32) * depth_scale
             hw_ts = hw_ts or float(depth_frame.get_timestamp()) * 0.001
         recv = time.monotonic()
+        intrinsics = self._camera_intrinsics()
         return SensorData(
             rgb=rgb,
             depth=depth,
+            frame_id=str(self.name),
+            intrinsics=intrinsics,
+            extrinsics=self.mount_extrinsics(),
             timestamp=hw_ts or recv,
             timestamp_hw=hw_ts or recv,
             timestamp_recv=recv,
             timestamp_source="hardware" if hw_ts else "wall",
         )
+
+    def _camera_intrinsics(self) -> dict[str, float] | None:
+        profile = getattr(self, "_profile", None)
+        if profile is None:
+            return None
+        try:
+            stream = profile.get_stream(self._rs.stream.color)
+            intr = stream.as_video_stream_profile().get_intrinsics()
+            return {
+                "width": float(intr.width),
+                "height": float(intr.height),
+                "fx": float(intr.fx),
+                "fy": float(intr.fy),
+                "cx": float(intr.ppx),
+                "cy": float(intr.ppy),
+            }
+        except Exception:
+            width = int(self.config.get("width", 640))
+            height = int(self.config.get("height", 480))
+            return {
+                "width": float(width),
+                "height": float(height),
+                "fx": float(width),
+                "fy": float(height),
+                "cx": float(width) * 0.5,
+                "cy": float(height) * 0.5,
+            }
 
     def _close_impl(self) -> None:
         pipeline = getattr(self, "_pipeline", None)

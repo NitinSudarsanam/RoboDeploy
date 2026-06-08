@@ -6,7 +6,8 @@ For environment setup (MuJoCo / ROS2+RViz / Isaac Sim), see [docs/BACKEND_SETUP.
 
 Named YAML presets and demo policies live here, **not** in the `robodeploy` package:
 
-- [config/presets.yaml](config/presets.yaml) — `kuka_pick_mujoco`, `franka_pick_mujoco`, `kuka_sensor_pick_mujoco`, `kuka_sinusoid_mujoco`
+- [config/presets.yaml](config/presets.yaml) — `kuka_pick_mujoco` (sensor-first default), `franka_pick_mujoco`, `mujoco_showcase_kuka`, `mujoco_showcase_franka`, `mujoco_pick_kuka`, `kuka_sensor_pick_mujoco`, `kuka_sensor_ros2_rviz`, `kuka_sensor_gazebo`, `kuka_sinusoid_mujoco`
+- [catalog/](catalog/) — MuJoCo Universe catalog YAML + [README](catalog/README.md)
 - [tasks/](tasks/) — `pick_place`, `pour`, `peg_insertion` (import `examples.tasks` to register)
 - [policies/](policies/) — `example_reach_pick`, `example_sensor_reach_pick`, `example_joint_track` (import `examples.policies` to register)
 - [sensors/](sensors/) — `sim_prop_pose` oracle prop reader (import `examples.sensors` to register)
@@ -16,24 +17,50 @@ Named YAML presets and demo policies live here, **not** in the `robodeploy` pack
 CLI (from repo root, after `pip install -e .`):
 
 ```bash
-robodeploy list-presets
-robodeploy run-episode --preset kuka_pick_mujoco --dummy --steps 5 --action sinusoid
+python -m examples.cli list-presets
+python -m examples.cli run-episode --preset kuka_pick_mujoco --dummy --steps 5 --action sinusoid
+python -m examples.mujoco_universe.run --list
+python -m examples.mujoco_universe.run --preset mujoco_showcase_kuka
 ```
+
+Library CLI (`robodeploy list-registry`, `robodeploy run-episode --dummy`) does not bundle example presets.
 
 ## Runnable pick-and-place demos (MuJoCo)
 
-These wire `examples.tasks.PickPlaceTask` + `ReachPickPlacePolicy` end-to-end (no stubs):
+Pick-place demos use **`example_sensor_reach_pick`** and `SimPropPoseSensor` by default (`kuka_pick_mujoco` preset). Object poses come from `Observation.objects`, not `backend.get_prop_pose()`.
+
+**Preferred entry:** `python -m examples.cli run-episode --preset kuka_pick_mujoco` or MuJoCo Universe (below). Per-robot `run_mujoco.py` scripts are thin legacy wrappers.
 
 | Example | Command |
 |---------|---------|
-| Kuka + MuJoCo | `python -m examples.kuka_pick_place_mujoco.run_mujoco` |
-| Franka (MJCF names) + MuJoCo | `python -m examples.franka_pick_place_mujoco.run_mujoco` |
-| Kuka + sensors + MuJoCo | `python -m examples.kuka_sensor_pick_mujoco.run_mujoco` |
+| Kuka + MuJoCo (sensor-first) | `python -m examples.cli run-episode --preset kuka_pick_mujoco` |
+| Franka (MJCF names) + MuJoCo | `python -m examples.cli run-episode --preset franka_pick_mujoco` |
+| Kuka + sensors + MuJoCo (alias preset) | `python -m examples.cli run-episode --preset kuka_sensor_pick_mujoco` |
+| Legacy thin wrappers | `python -m examples.kuka_pick_place_mujoco.run_mujoco` (etc.) |
+| Kuka + ROS2 RViz sensors | `python -m examples.kuka_sensor_ros2_rviz.run_ros2_rviz` |
+| Kuka + Gazebo sensors | `python -m examples.kuka_sensor_gazebo.run_gazebo` |
+| Sensor diagnostics smoke | `python -m examples.sensor_diagnostics_demo.run` |
+| **Multi-sensor showcase** (PNG + JSON) | `python -m examples.sensor_showcase.run` |
+| **MuJoCo Universe** (catalog + all geoms/sensors) | `python -m examples.mujoco_universe.run` |
 | Simulator-free smoke | `python -m examples.dummy_pick_place.run` |
 
-Requires `pip install -e ".[sim]"` for MuJoCo examples. The reach policy uses MuJoCo Jacobian IK (call `policy.attach_mujoco(backend, description)` after `env.reset()`). It completes pick-place in sim via kinematic carry of the `source` prop.
+## MuJoCo Universe
 
-The sensor-driven variant (`example_sensor_reach_pick`) reads object poses from `Observation.objects` (via `SimPropPoseSensor` / `SensorRig`) instead of calling `backend.get_prop_pose()` for perception.
+One CLI for every robot × task × policy × sensor rig combination. See [catalog/README.md](catalog/README.md).
+
+```bash
+python -m examples.mujoco_universe.run --list
+python -m examples.mujoco_universe.run --preset mujoco_showcase_kuka
+python -m examples.mujoco_universe.run --robot kuka --task showcase_scene --policy example_joint_track --rig full --steps 300
+```
+
+| Preset | Robot | Task | Policy | Sensor rig |
+|--------|-------|------|--------|------------|
+| `mujoco_showcase_kuka` | kuka | showcase_scene | example_joint_track | full (6 kinds) |
+| `mujoco_showcase_franka` | example_franka_mujoco | showcase_scene | example_joint_track | full |
+| `mujoco_pick_kuka` | kuka | pick_place | example_sensor_reach_pick | vision |
+
+Requires `pip install -e ".[sim]"` for MuJoCo examples. MuJoCo IK binds automatically via `PolicyBase.bind_runtime()` on first `env.reset()` (see CONTRACTS.md).
 
 Preset-based construction (loads custom modules from YAML):
 

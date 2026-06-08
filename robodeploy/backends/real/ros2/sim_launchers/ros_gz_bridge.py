@@ -72,6 +72,34 @@ def image_bridge_rules(*topics: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(rules))
 
 
+def camera_info_bridge_rules(*topics: str) -> tuple[str, ...]:
+    """Return ros_gz_bridge rules for Gazebo CameraInfo topics."""
+
+    rules: list[str] = []
+    for topic in topics:
+        t = str(topic or "").strip()
+        if not t:
+            continue
+        if not t.startswith("/"):
+            t = f"/{t}"
+        rules.append(f"{t}@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo")
+    return tuple(dict.fromkeys(rules))
+
+
+def imu_bridge_rules(*topics: str) -> tuple[str, ...]:
+    """Return ros_gz_bridge rules for Gazebo IMU topics."""
+
+    rules: list[str] = []
+    for topic in topics:
+        t = str(topic or "").strip()
+        if not t:
+            continue
+        if not t.startswith("/"):
+            t = f"/{t}"
+        rules.append(f"{t}@sensor_msgs/msg/Imu[gz.msgs.IMU")
+    return tuple(dict.fromkeys(rules))
+
+
 def wrench_bridge_rules(*topics: str) -> tuple[str, ...]:
     """Return ros_gz_bridge rules for Gazebo wrench / FT topics."""
 

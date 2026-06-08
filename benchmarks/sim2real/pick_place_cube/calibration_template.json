@@ -1,0 +1,7 @@
+{
+  "schema_version": "robodeploy-calibration-v1",
+  "robot_id": "default",
+  "kinematic": "kinematic.json",
+  "extrinsic": "extrinsic_wrist.json",
+  "system_id": "system_id.json"
+}

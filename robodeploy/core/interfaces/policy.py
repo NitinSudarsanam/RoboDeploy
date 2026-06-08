@@ -38,8 +38,7 @@ class IPolicy(ABC):
     # Lifecycle
     # ------------------------------------------------------------------
 
-    @abstractmethod
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset internal policy state at the start of a new episode.
 
         Must clear:
@@ -49,6 +48,9 @@ class IPolicy(ABC):
           - Any episode-scoped counters.
 
         Called by RoboEnv.reset() automatically before the first step.
+
+        Args:
+            seed: Optional deterministic seed for policy-internal RNGs.
         """
         ...
 

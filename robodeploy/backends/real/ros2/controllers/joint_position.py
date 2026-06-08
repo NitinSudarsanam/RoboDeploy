@@ -22,7 +22,7 @@ from robodeploy.core.spaces import ActionSpace
 from robodeploy.core.types import Action, Observation
 
 from ._clamp import slew_limit_command
-from .base import ControllerConfig, register_controller
+from .base import CommandAck, ControllerConfig, register_controller
 from robodeploy.ros2 import Ros2NodeAdapter
 
 
@@ -37,6 +37,9 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
         self._joint_states_topic = cfg.joint_states_topic
         self._cmd_topic = cfg.cmd_topic
         self._joint_state_timeout_s = float(cfg.joint_state_timeout_s)
+        self._ack_timeout_s = float(cfg.ack_timeout_s)
+        self._sequence_id = 0
+        self._pending_acks: list[CommandAck] = []
         self._base_frame = cfg.base_frame
         self._ee_frame = cfg.ee_frame
 
@@ -165,7 +168,9 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
                 self._last_joint_state_stamp_s = float(stamp.sec) + float(stamp.nanosec) * 1e-9
             except Exception:
                 self._last_joint_state_stamp_s = self._last_joint_state_wall_s
+            stamp_out = float(self._last_joint_state_stamp_s)
         self._joint_state_event.set()
+        self.note_state_update(stamp_out)
 
     def _wait_for_joint_state(self, *, timeout_s: float) -> None:
         deadline = time.monotonic() + float(timeout_s)
@@ -194,9 +199,9 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
         msg.data = [float(x) for x in np.asarray(positions_rad, dtype=np.float64).reshape(-1).tolist()]
         self._cmd_pub.publish(msg)
 
-    def send_action(self, action: Action) -> None:
+    def send_action(self, action: Action) -> CommandAck | None:
         if action.joint_positions is None:
-            return
+            return None
         q_des = np.asarray(action.joint_positions, dtype=np.float64).reshape(-1)
         with self._lock:
             q_cur = self._q.copy()
@@ -207,6 +212,29 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
             command_hz=self._cmd_hz,
         )
         self._commander.send(q_des)
+        self._sequence_id += 1
+        ack = CommandAck(
+            published_at=time.time(),
+            expected_ack_within_s=self._ack_timeout_s,
+            sequence_id=self._sequence_id,
+        )
+        self._pending_acks.append(ack)
+        if len(self._pending_acks) > 32:
+            self._pending_acks = self._pending_acks[-16:]
+        return ack
+
+    def note_state_update(self, stamp_s: float | None = None) -> None:
+        """Mark the latest pending command as acknowledged by fresh joint state."""
+        if not self._pending_acks:
+            return
+        now = time.time()
+        with self._lock:
+            stamp = float(stamp_s if stamp_s is not None else self._last_joint_state_stamp_s)
+        for ack in reversed(self._pending_acks):
+            if ack.received_at is None:
+                ack.received_at = now
+                ack.state_response_at = stamp
+                break
 
     def send_action_and_wait(self, action: Action) -> None:
         with self._lock:
@@ -262,14 +290,18 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
             last_wall = float(self._last_joint_state_wall_s)
             last_stamp = float(self._last_joint_state_stamp_s)
         age_s = time.time() - last_wall if last_wall > 0 else 1e9
+        pending = [a for a in self._pending_acks if not a.acked and a.timed_out]
         return {
             "robot_id": self._robot_id,
             "controller_type": self.controller_type,
             "joint_state_timeout_s": float(self._joint_state_timeout_s),
+            "ack_timeout_s": float(self._ack_timeout_s),
             "last_joint_state_age_s": float(age_s),
             "last_joint_state_stamp_s": float(last_stamp),
             "command_count": self._commander.record.count,
             "last_command_wall_s": self._commander.record.sent_wall_s,
+            "pending_ack_timeouts": len(pending),
+            "last_sequence_id": int(self._sequence_id),
             "ee_pose_valid": self._last_tf_error is None,
             "last_tf_error": self._last_tf_error,
         }

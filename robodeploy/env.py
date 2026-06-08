@@ -10,7 +10,12 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-from robodeploy.backends.capabilities import SupportsDiagnostics, SupportsMultiRobot, SupportsVizSink
+from robodeploy.backends.capabilities import (
+    SupportsContactQuery,
+    SupportsDiagnostics,
+    SupportsMultiRobot,
+    SupportsVizSink,
+)
 from robodeploy.core.extra_schemas import (
     build_assets_extra,
     build_diagnostics_extra,
@@ -36,12 +41,24 @@ from robodeploy.core.types import (
     HumanInterventionRequired,
     MultiAgentInfo,
     Observation,
+    Pose3D,
     PropConfig,
     RobotStepState,
     SceneSpec,
     TaskStepState,
 )
+from robodeploy.core.seeding import SeedSet, derive_seeds, seed_global_rngs, seedset_as_dict
 from robodeploy.obs_pipeline import ObsPipeline
+from robodeploy.observability.health import HealthMonitor, summarize_sensor_health
+from robodeploy.safety import (
+    CollisionGuard,
+    ForceLimitGuard,
+    SafetyError,
+    SafetyFilterGuard,
+    SafetyMonitor,
+    VelocityGuard,
+)
+from robodeploy.safety.monitor import SafetyStatus
 
 
 class RoboEnv:
@@ -55,6 +72,14 @@ class RoboEnv:
         shared_sensors: Optional[List[ISensor]] = None,
         max_episode_steps: Optional[int] = None,
         obs_spec_policy: str = "warn",
+        logger=None,
+        health_monitor: Optional[HealthMonitor] = None,
+        record_manifest: bool = False,
+        run_name: Optional[str] = None,
+        env_config: Optional[dict] = None,
+        safety: SafetyMonitor | None = None,
+        safety_enabled: bool = True,
+        emergency_action: Action | None = None,
     ) -> None:
         if backend is None:
             raise ValueError("RoboEnv requires a backend.")
@@ -74,11 +99,36 @@ class RoboEnv:
         self._on_pause: Optional[Callable[[], None]] = None
         self._on_resume: Optional[Callable[[], None]] = None
         self._on_intervention: Optional[Callable[[HumanInterventionRequired], None]] = None
+        self._logger = logger
+        self._health_monitor = health_monitor or HealthMonitor()
+        self._record_manifest = bool(record_manifest)
+        self._run_name = run_name
+        self._manifest_recorder = None
+        self._master_seed: Optional[int] = None
+        self._seeds: Optional[SeedSet] = None
+        self.env_config_snapshot = dict(env_config or {})
+        self.seed_snapshot: dict[str, int] = {}
+        self._emergency_action = emergency_action
+        self._last_obs_by_robot: Dict[str, Observation] = {}
+        self._safety_enabled = bool(safety_enabled)
+        if safety is not None:
+            self._safety = safety
+        elif self._safety_enabled:
+            self._safety = self._build_default_safety()
+        else:
+            self._safety = None
+        if self._safety is not None:
+            from robodeploy.safety.registry import register_safety_monitor
+
+            label = ",".join(robot.robot_id for robot in self._robots)
+            register_safety_monitor(self._safety, label=label)
 
         primary_robot = self._robots[0]
         primary_task_id = primary_robot.active_task_id
         primary_task = primary_robot.tasks[primary_task_id] if primary_task_id else None
         self._max_steps = max_episode_steps or (primary_task.task.max_steps() if primary_task else 1000)
+        self._policy_diagnostics: dict[str, Any] = {}
+        self._negotiate_action_spaces()
 
     # ------------------------------------------------------------------
     # Construction sugar
@@ -93,74 +143,67 @@ class RoboEnv:
         policy: Optional[str] = None,
         sensors: Optional[List[str]] = None,
         sensor_kwargs: Optional[dict] = None,
+        sensor_rigs: Optional[List[Any]] = None,
         backend_kwargs: Optional[dict] = None,
         task_kwargs: Optional[dict] = None,
         policy_kwargs: Optional[dict] = None,
         obs_pipeline: Optional[ObsPipeline] = None,
+        obs_pipeline_spec: Optional[dict] = None,
+        custom_modules: Optional[List[str]] = None,
+        obs_spec_policy: str = "warn",
+        max_episode_steps: Optional[int] = None,
         robot_id: str = "robot0",
         task_id: str = "task0",
         policy_id: str = "policy0",
     ) -> "RoboEnv":
-        from robodeploy.builtins import import_builtins
-
-        import_builtins()
-        DescriptionClass = get_robot(robot)
-        BackendClass = get_backend(backend)
-        TaskClass = get_task(task)
-
-        description_obj = DescriptionClass()
-        backend_obj = BackendClass(**(backend_kwargs or {}))
-        task_obj: ITask = TaskClass(**(task_kwargs or {}))
-        sensor_backend_name = cls._sensor_backend_name_for(backend_obj, default_name=backend)
-
         if policy is None:
             raise ValueError(
                 "RoboEnv.make() requires a policy name. "
                 "Construct RoboEnv(robots=[...]) directly to use external action injection."
             )
-        PolicyClass = get_policy(policy)
-        policy_obj: IPolicy = PolicyClass(**(policy_kwargs or {}))
-
-        sensor_objs: List[ISensor] = []
+        cfg: dict[str, Any] = {
+            "robot": robot,
+            "backend": backend,
+            "task": task,
+            "policy": policy,
+            "robot_id": robot_id,
+            "task_id": task_id,
+            "policy_id": policy_id,
+            "obs_spec_policy": obs_spec_policy,
+        }
         if sensors:
-            for s in sensors:
-                SensorClass = resolve_sensor_class(
-                    s,
-                    is_real=backend_obj.is_real,
-                    backend_name=sensor_backend_name,
-                )
-                cfg = dict((sensor_kwargs or {}).get(s, {}) or {})
-                try:
-                    sensor_objs.append(SensorClass(config=cfg))
-                except TypeError:
-                    sensor_objs.append(SensorClass())
-
-        robot_obj = Robot(
-            robot_id=robot_id,
-            description=description_obj,
-            tasks={
-                task_id: RobotTask(
-                    task=task_obj,
-                    policies={policy_id: policy_obj},
-                    task_id=task_id,
-                ),
-            },
-            sensors=sensor_objs,
-            obs_pipeline=obs_pipeline or ObsPipeline(),
-        )
-
-        return cls(backend=backend_obj, robots=[robot_obj])
+            cfg["sensors"] = list(sensors)
+        if sensor_kwargs:
+            cfg["sensor_kwargs"] = sensor_kwargs
+        if sensor_rigs:
+            cfg["sensor_rigs"] = sensor_rigs
+        if backend_kwargs:
+            cfg["backend_kwargs"] = backend_kwargs
+        if task_kwargs:
+            cfg["task_kwargs"] = task_kwargs
+        if policy_kwargs:
+            cfg["policy_kwargs"] = policy_kwargs
+        if custom_modules:
+            cfg["custom_modules"] = list(custom_modules)
+        if obs_pipeline_spec:
+            cfg["obs_pipeline"] = obs_pipeline_spec
+        if max_episode_steps is not None:
+            cfg["max_episode_steps"] = max_episode_steps
+        return cls.from_config(cfg, obs_pipeline=obs_pipeline)
 
     @classmethod
     def from_config(
         cls,
-        cfg: dict,
+        cfg: dict | Any,
         obs_pipeline: Optional[ObsPipeline] = None,
     ) -> "RoboEnv":
         from robodeploy.builtins import import_builtins
+        from robodeploy.core.env_config import EnvConfig
         from robodeploy.core.registry import use
 
         import_builtins()
+        if isinstance(cfg, EnvConfig):
+            cfg = cfg.to_dict()
         cfg = dict(cfg)
         for module_path in cfg.pop("custom_modules", []):
             use(module_path)
@@ -171,11 +214,28 @@ class RoboEnv:
             default_name=cfg["backend"] if isinstance(cfg.get("backend"), str) else None,
         )
         if "robots" in cfg:
-            robots = [cls._coerce_robot_object(item) for item in cfg["robots"]]
+            robots = cls._coerce_robots_list(
+                cfg["robots"],
+                backend_obj=backend_obj,
+                sensor_backend_name=sensor_backend_name,
+                default_obs_pipeline=obs_pipeline,
+                cfg=cfg,
+            )
+            shared_raw = cfg.get("shared_sensors")
+            shared_sensors = (
+                cls._coerce_sensors(
+                    shared_raw,
+                    cfg.get("sensor_kwargs"),
+                    is_real=backend_obj.is_real,
+                    backend_name=sensor_backend_name,
+                )
+                if shared_raw is not None
+                else None
+            )
             return cls(
                 backend=backend_obj,
                 robots=robots,
-                shared_sensors=cfg.get("shared_sensors"),
+                shared_sensors=shared_sensors,
                 max_episode_steps=cfg.get("max_episode_steps"),
                 obs_spec_policy=str(cfg.get("obs_spec_policy", "warn")),
             )
@@ -217,6 +277,9 @@ class RoboEnv:
                             wrist_rgbd=entry.get("wrist_rgbd"),
                             overhead_rgbd=entry.get("overhead_rgbd"),
                             wrist_ft=entry.get("wrist_ft"),
+                            wrist_imu=entry.get("wrist_imu"),
+                            base_imu=entry.get("base_imu"),
+                            wrist_contact=entry.get("wrist_contact"),
                             prop_pose=entry.get("prop_pose"),
                         )
                     )
@@ -316,7 +379,12 @@ class RoboEnv:
     @classmethod
     def _coerce_policy(cls, value: Any, kwargs: Optional[dict]) -> IPolicy:
         if isinstance(value, str):
-            PolicyClass = get_policy(value)
+            ref = str(value)
+            if ref.startswith("hf:") or (":" in ref and not ref.startswith("http")) or ref.endswith((".pt", ".pth", ".ckpt")):
+                from robodeploy.policies.learned.factory import load_policy_from_ref
+
+                return load_policy_from_ref(ref, config=kwargs or {})
+            PolicyClass = get_policy(ref)
             return PolicyClass(**(kwargs or {}))
         obj = cls._instantiate_component(value, kwargs)
         if not isinstance(obj, IPolicy):
@@ -328,6 +396,103 @@ class RoboEnv:
         if not isinstance(value, Robot):
             raise TypeError("cfg['robots'] entries must be Robot instances.")
         return value
+
+    @classmethod
+    def _coerce_pose3d(cls, value: Any) -> Pose3D | None:
+        if value is None:
+            return None
+        if isinstance(value, Pose3D):
+            return value
+        if not isinstance(value, dict):
+            raise TypeError("base_pose must be a Pose3D or dict with position/orientation.")
+        pos = tuple(float(v) for v in value.get("position", (0.0, 0.0, 0.0)))
+        quat = tuple(float(v) for v in value.get("orientation", (1.0, 0.0, 0.0, 0.0)))
+        return Pose3D(position=pos, orientation=quat)
+
+    @classmethod
+    def _coerce_robots_list(
+        cls,
+        entries: list[Any],
+        *,
+        backend_obj: IBackend,
+        sensor_backend_name: str | None,
+        default_obs_pipeline: ObsPipeline | None,
+        cfg: dict,
+    ) -> list[Robot]:
+        robots: list[Robot] = []
+        for idx, item in enumerate(entries):
+            if isinstance(item, Robot):
+                robots.append(item)
+                continue
+            if not isinstance(item, dict):
+                raise TypeError("cfg['robots'] entries must be Robot instances or dict specs.")
+            robot_id = str(item.get("robot_id", f"robot{idx}"))
+            description = cls._coerce_description(item.get("robot") or item.get("description"), item.get("robot_kwargs"))
+            task_id = str(item.get("task_id", "task0"))
+            policy_id = str(item.get("policy_id", "policy0"))
+            task_obj = cls._coerce_task(item["task"], {**(cfg.get("task_kwargs") or {}), **(item.get("task_kwargs") or {})})
+            policy_obj = cls._coerce_policy(
+                item["policy"],
+                {**(cfg.get("policy_kwargs") or {}), **(item.get("policy_kwargs") or {})},
+            )
+            sensor_objs = cls._coerce_sensors(
+                item.get("sensors") or cfg.get("sensors"),
+                item.get("sensor_kwargs") or cfg.get("sensor_kwargs"),
+                is_real=backend_obj.is_real,
+                backend_name=sensor_backend_name,
+            )
+            rig_specs = item.get("sensor_rigs") or cfg.get("sensor_rigs")
+            if rig_specs:
+                from robodeploy.core.sensor_rig import SensorRig, materialize_sensor_rigs
+
+                rigs: list[SensorRig] = []
+                for entry in rig_specs:
+                    if isinstance(entry, SensorRig):
+                        rigs.append(entry)
+                    elif isinstance(entry, dict):
+                        rigs.append(
+                            SensorRig.robot_mounted(
+                                str(entry.get("rig_id", "arm_sensors")),
+                                ee_link=str(entry.get("ee_link", f"{robot_id}/ee_link")),
+                                wrist_rgbd=entry.get("wrist_rgbd"),
+                                overhead_rgbd=entry.get("overhead_rgbd"),
+                                wrist_ft=entry.get("wrist_ft"),
+                                wrist_imu=entry.get("wrist_imu"),
+                                base_imu=entry.get("base_imu"),
+                                wrist_contact=entry.get("wrist_contact"),
+                                prop_pose=entry.get("prop_pose"),
+                            )
+                        )
+                    else:
+                        raise TypeError("sensor_rigs entries must be SensorRig instances or dicts.")
+                sensor_objs = list(sensor_objs) + materialize_sensor_rigs(
+                    rigs,
+                    is_real=backend_obj.is_real,
+                    backend_name=sensor_backend_name,
+                )
+            pipeline = cls._coerce_obs_pipeline(item.get("obs_pipeline") or cfg.get("obs_pipeline"))
+            if pipeline is None and default_obs_pipeline is not None:
+                pipeline = default_obs_pipeline
+            resolver = item.get("task_action_resolver")
+            robots.append(
+                Robot(
+                    robot_id=robot_id,
+                    description=description,
+                    tasks={
+                        task_id: RobotTask(
+                            task=task_obj,
+                            policies={policy_id: policy_obj},
+                            task_id=task_id,
+                            mode=str(item.get("task_mode", "sequential")),
+                        ),
+                    },
+                    sensors=sensor_objs,
+                    obs_pipeline=pipeline or ObsPipeline(),
+                    base_pose=cls._coerce_pose3d(item.get("base_pose")),
+                    task_action_resolver=resolver,
+                )
+            )
+        return robots
 
     @classmethod
     def _coerce_sensors(
@@ -400,6 +565,150 @@ class RoboEnv:
     @property
     def primary_robot(self) -> Robot:
         return self._robots[0]
+
+    @property
+    def max_episode_steps(self) -> int:
+        return int(self._max_steps)
+
+    @property
+    def safety_monitor(self) -> SafetyMonitor | None:
+        return self._safety
+
+    @property
+    def master_seed(self) -> Optional[int]:
+        return self._master_seed
+
+    @property
+    def logger(self):
+        return self._logger
+
+    @property
+    def health_monitor(self) -> HealthMonitor:
+        return self._health_monitor
+
+    def _seed_components(self) -> None:
+        if self._seeds is None:
+            return
+        seed_global_rngs(self._seeds.env_seed)
+        self.seed_snapshot = seedset_as_dict(self._seeds)
+        backend_seed = getattr(self._backend, "seed", None)
+        if callable(backend_seed):
+            backend_seed(self._seeds.env_seed)
+        for robot in self._robots:
+            for robot_task in robot.tasks.values():
+                randomizer_fn = getattr(robot_task.task, "_domain_randomizer", None)
+                if callable(randomizer_fn):
+                    dr = randomizer_fn()
+                    if dr is not None:
+                        dr.seed(self._seeds.randomizer_seed)
+                for transform in robot.obs_pipeline.transforms:
+                    reseed = getattr(transform, "seed", None)
+                    if callable(reseed):
+                        reseed(self._seeds.obs_pipeline_seed)
+                    elif hasattr(transform, "_rng"):
+                        try:
+                            import numpy as np
+
+                            transform._rng = np.random.default_rng(self._seeds.obs_pipeline_seed)
+                        except Exception:
+                            pass
+        for sensor in self._all_sensors():
+            sensor.seed(self._seeds.sensor_noise_seed)
+
+    def _build_default_safety(self) -> SafetyMonitor:
+        guards: list = []
+        for robot in self._robots:
+            desc = robot.description
+            task_id = robot.active_task_id or next(iter(robot.tasks))
+            action_space = robot.tasks[task_id].action_space()
+            guards.extend(
+                [
+                    SafetyFilterGuard(
+                        safety_filter=desc.get_safety_filter(),
+                        action_space=action_space,
+                        robot_id=robot.robot_id,
+                    ),
+                    ForceLimitGuard(
+                        max_force_N=50.0,
+                        over_limit_strikes=3,
+                        robot_id=robot.robot_id,
+                    ),
+                    VelocityGuard(
+                        max_joint_velocity=desc.joint_velocity_limits,
+                        robot_id=robot.robot_id,
+                    ),
+                ]
+            )
+        if isinstance(self._backend, SupportsContactQuery):
+            guards.append(CollisionGuard(backend=self._backend))
+        return SafetyMonitor(guards=guards, on_violation="clamp", on_critical="raise")
+
+    def emergency_stop(self, reason: str = "external") -> None:
+        for robot in self._robots:
+            robot.description.get_safety_filter().trigger_estop()
+        if self._safety is not None:
+            self._safety.estop.trip(reason)
+            from robodeploy.safety.violation import Hazard
+
+            self._safety.halt(reason, hazard=Hazard.OPERATOR_ESTOP)
+        self._enter_safe_state()
+
+    def reset_safety(self) -> None:
+        for robot in self._robots:
+            robot.description.get_safety_filter().clear_estop()
+        if self._safety is not None:
+            self._safety.reset()
+
+    def _enter_safe_state(self) -> None:
+        if not self._initialized:
+            return
+        hold_actions: list[Action] = []
+        for robot in self._robots:
+            if self._emergency_action is not None:
+                hold_actions.append(self._emergency_action)
+                continue
+            last = self._last_obs_by_robot.get(robot.robot_id)
+            if last is not None:
+                hold_actions.append(Action(joint_positions=last.joint_positions))
+            else:
+                hold_actions.append(Action(joint_positions=robot.description.home_qpos))
+        try:
+            self._backend.step_multi(hold_actions)
+        except Exception:
+            pass
+
+    def _build_safety_info(self, err: SafetyError) -> EpisodeInfo:
+        info = EpisodeInfo(
+            episode_id=self._episode_info.episode_id,
+            step=self._episode_info.step,
+            reward=0.0,
+            success=False,
+            failure=True,
+        )
+        info.extra["safety"] = self._safety_payload(err)
+        return info
+
+    def _safety_payload(self, err: SafetyError | None = None) -> dict:
+        status: SafetyStatus | None = self._safety.status() if self._safety is not None else None
+        payload: dict = {
+            "tripped": bool(status.tripped) if status else False,
+            "history_count": int(status.history_count) if status else 0,
+        }
+        if status and status.last_violation is not None:
+            v = status.last_violation
+            payload["last_violation"] = {
+                "hazard": v.hazard.name,
+                "severity": v.severity.name,
+                "message": v.message,
+            }
+        if err is not None:
+            payload["error"] = str(err)
+            payload["hazard"] = err.violation.hazard.name
+        return payload
+
+    def _control_dt(self) -> float:
+        hz = float(getattr(self._backend, "control_hz", 0.0) or 0.0)
+        return 1.0 / hz if hz > 0 else 0.05
 
     # ------------------------------------------------------------------
     # Initialization & reset
@@ -476,6 +785,25 @@ class RoboEnv:
                     if callable(bind):
                         bind(self._backend, robot.description)
 
+    def _negotiate_action_spaces(self) -> None:
+        from robodeploy.policies.learned.diagnostics import PolicyDiagnostics
+        from robodeploy.policies.learned.negotiation import negotiate_action_space
+
+        for robot in self._robots:
+            for robot_task in robot.tasks.values():
+                for policy in robot_task.policies.values():
+                    _, effective_space, adapter = negotiate_action_space(
+                        policy,
+                        self._backend,
+                        robot.description,
+                        existing_adapter=robot.action_adapter,
+                    )
+                    robot.action_adapter = adapter
+                    robot.effective_action_space = effective_space
+            self._policy_diagnostics[robot.robot_id] = PolicyDiagnostics(
+                expected_dim=int(getattr(robot.description, "dof", 0) or 0) or None
+            )
+
     def _all_sensors(self) -> list[ISensor]:
         sensors: list[ISensor] = []
         seen: set[int] = set()
@@ -543,13 +871,16 @@ class RoboEnv:
         *,
         action_fn=None,
         record: bool = True,
+        seed: int | None = None,
     ):
         """Run reset + N steps; optionally record explicit actions into a DemoRecorder."""
         from robodeploy.demo_recording import DemoRecorder, DemoSession
 
         recorder = DemoRecorder()
+        if seed is not None:
+            recorder.metadata["seed"] = int(seed)
         session = DemoSession(self, recorder=recorder) if record else None
-        obs, info = (session.reset() if session else self.reset())
+        obs, info = (session.reset(seed=seed) if session else self.reset(seed=seed))
         for _ in range(int(steps)):
             action = action_fn(obs) if action_fn is not None else None
             if session is not None:
@@ -560,15 +891,28 @@ class RoboEnv:
             return recorder
         return obs, info
 
-    def reset(self) -> tuple[Observation, EpisodeInfo]:
+    def reset(self, *, seed: int | None = None) -> tuple[Observation, EpisodeInfo]:
+        if seed is not None:
+            self._master_seed = int(seed)
+            self._seeds = derive_seeds(self._master_seed)
+            self._seed_components()
+
         if not self._initialized:
             self._initialize_components()
+            if self._seeds is not None:
+                self._seed_components()
+
+        if self._record_manifest and self._manifest_recorder is None:
+            from robodeploy.observability.manifest import ManifestRecorder
+
+            self._manifest_recorder = ManifestRecorder(self, run_name=self._run_name)
 
         raw_obs_list = self._backend.reset_multi()
         self._require_obs_count(raw_obs_list, "reset_multi")
 
+        policy_seed = self._seeds.policy_seed if self._seeds is not None else None
         for robot in self._robots:
-            robot.reset()
+            robot.reset(policy_seed=policy_seed)
             robot.obs_pipeline.reset_sync()
             for robot_task in robot.tasks.values():
                 self._run_task_reset_routine(robot, robot_task)
@@ -593,6 +937,19 @@ class RoboEnv:
         self._maybe_send_viz_to_backend(info.extra["viz"])
         info.extra["assets"] = build_assets_extra(getattr(self._backend, "asset_selections", {}))
         info.extra["diagnostics"] = build_diagnostics_extra(self._backend_diagnostics())
+        primary_task_id = primary_robot.active_task_id
+        primary_task = primary_robot.tasks.get(primary_task_id) if primary_task_id else None
+        self._attach_step_observability(
+            info,
+            obs=primary_obs,
+            reward=0.0,
+            done=False,
+            robot=primary_robot,
+            robot_task=primary_task,
+            action=Action(),
+        )
+        self._last_obs_by_robot = dict(obs_by_robot)
+        info.extra["safety"] = self._safety_payload()
         return primary_obs, info
 
     def _run_task_reset_routine(self, robot: Robot, robot_task: RobotTask) -> None:
@@ -618,28 +975,56 @@ class RoboEnv:
     # ------------------------------------------------------------------
 
     def step(self, action: Optional[Action | List[Action] | Dict[str, Action]] = None):
+        try:
+            return self._step_impl(action)
+        except SafetyError as err:
+            self._enter_safe_state()
+            primary_robot = self._robots[0]
+            primary_obs = self._last_obs_by_robot.get(
+                primary_robot.robot_id,
+                make_obs_fallback(primary_robot),
+            )
+            info = self._build_safety_info(err)
+            self._episode_info = info
+            return primary_obs, 0.0, True, info
+
+    def _step_impl(self, action: Optional[Action | List[Action] | Dict[str, Action]] = None):
         explicit_actions = self._normalize_explicit_actions(action)
         obs_by_robot = self.get_processed_obs_by_robot()
+        self._last_obs_by_robot = dict(obs_by_robot)
 
         final_actions: dict[str, Action] = {}
         prepared_active_ids: dict[str, list[str]] = {}
         precomputed_task_actions: dict[str, dict[str, Action]] = {}
         if explicit_actions is None:
             prepared_active_ids, precomputed_task_actions = self._plan_policy_actions(obs_by_robot)
+        dt = self._control_dt()
         for robot in self._robots:
             obs = obs_by_robot[robot.robot_id]
             if explicit_actions is not None and robot.robot_id in explicit_actions:
-                supplied = explicit_actions[robot.robot_id]
-                adapted = robot.action_adapter.process(supplied)
-                first_task = next(iter(robot.tasks.values()))
-                action_space = first_task.action_space()
-                final_actions[robot.robot_id] = robot.description.get_safety_filter().filter(adapted, action_space)
+                safe_action = robot.action_adapter.process(explicit_actions[robot.robot_id])
             else:
-                final_actions[robot.robot_id] = robot.step(
+                safe_action = robot.step(
                     obs,
                     active_ids=prepared_active_ids.get(robot.robot_id),
                     precomputed_task_actions=precomputed_task_actions.get(robot.robot_id),
                 )
+            if self._safety is not None:
+                safe_action = self._safety.check_action(
+                    safe_action,
+                    obs,
+                    dt=dt,
+                    robot_id=robot.robot_id,
+                    ignore_slew=(
+                        explicit_actions is not None
+                        and robot.robot_id in explicit_actions
+                    ),
+                )
+            for task_id in robot.active_task_ids():
+                robot_task = robot.tasks.get(task_id)
+                if robot_task is not None:
+                    safe_action = robot_task.task.transform_action(safe_action)
+            final_actions[robot.robot_id] = safe_action
 
         ordered_actions = [
             final_actions.get(
@@ -649,6 +1034,8 @@ class RoboEnv:
             for robot in self._robots
         ]
         raw_obs_list = self._backend.step_multi(ordered_actions)
+        for robot, task_id, robot_task in self._active_task_refs():
+            robot_task.task.apply_disturbance(self._backend)
         self._require_obs_count(raw_obs_list, "step_multi")
         pending = self._drain_backend_sensor_reads()
         next_obs_by_robot = {
@@ -657,17 +1044,30 @@ class RoboEnv:
             )
             for idx, robot in enumerate(self._robots[: len(raw_obs_list)])
         }
+        self._last_obs_by_robot = dict(next_obs_by_robot)
+        if self._safety is not None:
+            for robot in self._robots:
+                self._safety.check_observation(
+                    next_obs_by_robot[robot.robot_id],
+                    robot_id=robot.robot_id,
+                )
 
-        task_states, primary_obs, primary_reward, primary_done, primary_success, primary_failure = (
-            self._evaluate_active_tasks(next_obs_by_robot, final_actions)
-        )
+        (
+            task_states,
+            primary_obs,
+            primary_reward,
+            primary_done,
+            primary_success,
+            primary_failure,
+            primary_reward_components,
+        ) = self._evaluate_active_tasks(next_obs_by_robot, final_actions)
 
         info = EpisodeInfo(
             episode_id=self._episode_info.episode_id,
             step=self._primary_step(task_states),
             reward=primary_reward,
             success=primary_success,
-            failure=primary_failure,
+            failure=primary_failure or (self._safety.tripped if self._safety else False),
         )
         info.extra["multi_agent"] = build_multi_agent_extra(
             self._build_multi_info(next_obs_by_robot, final_actions, task_states, [])
@@ -675,6 +1075,22 @@ class RoboEnv:
         info.extra["viz"] = self._build_viz_payload(next_obs_by_robot)
         self._maybe_send_viz_to_backend(info.extra["viz"])
         info.extra["diagnostics"] = build_diagnostics_extra(self._backend_diagnostics())
+        info.extra["safety"] = self._safety_payload()
+        if primary_reward_components:
+            info.extra["reward_components"] = primary_reward_components
+        primary_robot = self._robots[0]
+        primary_task_id = primary_robot.active_task_id
+        primary_task = primary_robot.tasks.get(primary_task_id) if primary_task_id else None
+        primary_action = final_actions.get(primary_robot.robot_id, Action())
+        self._attach_step_observability(
+            info,
+            obs=primary_obs,
+            reward=primary_reward,
+            done=primary_done,
+            robot=primary_robot,
+            robot_task=primary_task,
+            action=primary_action,
+        )
         self._episode_info = info
         return primary_obs, primary_reward, primary_done, info
 
@@ -763,7 +1179,7 @@ class RoboEnv:
         self,
         obs_by_robot: dict[str, Observation],
         actions_by_robot: dict[str, Action],
-    ) -> tuple[dict[str, TaskStepState], Observation, float, bool, bool, bool]:
+    ) -> tuple[dict[str, TaskStepState], Observation, float, bool, bool, bool, dict[str, float]]:
         task_states: dict[str, TaskStepState] = {}
         primary_robot = self._robots[0]
         primary_obs = obs_by_robot[primary_robot.robot_id]
@@ -772,6 +1188,7 @@ class RoboEnv:
         primary_done = False
         primary_success = False
         primary_failure = False
+        primary_reward_components: dict[str, float] = {}
 
         for robot, task_id, robot_task in self._active_task_refs():
             robot_task.task._on_step()
@@ -800,8 +1217,19 @@ class RoboEnv:
                 primary_done = done
                 primary_success = success
                 primary_failure = failure
+                components_fn = getattr(robot_task.task, "reward_components_fn", None)
+                if components_fn is not None:
+                    primary_reward_components = components_fn(task_obs, action_used)
 
-        return task_states, primary_obs, primary_reward, primary_done, primary_success, primary_failure
+        return (
+            task_states,
+            primary_obs,
+            primary_reward,
+            primary_done,
+            primary_success,
+            primary_failure,
+            primary_reward_components,
+        )
 
     @staticmethod
     def _unique_task_state_key(robot_id: str, task_id: str) -> str:
@@ -882,11 +1310,55 @@ class RoboEnv:
                 pass
         return payload
 
+    def _attach_step_observability(
+        self,
+        info: EpisodeInfo,
+        *,
+        obs: Observation,
+        reward: float,
+        done: bool,
+        robot: Robot,
+        robot_task: RobotTask | None,
+        action: Action,
+    ) -> None:
+        """Surface sensor health and optional structured logging each step."""
+        status = dict(getattr(obs, "sensor_status", {}) or {})
+        health_summary = summarize_sensor_health(status)
+        info.extra["sensor_status"] = status
+        info.extra["sensor_health"] = health_summary
+        info.extra["backend_diagnostics"] = self._backend_diagnostics()
+        info.extra["health_status"] = self._health_monitor.observe(status)
+        diag = self._policy_diagnostics.get(robot.robot_id)
+        if diag is not None:
+            diag.record(action)
+            info.extra["policy_diagnostics"] = diag.summary()
+        if self._logger is not None:
+            self._logger.log_step(
+                {
+                    "episode_id": info.episode_id,
+                    "reward": reward,
+                    "done": done,
+                    "sensor_health": health_summary.get("overall", "ok"),
+                    "sensor_status": status,
+                    "robot_id": robot.robot_id,
+                    "task_id": robot.active_task_id,
+                    "action": action,
+                },
+                step=info.step,
+            )
+
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
 
-    def close(self) -> None:
+    def close(self, *, manifest_dir: str | None = None) -> None:
+        from robodeploy.safety.registry import clear_safety_monitor
+
+        clear_safety_monitor(self._safety)
+        if self._manifest_recorder is not None and manifest_dir:
+            self._manifest_recorder.write(manifest_dir)
+        if self._logger is not None:
+            self._logger.close()
         for robot in self._robots:
             for sensor in robot.sensors:
                 sensor.close()
@@ -900,3 +1372,24 @@ class RoboEnv:
 
     def __repr__(self) -> str:
         return f"RoboEnv(robots={len(self._robots)}, backend={self._backend!r}, real={self.is_real})"
+
+
+def make_obs_fallback(robot: Robot) -> Observation:
+    """Minimal observation when safety halts before any obs is cached."""
+    try:
+        import jax.numpy as jnp
+    except Exception:
+        import numpy as jnp  # type: ignore[assignment]
+
+    home = jnp.asarray(robot.description.home_qpos, dtype=jnp.float32)
+    dof = int(home.shape[0])
+    zeros = jnp.zeros((dof,), dtype=jnp.float32)
+    return Observation(
+        joint_positions=home,
+        joint_velocities=zeros,
+        joint_torques=zeros,
+        ee_position=jnp.zeros((3,), dtype=jnp.float32),
+        ee_orientation=jnp.asarray([1.0, 0.0, 0.0, 0.0], dtype=jnp.float32),
+        ee_velocity=jnp.zeros((3,), dtype=jnp.float32),
+        ee_angular_velocity=jnp.zeros((3,), dtype=jnp.float32),
+    )

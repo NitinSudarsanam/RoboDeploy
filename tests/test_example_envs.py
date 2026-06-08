@@ -78,12 +78,11 @@ class ExampleEnvTests(unittest.TestCase):
             import mujoco  # noqa: F401
         except ImportError:
             self.skipTest("mujoco not installed")
-        from examples.kuka_pick_place_mujoco.run_mujoco import _attach_policy_ik, build_env
+        from examples.env_from_preset import env_from_preset
 
-        env = build_env(max_steps=1500)
+        env = env_from_preset("kuka_pick_mujoco", max_episode_steps=1500)
         try:
             env.reset()
-            _attach_policy_ik(env)
             for _ in range(1500):
                 _, _, done, info = env.step()
                 if done:
@@ -148,12 +147,11 @@ class ExampleEnvTests(unittest.TestCase):
             import mujoco  # noqa: F401
         except ImportError:
             self.skipTest("mujoco not installed")
-        from examples.kuka_pick_place_mujoco.run_mujoco import _attach_policy_ik, build_env
+        from examples.env_from_preset import env_from_preset
 
-        env = build_env(max_steps=10)
+        env = env_from_preset("kuka_pick_mujoco", max_episode_steps=10)
         try:
             obs, info = env.reset()
-            _attach_policy_ik(env)
             self.assertIsNotNone(obs)
             self.assertEqual(info.episode_id, 1)
             env.step()

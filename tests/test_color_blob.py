@@ -79,6 +79,20 @@ class ColorBlobTransformTests(unittest.TestCase):
         pos, _ = out.objects["source"]
         self.assertAlmostEqual(pos[2], 0.55, delta=0.05)
 
+    def test_camera_to_world_with_oriented_extrinsics(self):
+        pos = _camera_to_world(
+            (0.0, 0.0, 0.1),
+            {
+                "position": (0.0, 0.0, 0.0),
+                "orientation": (0.70710678, 0.70710678, 0.0, 0.0),
+            },
+            fallback_origin=(0.0, 0.0, 0.0),
+            fallback_scale=(1.0, 1.0, 1.0),
+            default_z=0.38,
+        )
+        self.assertAlmostEqual(abs(pos[1]), 0.1, places=4)
+        self.assertAlmostEqual(pos[0], 0.0, places=4)
+
     def test_uses_camera_extrinsics_mount_position(self):
         rgb = np.zeros((48, 64, 3), dtype=np.uint8)
         rgb[20:28, 30:38] = (255, 0, 0)

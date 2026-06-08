@@ -1,0 +1,18 @@
+{
+  "benchmark": "sim2real/peg_insert",
+  "version": "1.0",
+  "transfer_targets": {
+    "sim_success_rate": 0.70,
+    "real_success_rate": 0.40,
+    "max_acceptable_gap": 0.35
+  },
+  "baselines": [
+    {
+      "policy": "benchmark_reach_scripted",
+      "sim_success_rate": 0.70,
+      "real_success_rate": 0.40,
+      "n_episodes": 20,
+      "seed_base": 0
+    }
+  ]
+}

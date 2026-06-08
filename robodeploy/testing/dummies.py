@@ -58,6 +58,9 @@ class DummyBackend(BackendBase):
         del description, scene, sensors
 
     def _reset_impl(self) -> Observation:
+        self._latest["robot0"] = make_obs(0.0)
+        if "robot1" in self._latest:
+            self._latest["robot1"] = make_obs(1.0)
         return self._latest["robot0"]
 
     def _step_impl(self, action: Action) -> Observation:
@@ -77,6 +80,8 @@ class DummyBackend(BackendBase):
 
     def reset_multi(self, robot_ids=None) -> list[Observation]:
         ids = robot_ids or self._robot_ids
+        for rid in ids:
+            self._latest[rid] = make_obs(0.0 if rid == "robot0" else 1.0)
         return [self._latest[rid] for rid in ids]
 
     def step_multi(self, actions: list[Action]) -> list[Observation]:
@@ -96,6 +101,18 @@ class DummyBackend(BackendBase):
     def get_diagnostics(self) -> dict:
         return {"backend": "dummy", "ok": True}
 
+    def get_sim_state(self) -> dict:
+        latest_values: dict[str, float] = {}
+        for rid, obs in self._latest.items():
+            jp = obs.joint_positions
+            latest_values[rid] = float(jp[0]) if jp is not None else 0.0
+        return {"latest_values": latest_values}
+
+    def set_sim_state(self, state: dict) -> None:
+        for rid, val in dict(state.get("latest_values") or {}).items():
+            if rid in self._latest:
+                self._latest[rid] = make_obs(float(val))
+
 
 class DummyRealBackend(DummyBackend):
     is_real = True
@@ -106,7 +123,8 @@ class DummyPolicy(PolicyBase):
         super().__init__(action_space=ActionSpace.JOINT_POS)
         self._value = value
 
-    def _reset_impl(self) -> None:
+    def _reset_impl(self, *, seed: int | None = None) -> None:
+        del seed
         return
 
     def get_action(self, obs: Observation) -> Action:
@@ -161,6 +179,11 @@ class DummyTask(TaskBase):
     def reward_fn(self, obs: Observation, action: Action) -> float:
         del action
         return float(obs.joint_positions[0])
+
+    def reward_components_fn(self, obs: Observation, action: Action) -> dict[str, float]:
+        from robodeploy.tasks.reward_builder import RewardBuilder
+
+        return RewardBuilder().penalty_action_norm(scale=0.01).build_components()(obs, action)
 
     def success_fn(self, obs: Observation) -> bool:
         return False

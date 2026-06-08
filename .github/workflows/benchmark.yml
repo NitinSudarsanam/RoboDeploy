@@ -1,0 +1,151 @@
+name: benchmark-nightly
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "benchmarks/leaderboard/submissions/**"
+      - "benchmarks/manipulation_v1/spec.json"
+      - "benchmarks/leaderboard/schema.json"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: benchmark-pages
+  cancel-in-progress: false
+
+jobs:
+  validate-schemas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install eval dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,eval]"
+      - name: Validate benchmark spec JSON Schema
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from robodeploy.evaluation.schema_validate import validate_benchmark_spec
+
+          spec_path = Path("benchmarks/manipulation_v1/spec.json")
+          spec = json.loads(spec_path.read_text(encoding="utf-8"))
+          errors = validate_benchmark_spec(spec)
+          if errors:
+              raise SystemExit("spec.json validation failed:\n" + "\n".join(errors))
+          print("spec.json OK")
+          PY
+      - name: Validate leaderboard schema file
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from robodeploy.evaluation.schema_validate import load_schema, validate_json
+
+          schema = load_schema("benchmarks/leaderboard/schema.json")
+          sample = {
+              "benchmark": "manipulation_v1/reach_target",
+              "benchmark_version": "1.0",
+              "policy_name": "scripted",
+              "author": "ci",
+              "success_rate": 0.9,
+              "n_episodes": 10,
+              "manifest": {},
+              "reproduce": {"command": "robodeploy eval --benchmark manipulation_v1/reach_target", "docker_image": "robodeploy/cpu:latest"},
+          }
+          errors = validate_json(sample, schema)
+          if errors:
+              raise SystemExit("leaderboard schema smoke failed:\n" + "\n".join(errors))
+          print("leaderboard schema OK")
+          PY
+      - name: Validate leaderboard PR submissions
+        if: github.event_name == 'pull_request'
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from robodeploy.evaluation.schema_validate import validate_leaderboard_submission
+
+          root = Path("benchmarks/leaderboard/submissions")
+          files = sorted(root.rglob("*.json")) if root.is_dir() else []
+          if not files:
+              print("No submission JSON files to validate.")
+              raise SystemExit(0)
+          failed = False
+          for path in files:
+              payload = json.loads(path.read_text(encoding="utf-8"))
+              errors = validate_leaderboard_submission(payload)
+              if errors:
+                  failed = True
+                  print(f"{path}:")
+                  for err in errors:
+                      print(f"  - {err}")
+          if failed:
+              raise SystemExit(1)
+          print(f"Validated {len(files)} submission file(s).")
+          PY
+
+  manipulation-v1-dummy:
+    needs: validate-schemas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,eval]"
+      - name: Run manipulation_v1 scripted baselines (reduced N)
+        run: |
+          mkdir -p benchmark_results
+          python -m robodeploy.cli eval \
+            --benchmark manipulation_v1 \
+            --policy scripted \
+            --backend dummy \
+            --episodes 5 \
+            --parallel \
+            --workers 4 \
+            --output benchmark_results/manipulation_v1_dummy.json \
+            --html benchmark_results/manipulation_v1_dummy.html
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark_results/
+
+  publish-pages:
+    needs: manipulation-v1-dummy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark_results
+      - name: Prepare GitHub Pages site
+        run: |
+          mkdir -p site
+          cp benchmark_results/manipulation_v1_dummy.html site/index.html
+          printf '<h1>RoboDeploy benchmark nightly</h1><pre>%s</pre>' "$(cat benchmark_results/manipulation_v1_dummy.json)" > site/raw.json
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

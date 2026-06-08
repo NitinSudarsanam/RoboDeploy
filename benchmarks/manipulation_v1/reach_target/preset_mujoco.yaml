@@ -1,0 +1,12 @@
+robot: kuka
+backend: mujoco
+task: user_kuka_sinusoid
+policy: user_sinusoid
+backend_kwargs:
+  config:
+    allow_actuator_name_fallback: true
+    enable_viewer: false
+max_episode_steps: 300
+obs_spec_policy: warn
+custom_modules:
+  - examples.user_kuka_sinusoid.components

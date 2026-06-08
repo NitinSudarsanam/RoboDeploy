@@ -62,3 +62,39 @@ class SupportsPhysicsRandomization(Protocol):
     """Backend supports physics parameter randomization at runtime."""
 
     def set_physics_params(self, **kwargs) -> None: ...
+
+
+@runtime_checkable
+class SupportsGraspWeld(Protocol):
+    """Backend supports physics weld grasping (MuJoCo equality constraints)."""
+
+    def attach_grasp_welds(self, prop_names: list[str]) -> None: ...
+    def set_grasp_prop(self, prop_name: str | None, *, mode: str = "weld", offset: tuple[float, float, float] | None = None) -> None: ...
+
+
+@runtime_checkable
+class SupportsGraspFollow(Protocol):
+    """Backend supports kinematic follow grasping (Gazebo workaround)."""
+
+    def set_grasp_prop(self, prop_name: str | None, *, mode: str = "follow", offset: tuple[float, float, float] | None = None) -> None: ...
+
+
+@runtime_checkable
+class SupportsContactQuery(Protocol):
+    """Backend can query prop/body contact state."""
+
+    def has_prop_contact(self, prop_name: str, *, other_body: str | None = None) -> bool: ...
+
+
+@runtime_checkable
+class SupportsProceduralTerrain(Protocol):
+    """Backend can emit procedural terrain heightfields."""
+
+    def set_terrain(self, kind: str, **kwargs) -> None: ...
+
+
+@runtime_checkable
+class SupportsPhysicsTuning(Protocol):
+    """Backend supports runtime physics parameter tuning beyond gravity."""
+
+    def set_physics_params(self, **kwargs) -> None: ...

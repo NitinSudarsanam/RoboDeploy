@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["name", "version", "tasks", "scoring"],
+  "properties": {
+    "name": {"type": "string"},
+    "version": {"type": "string"},
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "tier", "max_steps", "expected_success", "weight"],
+        "properties": {
+          "name": {"type": "string"},
+          "tier": {"type": "integer", "minimum": 1},
+          "max_steps": {"type": "integer", "minimum": 1},
+          "expected_success": {"type": "number", "minimum": 0, "maximum": 1},
+          "weight": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+    "scoring": {
+      "type": "object",
+      "required": ["method", "tie_breaker"],
+      "properties": {
+        "method": {"type": "string"},
+        "tie_breaker": {"type": "string"}
+      }
+    }
+  }
+}

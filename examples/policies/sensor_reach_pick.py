@@ -7,7 +7,7 @@ import numpy as np
 from robodeploy.core.registry import register_policy
 from robodeploy.core.types import Observation
 
-from examples.policies.reach_pick_place import ReachPickPlacePolicy, _Phase
+from examples.policies.reach_pick_place import ReachPickPlacePolicy
 
 
 @register_policy("example_sensor_reach_pick")
@@ -15,7 +15,9 @@ class SensorReachPickPlacePolicy(ReachPickPlacePolicy):
     """Reach pick-place using prop poses published by sensors into ``obs.objects``."""
 
     def __init__(self, *args, carry_mode: str = "follow", **kwargs) -> None:
-        super().__init__(*args, carry_mode=carry_mode, **kwargs)
+        config = dict(kwargs.pop("config", None) or {})
+        config.setdefault("carry_mode", carry_mode)
+        super().__init__(*args, config=config, **kwargs)
 
     def _update_targets_from_obs(self, obs: Observation) -> None:
         objects = getattr(obs, "objects", None) or {}
@@ -23,7 +25,7 @@ class SensorReachPickPlacePolicy(ReachPickPlacePolicy):
             return
         src_pos, _ = objects["source"]
         tgt_pos, _ = objects["target"]
-        self._set_ee_targets(
+        self._set_waypoints(
             np.array(src_pos, dtype=np.float32),
             np.array(tgt_pos, dtype=np.float32),
         )
@@ -41,7 +43,3 @@ class SensorReachPickPlacePolicy(ReachPickPlacePolicy):
     def get_action(self, obs: Observation):
         self._update_targets_from_obs(obs)
         return super().get_action(obs)
-
-    def _reset_impl(self) -> None:
-        super()._reset_impl()
-        self._phase = _Phase.SETTLE_HOME

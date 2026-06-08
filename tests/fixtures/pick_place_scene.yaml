@@ -1,0 +1,21 @@
+# Minimal pick-place scene for CLI scene validate tests.
+table_height: 0.0
+lighting: default
+props:
+  - name: source
+    position: [0.55, 0.0, 0.38]
+    mass: 0.05
+    is_fixed: false
+    geom:
+      kind: box
+      size: [0.025, 0.025, 0.025]
+    material:
+      rgba: [1.0, 0.0, 0.0, 1.0]
+  - name: target
+    position: [0.60, 0.20, 0.38]
+    is_fixed: true
+    geom:
+      kind: box
+      size: [0.04, 0.04, 0.003]
+    material:
+      rgba: [0.0, 0.8, 0.0, 0.7]

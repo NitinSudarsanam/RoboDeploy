@@ -24,9 +24,11 @@ class DemoRoboEnvE2ETests(unittest.TestCase):
         )
         env = RoboEnv(backend=backend, robots=[robot])
         session = DemoSession(env)
-        session.reset()
+        session.reset(seed=42)
+        self.assertEqual(session.recorder.metadata.get("seed"), 42)
         session.step(Action(joint_positions=jnp.asarray([1.0, 1.0], dtype=jnp.float32)))
         session.step(Action(joint_positions=jnp.asarray([2.0, 2.0], dtype=jnp.float32)))
+        self.assertEqual(len(session.recorder.frames), 2)
 
         replay_backend = DummyBackend()
         replay_robot = Robot(
@@ -35,7 +37,7 @@ class DemoRoboEnvE2ETests(unittest.TestCase):
             tasks={"task0": RobotTask(task=DummyTask(), policies={"p": DummyPolicy(0.0)})},
         )
         replay_env = RoboEnv(backend=replay_backend, robots=[replay_robot])
-        replay_env.reset()
+        replay_env.reset(seed=42)
         for action in session.iter_replay_actions():
             replay_env.step(action)
         self.assertAlmostEqual(float(replay_backend.last_actions["robot0"].joint_positions[0]), 2.0)

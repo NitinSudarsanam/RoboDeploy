@@ -1,0 +1,11 @@
+robot: kuka
+backend: isaacsim
+task: user_kuka_sinusoid
+policy: user_sinusoid
+backend_kwargs:
+  config:
+    headless: true
+max_episode_steps: 300
+obs_spec_policy: warn
+custom_modules:
+  - examples.user_kuka_sinusoid.components

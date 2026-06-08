@@ -7,6 +7,8 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from robodeploy.core.procedural_terrain import ProceduralTerrainGenerator
+from robodeploy.core.scene_ir import SceneIR, ir_to_world_spec
 from robodeploy.core.types import CameraSpec, GeomSpec, LightSpec, PropConfig, WorldSpec
 
 
@@ -50,7 +52,13 @@ class GazeboSceneBuilder:
     def __init__(self, *, world_name: str = "robodeploy_world") -> None:
         self.world_name = str(world_name)
 
+    @classmethod
+    def from_ir(cls, ir: SceneIR, *, world_name: str = "robodeploy_world") -> str:
+        """Build SDF XML from unified SceneIR."""
+        return cls(world_name=world_name).build(ir_to_world_spec(ir))
+
     def build(self, world: WorldSpec) -> str:
+        world = self._resolve_procedural_terrain(world)
         root = ET.Element("sdf", {"version": "1.9"})
         world_elem = ET.SubElement(root, "world", {"name": self.world_name})
         ET.SubElement(world_elem, "gravity").text = _fmt(world.gravity)
@@ -111,13 +119,40 @@ class GazeboSceneBuilder:
         diffuse = ET.SubElement(light_elem, "diffuse")
         diffuse.text = _fmt((*light.diffuse, 1.0))
 
+    def _resolve_procedural_terrain(self, world: WorldSpec) -> WorldSpec:
+        terrain = world.terrain
+        if terrain.kind != "procedural":
+            return world
+        params = dict(terrain.procedural_params or {})
+        png_path = ProceduralTerrainGenerator.to_temp_heightmap(
+            size_m=tuple(terrain.size),
+            resolution=int(params.get("resolution", 64)),
+            seed=int(params.get("seed", 0)),
+            max_height_m=float(params.get("max_height_m", 0.25)),
+            generator=str(params.get("generator", "perlin")),
+            ridges=int(params.get("ridges", 5)),
+            num_steps=int(params.get("num_steps", 8)),
+        )
+        from dataclasses import replace
+
+        new_terrain = replace(
+            terrain,
+            kind="heightfield",
+            heightfield_path=str(png_path),
+        )
+        return replace(world, terrain=new_terrain)
+
     def _attach_prop(self, world_elem: ET.Element, prop: PropConfig) -> None:
+        geom = prop.geom or self._geom_from_prop(prop)
+        if geom is not None and geom.kind == "capsule":
+            self._attach_capsule_compound(world_elem, prop, geom)
+            return
+
         model = ET.SubElement(world_elem, "model", {"name": prop.name})
         ET.SubElement(model, "static").text = "true" if prop.is_fixed else "false"
         ET.SubElement(model, "pose").text = _pose(prop.position, prop.orientation)
         link = ET.SubElement(model, "link", {"name": f"{prop.name}_link"})
 
-        geom = prop.geom or self._geom_from_prop(prop)
         if geom is None:
             return
 
@@ -152,8 +187,43 @@ class GazeboSceneBuilder:
         ET.SubElement(clip, "near").text = "0.01"
         ET.SubElement(clip, "far").text = "100.0"
 
+    def _attach_capsule_compound(self, world_elem: ET.Element, prop: PropConfig, geom: GeomSpec) -> None:
+        """Approximate SDF capsule with cylinder + two end-cap spheres."""
+        radius = float(geom.size[0]) if geom.size else 0.05
+        length = float(geom.size[1]) if len(geom.size) > 1 else 0.1
+        model = ET.SubElement(world_elem, "model", {"name": prop.name})
+        ET.SubElement(model, "static").text = "true" if prop.is_fixed else "false"
+        ET.SubElement(model, "pose").text = _pose(prop.position, prop.orientation)
+        link = ET.SubElement(model, "link", {"name": f"{prop.name}_link"})
+        if not prop.is_fixed:
+            inertial = ET.SubElement(link, "inertial")
+            ET.SubElement(inertial, "mass").text = str(float(prop.mass))
+        parts = (
+            ("cyl", f"0 0 0 0 0 0", "cylinder", {"radius": radius, "length": length}),
+            ("cap_top", f"0 0 {length / 2.0} 0 0 0", "sphere", {"radius": radius}),
+            ("cap_bot", f"0 0 {-length / 2.0} 0 0 0", "sphere", {"radius": radius}),
+        )
+        for tag in ("collision", "visual"):
+            for suffix, pose_txt, prim, attrs in parts:
+                elem = ET.SubElement(link, tag, {"name": f"{prop.name}_{suffix}_{tag}"})
+                ET.SubElement(elem, "pose").text = pose_txt
+                geom_elem = ET.SubElement(elem, "geometry")
+                prim_elem = ET.SubElement(geom_elem, prim)
+                for key, value in attrs.items():
+                    ET.SubElement(prim_elem, key).text = str(float(value))
+                if tag == "visual":
+                    material = ET.SubElement(elem, "material")
+                    ET.SubElement(material, "ambient").text = _fmt(prop.material.rgba)
+                    ET.SubElement(material, "diffuse").text = _fmt(prop.material.rgba)
+
     def _attach_geom(self, geom_elem: ET.Element, geom: GeomSpec, asset_path: str) -> None:
         kind = str(geom.kind)
+        if kind == "plane":
+            plane = ET.SubElement(geom_elem, "plane")
+            size = geom.size if geom.size else (1.0, 1.0)
+            ET.SubElement(plane, "normal").text = "0 0 1"
+            ET.SubElement(plane, "size").text = _fmt(size[:2])
+            return
         if kind == "box":
             box = ET.SubElement(geom_elem, "box")
             ET.SubElement(box, "size").text = _fmt(tuple(float(v) * 2.0 for v in geom.size[:3]))

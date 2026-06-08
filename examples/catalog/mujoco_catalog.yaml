@@ -1,0 +1,110 @@
+# MuJoCo Universe catalog — robots, tasks, policies, sensor rigs, geom kinds.
+# Used by examples/mujoco_universe/run.py and examples/catalog/README.md.
+
+geom_kinds:
+  - box
+  - cylinder
+  - sphere
+  - capsule
+  - mesh
+
+robots:
+  kuka:
+    ee_link: robot0/ee_link
+    notes: "7-DOF demo arm (built-in MJCF)"
+  franka:
+    ee_link: panda_hand
+    notes: "Franka Panda built-in MJCF"
+  example_franka_mujoco:
+    ee_link: robot0/ee_link
+    notes: "Example Franka MJCF with robot0/* naming"
+  so101:
+    ee_link: ""
+    notes: "SO-101 arm (URDF); not used in MuJoCo showcase presets"
+  user_kuka:
+    ee_link: robot0/ee_link
+    notes: "User sinusoid demo robot"
+
+tasks:
+  showcase_scene:
+    geom_kinds: [box, cylinder, sphere, capsule]
+    prop_names: [showcase_box, showcase_cylinder, showcase_sphere, showcase_capsule]
+    notes: "All procedural geom kinds on one table"
+  pick_place:
+    geom_kinds: [box]
+    prop_names: [source, target]
+    notes: "Red box pick, green target pad"
+  pour:
+    geom_kinds: [cylinder]
+    prop_names: [cup_source, cup_target]
+    notes: "Pour between two cups"
+  peg_insertion:
+    geom_kinds: [cylinder, box]
+    prop_names: [peg, hole]
+    notes: "Peg-in-hole insertion"
+
+policies:
+  example_joint_track:
+    needs: []
+    needs_ik: false
+    notes: "Joint-space waypoint tracking"
+  example_sensor_reach_pick:
+    needs: [prop_pose]
+    needs_ik: true
+    notes: "Reach pick-place using obs.objects poses"
+  example_reach_pick:
+    needs: []
+    needs_ik: true
+    notes: "Reach pick-place reading backend prop poses"
+
+sensor_rigs:
+  full:
+    wrist_rgbd:
+      width: 64
+      height: 48
+      depth: true
+      allow_camera_fallback: true
+    overhead_rgbd:
+      mount:
+        parent_link: world
+        position: [0.0, -0.8, 0.9]
+        orientation: [1.0, 0.0, 0.0, 0.0]
+      width: 64
+      height: 48
+      depth: false
+      allow_camera_fallback: true
+    wrist_ft: {}
+    wrist_imu: {}
+    prop_pose:
+      prop_names: []
+  vision:
+    wrist_rgbd:
+      width: 64
+      height: 48
+      depth: true
+      allow_camera_fallback: true
+    prop_pose:
+      prop_names: []
+  proprio_only:
+    prop_pose:
+      prop_names: []
+
+combos:
+  mujoco_showcase_kuka:
+    preset: mujoco_showcase_kuka
+    robot: kuka
+    task: showcase_scene
+    policy: example_joint_track
+    rig: full
+  mujoco_showcase_franka:
+    preset: mujoco_showcase_franka
+    robot: example_franka_mujoco
+    task: showcase_scene
+    policy: example_joint_track
+    rig: full
+  mujoco_pick_kuka:
+    preset: mujoco_pick_kuka
+    robot: kuka
+    task: pick_place
+    policy: example_sensor_reach_pick
+    rig: vision

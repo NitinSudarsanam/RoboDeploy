@@ -50,11 +50,12 @@ Register a composed policy with `policy_names` in config (see `robodeploy.polici
 
 ## CLI
 
-After install (`python -m pip install -e .`), the `robodeploy` CLI is available:
+After install (`python -m pip install -e .`), the `robodeploy` CLI handles registry listing
+and simulator-free dummy smoke runs. **Demo presets** live under `examples/` only:
 
 ```bash
-robodeploy list-presets
 robodeploy list-registry --builtins
+python -m examples.cli list-presets
 ```
 
 Common debugging patterns:
@@ -66,20 +67,18 @@ robodeploy list-registry --custom-module examples.user_kuka_sinusoid.components
 # Load pip-installed extensions (entry points) before listing
 robodeploy list-registry --discover
 
-# Machine-parseable JSON output (all list/run/export commands)
-robodeploy list-presets --json
+# Machine-parseable JSON output
+python -m examples.cli list-presets --json
 robodeploy list-registry --builtins --json --pretty
 
-# Simulator-free smoke runs (no preset required)
+# Simulator-free smoke runs (library dummy backend)
 robodeploy run-episode --dummy --steps 10 --action sinusoid --json
 robodeploy run-episode --dummy --steps 1 --json --pretty
-
-# Simulator-free dataset export
 robodeploy export-episode --dummy --steps 10 --action hold --out demo.jsonl --json
 
-# Preset-based runs (example presets under examples/config/presets.yaml)
-robodeploy run-episode --preset kuka_pick_mujoco --dummy --steps 10 --json
-# Or set ROBODEPLOY_PRESETS_FILE=/path/to/presets.yaml when not in the repo root
+# Preset-based runs (examples/config/presets.yaml)
+python -m examples.cli run-episode --preset kuka_pick_mujoco --dummy --steps 10 --json
+python -m examples.mujoco_universe.run --preset mujoco_showcase_kuka
 ```
 
 ## Basic use
@@ -116,7 +115,11 @@ The same `Robot` can be passed to `backend_for_simulator("ros2_rviz", ...)`, `"g
 
 ## Configuration and registration
 
-For string-based construction, register project components first:
+**Canonical:** `RoboEnv.from_config(cfg)` or `examples.env_from_preset("kuka_pick_mujoco")` for
+demo YAML under `examples/config/presets.yaml` (sensor rigs, `custom_modules`, obs pipeline).
+
+**Minimal smoke:** `RoboEnv.make(...)` — flat `sensors: list[str]` only; no `sensor_rigs` or
+example presets. Register components first:
 
 ```python
 from robodeploy import RoboEnv, use
@@ -131,7 +134,8 @@ env = RoboEnv.make(
 )
 ```
 
-`RoboEnv.from_config()` supports the same registry names and, on this branch, can also accept already constructed robot/backend/task/policy objects for lightweight programmatic setup.
+`from_config()` accepts registry names or already-constructed robot/backend/task/policy objects.
+See [CONTRACTS.md](CONTRACTS.md) for the full construction hierarchy and [history.json](history.json) for current state and gaps.
 
 ## Backends and examples
 

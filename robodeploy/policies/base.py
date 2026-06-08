@@ -20,6 +20,7 @@ Extension point for batching:
 from __future__ import annotations
 
 from abc import abstractmethod
+import inspect
 
 import numpy as np
 
@@ -54,10 +55,16 @@ class PolicyBase(IPolicy):
     # IPolicy implementation
     # ------------------------------------------------------------------
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Increment episode counter and call _reset_impl() for subclass state."""
+        if seed is not None:
+            self._policy_seed = int(seed)
+            self._rng = np.random.default_rng(int(seed))
         self._episode_count += 1
-        self._reset_impl()
+        if "seed" in inspect.signature(self._reset_impl).parameters:
+            self._reset_impl(seed=seed)
+        else:
+            self._reset_impl()
 
     @abstractmethod
     def get_action(self, obs: Observation) -> Action:
@@ -89,13 +96,13 @@ class PolicyBase(IPolicy):
     # Subclass hooks
     # ------------------------------------------------------------------
 
-    def _reset_impl(self) -> None:
+    def _reset_impl(self, *, seed: int | None = None) -> None:
         """Override to clear internal state (buffers, RNN states, etc.).
 
         Default is a no-op. Subclasses that maintain episode-scoped state
         must override this.
         """
-        pass
+        del seed
 
     # ------------------------------------------------------------------
     # Batching extension point

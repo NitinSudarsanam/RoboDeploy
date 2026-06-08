@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "benchmark",
+    "benchmark_version",
+    "policy_name",
+    "author",
+    "success_rate",
+    "n_episodes",
+    "manifest",
+    "reproduce"
+  ],
+  "properties": {
+    "benchmark": {"type": "string"},
+    "benchmark_version": {"type": "string"},
+    "policy_name": {"type": "string"},
+    "policy_checkpoint": {"type": "string"},
+    "author": {"type": "string"},
+    "success_rate": {"type": "number"},
+    "success_rate_ci95": {
+      "type": "array",
+      "items": {"type": "number"},
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "n_episodes": {"type": "integer"},
+    "robo_score": {"type": "number"},
+    "manifest": {"type": "object"},
+    "reproduce": {
+      "type": "object",
+      "required": ["command", "docker_image"],
+      "properties": {
+        "command": {"type": "string"},
+        "docker_image": {"type": "string"}
+      }
+    },
+    "submitted_at": {"type": "string", "format": "date-time"}
+  }
+}

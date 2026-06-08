@@ -1,0 +1,22 @@
+robot: kuka
+backend: mujoco
+task: peg_insertion
+policy: example_sensor_reach_pick
+task_kwargs:
+  require_objects: true
+  success_threshold: 0.015
+obs_spec_policy: raise
+backend_kwargs:
+  config:
+    allow_actuator_name_fallback: true
+    enable_viewer: false
+sensor_rigs:
+  - rig_id: arm_sensors
+    ee_link: robot0/ee_link
+    prop_pose:
+      prop_names: [peg, hole]
+max_episode_steps: 2000
+custom_modules:
+  - examples.tasks
+  - examples.sensors
+  - examples.policies

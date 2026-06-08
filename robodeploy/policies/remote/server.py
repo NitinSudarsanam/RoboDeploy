@@ -36,11 +36,14 @@ without changing any policy or robot code.
 
 from __future__ import annotations
 
+import asyncio
 import signal
 import sys
+from collections.abc import AsyncIterator, Iterator
 from typing import Optional
 
 from robodeploy.core.interfaces.policy    import IPolicy
+from robodeploy.core.types import Action
 from robodeploy.policies.remote.transport import (
     IPolicyTransport,
     action_to_bytes,
@@ -95,7 +98,7 @@ class PolicyServer:
         """Request the server to stop after the current request."""
         self._running = False
 
-    def infer(self, obs) -> "Action":  # noqa: ANN001
+    def infer(self, obs) -> Action:  # noqa: ANN001
         """Run one local inference step (for tests and non-ZMQ integrations)."""
         return self._policy.get_action(obs)
 
@@ -190,3 +193,59 @@ def serve(
         raise ValueError(f"Unknown transport '{transport}'. Use 'zmq' or 'grpc'.")
 
     PolicyServer(policy=policy, transport=t, verbose=verbose).serve_forever()
+
+
+class StreamingPolicyServer(PolicyServer):
+    """Policy server that streams chunked action plans for slow VLA/diffusion models."""
+
+    def __init__(
+        self,
+        policy: IPolicy,
+        transport: IPolicyTransport,
+        *,
+        verbose: bool = True,
+        chunk_size: int = 4,
+    ) -> None:
+        super().__init__(policy=policy, transport=transport, verbose=verbose)
+        self._chunk_size = max(1, int(chunk_size))
+
+    async def predict_stream(self, obs) -> AsyncIterator[Action]:  # noqa: ANN001
+        for chunk in self._iter_chunks(obs):
+            if isinstance(chunk, (list, tuple)):
+                for action in chunk:
+                    yield action
+            else:
+                yield chunk
+
+    def infer_stream(self, obs) -> list[Action]:  # noqa: ANN001
+        """Synchronous helper for tests and HTTP integrations."""
+        actions: list[Action] = []
+        for chunk in self._iter_chunks(obs):
+            if isinstance(chunk, (list, tuple)):
+                actions.extend(chunk)
+            else:
+                actions.append(chunk)
+        return actions
+
+    def _iter_chunks(self, obs) -> Iterator[Action | list[Action]]:  # noqa: ANN001
+        policy = self._policy
+        if hasattr(policy, "predict_chunked"):
+            yield from policy.predict_chunked(obs, chunk_size=self._chunk_size)
+            return
+        if hasattr(policy, "_build_plan"):
+            plan = policy._build_plan(obs)  # noqa: SLF001
+            for idx in range(0, len(plan), self._chunk_size):
+                yield plan[idx : idx + self._chunk_size]
+            return
+        yield policy.get_action(obs)
+
+    async def serve_streaming_forever(self) -> None:
+        """Async loop placeholder for HTTP/SSE streaming transports."""
+        self._policy.reset()
+        self._transport.connect()
+        self._running = True
+        try:
+            while self._running:
+                await asyncio.sleep(0.05)
+        finally:
+            self._transport.close()

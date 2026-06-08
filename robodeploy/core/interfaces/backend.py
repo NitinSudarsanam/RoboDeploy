@@ -242,3 +242,19 @@ class IBackend(ABC):
     def render(self) -> None:
         """Render a viewer frame (no-op if viewer is disabled or backend is real)."""
         pass
+
+    def seed(self, seed: int) -> None:
+        """Re-seed backend-internal RNGs (sim physics randomization, etc.)."""
+        pass
+
+    def get_sim_state(self) -> dict:
+        """Return backend-specific simulation state for snapshots (sim only)."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support get_sim_state()."
+        )
+
+    def set_sim_state(self, state: dict) -> None:
+        """Restore simulation state from get_sim_state()."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support set_sim_state()."
+        )

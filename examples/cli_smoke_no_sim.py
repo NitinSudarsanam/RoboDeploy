@@ -13,12 +13,12 @@ from pathlib import Path
 def main() -> int:
     presets_file = Path(__file__).resolve().parent / "config" / "presets.yaml"
     cmds = [
-        [sys.executable, "-m", "robodeploy.cli", "list-presets", "--presets-file", str(presets_file)],
+        [sys.executable, "-m", "examples.cli", "list-presets", "--presets-file", str(presets_file)],
         [sys.executable, "-m", "robodeploy.cli", "list-registry", "--builtins"],
         [
             sys.executable,
             "-m",
-            "robodeploy.cli",
+            "examples.cli",
             "run-episode",
             "--preset",
             "kuka_pick_mujoco",

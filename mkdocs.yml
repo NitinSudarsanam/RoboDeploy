@@ -1,0 +1,69 @@
+site_name: RoboDeploy
+site_description: Backend-agnostic robot learning runtime
+site_url: https://robodeploy.github.io/RoboDeploy/
+repo_url: https://github.com/anthropic-ai/robodeploy
+repo_name: robodeploy/RoboDeploy
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Tutorial 1 — Hello RoboDeploy: tutorials/01_getting_started.md
+      - Tutorial 2 — Teleop: tutorials/02_teleop.md
+      - Tutorial 3 — Training: tutorials/03_training.md
+      - Tutorial 4 — Sim2Real: tutorials/04_sim2real.md
+      - Tutorial 5 — Safety: tutorials/05_safety.md
+  - Guides:
+      - Task creation: TASK_CREATION.md
+      - Policy creation: POLICY_CREATION.md
+      - Scene definition: SCENE_DEFINITION.md
+      - Sensor integration: SENSOR_INTEGRATION.md
+      - Sim2Real: SIM2REAL.md
+      - Safety: SAFETY.md
+      - Plugins: PLUGINS.md
+  - Reference:
+      - CLI reference: CLI_REFERENCE.md
+      - API reference: API_REFERENCE.md
+      - Backend setup: BACKEND_SETUP.md
+      - SO-101 real robot: SO101_REAL.md
+  - Cookbook: COOKBOOK.md
+  - Migration 0.2: MIGRATION_0.2.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: ignore
+  anchors: warn
+
+docs_dir: docs
+site_dir: site

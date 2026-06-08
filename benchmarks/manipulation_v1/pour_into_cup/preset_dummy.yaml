@@ -1,0 +1,15 @@
+backend: dummy
+task: benchmark_reach_target
+policy: benchmark_reach_scripted
+task_kwargs:
+  target_q: 0.45
+  success_tol: 0.05
+  max_steps: 800
+policy_kwargs:
+  target_q: 0.45
+  ramp_rate: 0.06
+max_episode_steps: 800
+obs_spec_policy: warn
+custom_modules:
+  - benchmarks.manipulation_v1.reach_target.task
+  - benchmarks.manipulation_v1.pour_into_cup.task

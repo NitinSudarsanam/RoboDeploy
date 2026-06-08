@@ -218,6 +218,7 @@ class BackendBase(IBackend):
         timestamp_hw = obs.timestamp_hw
         timestamp_recv = obs.timestamp_recv
         objects = dict(getattr(obs, "objects", {}) or {})
+        contact_state = dict(getattr(obs, "contact_state", {}) or {})
         sensor_status = dict(getattr(obs, "sensor_status", {}) or {})
         camera_frames = dict(getattr(obs, "camera_frames", {}) or {})
         camera_intrinsics = dict(getattr(obs, "camera_intrinsics", {}) or {})
@@ -258,6 +259,8 @@ class BackendBase(IBackend):
             imu_angular_velocity = sd.imu_angular_velocity if sd.imu_angular_velocity is not None else imu_angular_velocity
             if getattr(sd, "objects", None):
                 objects.update(sd.objects)
+            if getattr(sd, "contact_state", None):
+                contact_state.update(sd.contact_state)
             if getattr(sd, "frame_id", None):
                 camera_frames[name] = str(sd.frame_id)
             if getattr(sd, "intrinsics", None):
@@ -280,6 +283,7 @@ class BackendBase(IBackend):
             imu_acceleration=imu_acceleration,
             imu_angular_velocity=imu_angular_velocity,
             objects=objects,
+            contact_state=contact_state,
             sensor_status=sensor_status,
             camera_frames=camera_frames,
             camera_intrinsics=camera_intrinsics,
@@ -383,6 +387,10 @@ class BackendBase(IBackend):
     def step_count(self) -> int:
         """Number of steps taken in the current episode."""
         return self._step_count
+
+    def seed(self, seed: int) -> None:
+        """Default: record seed in config; subclasses may re-seed physics RNGs."""
+        self.config["rng_seed"] = int(seed)
 
     def __repr__(self) -> str:
         status = "initialized" if self._initialized else "not initialized"

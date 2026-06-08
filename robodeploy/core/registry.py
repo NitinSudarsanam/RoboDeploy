@@ -38,6 +38,7 @@ use() function exists to make that import explicit and readable.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Type, TypeVar
 
@@ -52,6 +53,7 @@ _POLICIES:  dict[str, type] = {}
 _TASKS:     dict[str, type] = {}
 _SENSORS:   dict[str, type] = {}
 _SENSOR_PAIRS: dict[str, "SensorPairSpec"] = {}
+_ENTRY_POINT_DISCOVERY = False
 
 
 def _put(store: dict[str, type], kind: str, name: str, cls: Type[T]) -> Type[T]:
@@ -59,7 +61,20 @@ def _put(store: dict[str, type], kind: str, name: str, cls: Type[T]) -> Type[T]:
     if existing is cls:
         return cls
     if existing is not None:
-        raise KeyError(f"{kind} '{name}' is already registered.")
+        existing_ref = f"{existing.__module__}.{existing.__qualname__}"
+        incoming_ref = f"{cls.__module__}.{cls.__qualname__}"
+        if _ENTRY_POINT_DISCOVERY:
+            warnings.warn(
+                f"{kind} '{name}' already registered as {existing_ref}; "
+                f"entry-point plugin overriding with {incoming_ref}.",
+                stacklevel=4,
+            )
+            store[name] = cls
+            return cls
+        raise KeyError(
+            f"{kind} '{name}' is already registered as {existing_ref}. "
+            f"Attempted duplicate from {incoming_ref}."
+        )
     store[name] = cls
     return cls
 
@@ -158,10 +173,14 @@ def register_sensor_pair(
         )
         if name in _SENSOR_PAIRS:
             existing = _SENSOR_PAIRS[name]
+            merged_backends = dict(existing.by_backend)
+            for backend_name, backend_cls in spec.by_backend.items():
+                if backend_cls is not None:
+                    merged_backends[backend_name] = backend_cls
             _SENSOR_PAIRS[name] = SensorPairSpec(
                 sim=spec.sim or existing.sim,
                 real=spec.real or existing.real,
-                by_backend={**existing.by_backend, **spec.by_backend},
+                by_backend=merged_backends,
                 default_mount=spec.default_mount or existing.default_mount,
                 default_config={**existing.default_config, **spec.default_config},
             )
@@ -393,17 +412,21 @@ def auto_discover_entry_points() -> None:
         "robodeploy.tasks",
         "robodeploy.sensors",
     ]
-    for group in groups:
-        for ep in entry_points(group=group):
-            try:
-                ep.load()   # importing the object triggers @register_* decorator
-            except Exception as exc:
-                import warnings
-                warnings.warn(
-                    f"Failed to load entry point '{ep.name}' from group "
-                    f"'{group}': {exc}",
-                    stacklevel=2,
-                )
+    global _ENTRY_POINT_DISCOVERY
+    _ENTRY_POINT_DISCOVERY = True
+    try:
+        for group in groups:
+            for ep in entry_points(group=group):
+                try:
+                    ep.load()   # importing the object triggers @register_* decorator
+                except Exception as exc:
+                    warnings.warn(
+                        f"Failed to load entry point '{ep.name}' from group "
+                        f"'{group}': {exc}",
+                        stacklevel=2,
+                    )
+    finally:
+        _ENTRY_POINT_DISCOVERY = False
 
 
 # ---------------------------------------------------------------------------

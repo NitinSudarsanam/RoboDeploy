@@ -1,0 +1,18 @@
+{
+  "benchmark": "sim2real/pick_place_cube",
+  "version": "1.0",
+  "transfer_targets": {
+    "sim_success_rate": 0.85,
+    "real_success_rate": 0.60,
+    "max_acceptable_gap": 0.30
+  },
+  "baselines": [
+    {
+      "policy": "example_sensor_reach_pick",
+      "sim_success_rate": 0.85,
+      "real_success_rate": 0.60,
+      "n_episodes": 30,
+      "seed_base": 0
+    }
+  ]
+}

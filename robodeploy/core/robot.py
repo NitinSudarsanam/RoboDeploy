@@ -32,7 +32,7 @@ from robodeploy.core.selectors import (
     WeightTaskSelector,
 )
 from robodeploy.core.spaces import ActionSpace, infer_action_space
-from robodeploy.core.types import Action, ArbitrationEvent, MultiTaskMode, Observation
+from robodeploy.core.types import Action, ArbitrationEvent, MultiTaskMode, Observation, Pose3D
 from robodeploy.description.base import RobotDescription
 from robodeploy.obs_pipeline import ObsPipeline
 
@@ -84,9 +84,9 @@ class RobotTask:
         first_policy = next(iter(self.policies.values()))
         return first_policy.action_space
 
-    def reset_policies(self) -> None:
+    def reset_policies(self, *, seed: int | None = None) -> None:
         for policy in self.policies.values():
-            policy.reset()
+            policy.reset(seed=seed)
 
     def warmup_policies(self, obs: Observation) -> None:
         policy_obs = self.policy_observation(obs)
@@ -174,9 +174,11 @@ class Robot:
     obs_pipeline: ObsPipeline = field(default_factory=_default_obs_pipeline)
     action_adapter: ActionAdapter = field(default_factory=_default_action_adapter)
     task_action_resolver: Optional[Callable[[str, list[Action]], Action]] = None
+    base_pose: Pose3D | None = None
 
     _arbitrator: LocalArbitrator | None = field(default=None, init=False)
     _safety: object | None = field(default=None, init=False)
+    effective_action_space: ActionSpace | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         if not self.robot_id:
@@ -211,17 +213,16 @@ class Robot:
             tasks=self.tasks,
             task_selector=self.task_selector,
         )
-        self._safety = self.description.get_safety_filter()
 
     # ------------------------------------------------------------------
     # Episode lifecycle
     # ------------------------------------------------------------------
 
-    def reset(self) -> None:
+    def reset(self, *, policy_seed: int | None = None) -> None:
         self.action_adapter.reset()
         for robot_task in self.tasks.values():
             robot_task.task._on_reset()
-            robot_task.reset_policies()
+            robot_task.reset_policies(seed=policy_seed)
             robot_task.set_instruction()
 
     def warmup(self, obs: Observation) -> None:
@@ -247,7 +248,7 @@ class Robot:
         active_ids: list[str] | None = None,
         precomputed_task_actions: dict[str, Action] | None = None,
     ) -> Action:
-        """Pick active task, query policies, adapt, safety-filter, return."""
+        """Pick active task, query policies, adapt, return."""
         active_ids = active_ids or self.prepare_step(obs)
 
         candidates: list[tuple[str, Action]] = [
@@ -263,7 +264,7 @@ class Robot:
         ]
 
         if len(candidates) == 1:
-            chosen_task_id, action = candidates[0]
+            action = candidates[0][1]
         else:
             if self.task_action_resolver is None:
                 raise RuntimeError(
@@ -271,15 +272,11 @@ class Robot:
                     f"({[c[0] for c in candidates]}) but has no task_action_resolver. "
                     "Provide one to combine concurrent + sequential task outputs."
                 )
-            chosen_task_id = candidates[-1][0]
             action = self.task_action_resolver(
                 self.robot_id, [a for _, a in candidates]
             )
 
-        adapted = self.action_adapter.process(action)
-        action_space = self.tasks[chosen_task_id].action_space()
-        assert self._safety is not None
-        return self._safety.filter(adapted, action_space)
+        return self.action_adapter.process(action)
 
     # ------------------------------------------------------------------
     # Arbitration controls

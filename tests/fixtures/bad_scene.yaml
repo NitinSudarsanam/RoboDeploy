@@ -1,0 +1,10 @@
+# Invalid scene — duplicate prop names.
+props:
+  - name: cube
+    geom:
+      kind: box
+      size: [0.03, 0.03, 0.03]
+  - name: cube
+    geom:
+      kind: box
+      size: [0.02, 0.02, 0.02]

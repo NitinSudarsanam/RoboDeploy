@@ -24,6 +24,7 @@ class ActionSpace(Enum):
     JOINT_TORQUE   = auto()
     CARTESIAN_POSE = auto()
     DELTA_EE       = auto()
+    GRIPPER        = auto()   # scalar open/close or width target
 
 
 class AssetFormat(Enum):

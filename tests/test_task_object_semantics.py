@@ -79,6 +79,29 @@ class TaskObjectSemanticsTests(unittest.TestCase):
         self.assertTrue(task.success_fn(make_obs((0.0, 0.0, 0.0))))
         self.assertGreater(task.reward_fn(make_obs((0.0, 0.0, 0.0)), action), upright_reward)
 
+    def test_pour_prefers_obs_objects_when_required(self):
+        task = PourTask(config={"require_objects": True})
+        goal = task._pour_goal()
+        action = Action()
+        task.reset_fn(_FakeSceneBackend({"cup_source": ((0.5, 0.0, 0.04), (1.0, 0.0, 0.0, 0.0))}))
+
+        tilted_obs = make_obs((0.0, 0.0, 0.0))
+        tilted_obs.objects = {
+            "cup_source": (goal, (0.70710678, 0.70710678, 0.0, 0.0)),
+        }
+        self.assertTrue(task.success_fn(tilted_obs))
+
+    def test_peg_insertion_prefers_obs_objects_when_required(self):
+        task = PegTask(config={"require_objects": True})
+        goal = task._insert_goal()
+        action = Action()
+        task.reset_fn(_FakeSceneBackend({"peg": ((0.5, 0.0, 0.06), (1.0, 0.0, 0.0, 0.0))}))
+
+        inserted_obs = make_obs((0.0, 0.0, 0.0))
+        inserted_obs.objects = {"peg": (goal, (1.0, 0.0, 0.0, 0.0))}
+        self.assertTrue(task.success_fn(inserted_obs))
+        self.assertGreater(task.reward_fn(inserted_obs, action), task.reward_fn(make_obs(), action))
+
     def test_peg_insertion_uses_peg_pose_for_reward_and_success(self):
         task = PegTask()
         goal = task._insert_goal()

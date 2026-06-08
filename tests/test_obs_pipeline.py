@@ -56,6 +56,30 @@ class ObsPipelineTests(unittest.TestCase):
         self.assertIn("wrist", merged.images)
         self.assertIsNotNone(merged.rgb)
 
+    def test_sensor_buffer_merges_camera_intrinsics_and_extrinsics(self):
+        pipeline = ObsPipeline(sync_window_s=0.1)
+        extrinsics = {
+            "position": (0.5, 0.0, 0.8),
+            "orientation": (1.0, 0.0, 0.0, 0.0),
+            "frame_id": "wrist_camera",
+            "source": "tf",
+        }
+        pipeline.buffer_sensor(
+            "wrist_camera",
+            SensorData(
+                rgb=np.zeros((4, 4, 3), dtype=np.uint8),
+                timestamp_hw=0.0,
+                timestamp=0.0,
+                intrinsics={"fx": 64.0, "fy": 48.0, "cx": 32.0, "cy": 24.0},
+                extrinsics=extrinsics,
+            ),
+        )
+        merged = pipeline.process(make_obs(hw=0.02))
+        self.assertIn("wrist_camera", merged.camera_intrinsics)
+        self.assertEqual(merged.camera_intrinsics["wrist_camera"]["fx"], 64.0)
+        self.assertIn("wrist_camera", merged.camera_extrinsics)
+        self.assertEqual(merged.camera_extrinsics["wrist_camera"]["source"], "tf")
+
 
 if __name__ == "__main__":
     unittest.main()

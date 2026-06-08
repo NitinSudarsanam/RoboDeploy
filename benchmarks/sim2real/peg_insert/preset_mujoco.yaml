@@ -1,0 +1,10 @@
+backend: mujoco
+task: peg_insertion
+policy: benchmark_reach_scripted
+task_kwargs:
+  max_steps: 600
+max_episode_steps: 600
+sim2real_pair: kuka_peg_mujoco
+custom_modules:
+  - examples.tasks
+  - benchmarks.manipulation_v1.reach_target.task

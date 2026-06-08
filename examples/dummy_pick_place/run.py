@@ -2,17 +2,9 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+from examples._bootstrap import ensure_repo_on_path
 
-
-def _ensure_repo_on_path() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    if str(repo_root) not in sys.path:
-        sys.path.insert(0, str(repo_root))
-
-
-_ensure_repo_on_path()
+ensure_repo_on_path()
 
 from robodeploy.builtins import import_builtins  # noqa: E402
 from robodeploy.core.registry import use  # noqa: E402

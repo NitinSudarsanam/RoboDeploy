@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import time
 
+from robodeploy.backends.real.ros2.sensors.tf_extrinsics import compose_extrinsics, extrinsics_dict
 from robodeploy.core.registry import register_sensor, register_sensor_pair
 from robodeploy.sensors.camera.sim.mujoco_gl import ensure_mujoco_gl_backend
 from robodeploy.core.types import SensorData, SensorMount
@@ -71,12 +72,68 @@ class MuJoCoCameraRenderer(SensorBase):
             depth=depth,
             frame_id=self._camera_name,
             intrinsics=self._intrinsics,
-            extrinsics=self.mount_extrinsics(),
+            extrinsics=self._live_mount_extrinsics(),
             timestamp=sim_time,
             timestamp_hw=sim_time,
             timestamp_recv=time.monotonic(),
             timestamp_source="sim",
         )
+
+    def _live_mount_extrinsics(self) -> dict[str, object] | None:
+        mount = getattr(self, "mount", None)
+        if mount is None or not mount.parent_link:
+            return self.mount_extrinsics()
+        parent = str(mount.parent_link).split("/")[-1]
+        body_id = self._mujoco.mj_name2id(self._model, self._mujoco.mjtObj.mjOBJ_BODY, parent)
+        if body_id < 0:
+            body_id = self._mujoco.mj_name2id(self._model, self._mujoco.mjtObj.mjOBJ_BODY, str(mount.parent_link))
+        if body_id < 0:
+            return self.mount_extrinsics()
+        parent_pos = tuple(float(v) for v in self._data.xpos[body_id])
+        xmat = self._data.xmat[body_id].reshape(3, 3)
+        parent_quat = self._mat_to_quat_wxyz(xmat)
+        mount_pos = tuple(float(v) for v in mount.position)
+        mount_quat = tuple(float(v) for v in mount.orientation)
+        pos, quat = compose_extrinsics(parent_pos, parent_quat, mount_pos, mount_quat)
+        return extrinsics_dict(
+            pos,
+            quat,
+            frame_id=str(self._camera_name),
+            parent_link=str(mount.parent_link),
+            source="sim_live",
+        )
+
+    @staticmethod
+    def _mat_to_quat_wxyz(mat) -> tuple[float, float, float, float]:
+        import numpy as np
+
+        m = np.asarray(mat, dtype=np.float64).reshape(3, 3)
+        trace = float(m[0, 0] + m[1, 1] + m[2, 2])
+        if trace > 0.0:
+            s = 0.5 / np.sqrt(trace + 1.0)
+            w = 0.25 / s
+            x = (m[2, 1] - m[1, 2]) * s
+            y = (m[0, 2] - m[2, 0]) * s
+            z = (m[1, 0] - m[0, 1]) * s
+        elif m[0, 0] > m[1, 1] and m[0, 0] > m[2, 2]:
+            s = 2.0 * np.sqrt(1.0 + m[0, 0] - m[1, 1] - m[2, 2])
+            w = (m[2, 1] - m[1, 2]) / s
+            x = 0.25 * s
+            y = (m[0, 1] + m[1, 0]) / s
+            z = (m[0, 2] + m[2, 0]) / s
+        elif m[1, 1] > m[2, 2]:
+            s = 2.0 * np.sqrt(1.0 + m[1, 1] - m[0, 0] - m[2, 2])
+            w = (m[0, 2] - m[2, 0]) / s
+            x = (m[0, 1] + m[1, 0]) / s
+            y = 0.25 * s
+            z = (m[1, 2] + m[2, 1]) / s
+        else:
+            s = 2.0 * np.sqrt(1.0 + m[2, 2] - m[0, 0] - m[1, 1])
+            w = (m[1, 0] - m[0, 1]) / s
+            x = (m[0, 2] + m[2, 0]) / s
+            y = (m[1, 2] + m[2, 1]) / s
+            z = 0.25 * s
+        return (float(w), float(x), float(y), float(z))
 
     def _camera_intrinsics(self) -> dict[str, float]:
         fovy_deg = float(self._model.cam_fovy[self._camera_id])
@@ -115,9 +172,6 @@ class MuJoCoOverheadCameraRenderer(MuJoCoCameraRenderer):
     by_backend={
         "mujoco": MuJoCoCameraRenderer,
         "isaacsim": IsaacSimCameraRenderer,
-        "ros2": None,
-        "ros2_rviz": None,
-        "gazebo": None,
     },
 )
 class WristCameraPair:
@@ -130,9 +184,6 @@ class WristCameraPair:
     by_backend={
         "mujoco": MuJoCoOverheadCameraRenderer,
         "isaacsim": IsaacSimOverheadCameraRenderer,
-        "ros2": None,
-        "ros2_rviz": None,
-        "gazebo": None,
     },
 )
 class OverheadCameraPair:

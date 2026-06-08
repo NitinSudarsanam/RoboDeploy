@@ -25,14 +25,18 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from robodeploy.backends.capabilities import SupportsSceneEdit
 from robodeploy.core.interfaces.task import ITask
 from robodeploy.core.types import Action, ObsSpec, Observation, SceneSpec
+from robodeploy.tasks.action_noise import ActionNoiseInjector, ExternalDisturbanceInjector
 from robodeploy.tasks.randomization import (
     DomainRandomizer,
     DomainRandomizerConfig,
     ObjectRandomConfig,
     RandomLevel,
+    resolve_domain_randomizer_config,
 )
 
 if TYPE_CHECKING:
@@ -52,6 +56,8 @@ class TaskBase(ITask):
         self._step_count:  int  = 0
         self._episode:     int  = 0
         self._backend = None
+        self._action_noise = ActionNoiseInjector.from_config(self.config.get("action_noise"))
+        self._disturbance = ExternalDisturbanceInjector.from_config(self.config.get("external_disturbance"))
 
     # ------------------------------------------------------------------
     # ITask abstract methods — subclasses must implement
@@ -81,6 +87,10 @@ class TaskBase(ITask):
     def reward_fn(self, obs: Observation, action: Action) -> float:
         """Scalar reward for current step. See ITask.reward_fn()."""
         ...
+
+    def reward_components_fn(self, obs: Observation, action: Action) -> dict[str, float]:
+        """Per-term reward breakdown for training diagnostics (override in tasks)."""
+        return {}
 
     @abstractmethod
     def success_fn(self, obs: Observation) -> bool:
@@ -199,6 +209,31 @@ class TaskBase(ITask):
                 return objects[name]
         return self.prop_pose(name)
 
+    def grasp_confirmed(
+        self,
+        obs: Observation,
+        *,
+        threshold_N: float | None = None,
+    ) -> bool:
+        """FT- or contact-sensor grasp confirmation (no backend physics query)."""
+        cfg_threshold = float(self.config.get("grasp_success_force_min", 0.0))
+        threshold = float(threshold_N if threshold_N is not None else cfg_threshold)
+        if threshold <= 0.0:
+            return True
+
+        force = obs.ft_force
+        if force is None and getattr(obs, "ft_forces", None):
+            forces = obs.ft_forces
+            if forces:
+                force = next(iter(forces.values()))
+
+        if force is not None:
+            return float(np.linalg.norm(force)) >= threshold
+
+        contact = getattr(obs, "contact_state", None) or {}
+        sensor_name = str(self.config.get("contact_sensor", "wrist_contact"))
+        return bool(contact.get(sensor_name, False))
+
     def _domain_randomizer(self) -> DomainRandomizer | None:
         """Build a randomizer from task config, if enabled."""
         dr_cfg = self.config.get("domain_randomization")
@@ -209,19 +244,13 @@ class TaskBase(ITask):
         if isinstance(dr_cfg, DomainRandomizerConfig):
             return DomainRandomizer(dr_cfg)
         if isinstance(dr_cfg, dict):
-            level_name = str(dr_cfg.get("level", "light")).upper()
-            level = RandomLevel[level_name] if level_name in RandomLevel.__members__ else RandomLevel.LIGHT
-            objects = [
-                ObjectRandomConfig(**item) if isinstance(item, dict) else item
-                for item in dr_cfg.get("objects", self._default_object_random_configs())
-            ]
-            return DomainRandomizer(
-                DomainRandomizerConfig(
-                    level=level,
-                    seed=dr_cfg.get("seed"),
-                    objects=objects,
-                )
+            resolved = resolve_domain_randomizer_config(
+                dr_cfg,
+                default_objects=self._default_object_random_configs(),
             )
+            if resolved is None:
+                return None
+            return DomainRandomizer(resolved)
         if self.config.get("randomize_objects"):
             return DomainRandomizer(
                 DomainRandomizerConfig(
@@ -251,3 +280,14 @@ class TaskBase(ITask):
         randomizer = self._domain_randomizer()
         if randomizer is not None:
             randomizer.randomize(backend)
+
+    def transform_action(self, action: Action) -> Action:
+        """Apply configured action noise (sim training)."""
+        if self._action_noise is None:
+            return action
+        return self._action_noise(action)
+
+    def apply_disturbance(self, backend: "IBackend") -> None:
+        """Inject external disturbances after each sim step."""
+        if self._disturbance is not None:
+            self._disturbance.inject(backend)

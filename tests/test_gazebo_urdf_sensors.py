@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from robodeploy.backends.real.ros2.sim_launchers.ros_gz_bridge import image_bridge_rules, wrench_bridge_rules
+from robodeploy.backends.real.ros2.sim_launchers.ros_gz_bridge import (
+    camera_info_bridge_rules,
+    image_bridge_rules,
+    wrench_bridge_rules,
+)
 from robodeploy.backends.sim.gazebo.urdf_sensors import inject_sensors_into_urdf
 from robodeploy.core.types import SensorMount
 from robodeploy.sensors.camera.sim.mujoco_camera import MuJoCoCameraRenderer
@@ -31,12 +35,16 @@ class GazeboUrdfSensorTests(unittest.TestCase):
         self.assertIn('joint name="wrist_camera_joint"', patched)
         self.assertIn('sensor name="wrist_camera" type="camera"', patched)
         self.assertIn('sensor name="wrist_ft" type="force_torque"', patched)
+        self.assertIn("<topic>/wrist_camera/image_raw</topic>", patched)
+        self.assertIn("<topic>/wrist_ft/wrench</topic>", patched)
 
     def test_bridge_rules_for_image_and_wrench(self):
         rules = image_bridge_rules("/robot0/wrist_camera/image_raw")
         self.assertTrue(any("sensor_msgs/msg/Image" in r for r in rules))
         wrules = wrench_bridge_rules("/robot0/wrist_ft/wrench")
         self.assertTrue(any("WrenchStamped" in r for r in wrules))
+        irules = camera_info_bridge_rules("/wrist_camera/camera_info")
+        self.assertTrue(any("CameraInfo" in r for r in irules))
 
 
 if __name__ == "__main__":

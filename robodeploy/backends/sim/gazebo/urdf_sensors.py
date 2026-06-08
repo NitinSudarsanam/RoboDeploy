@@ -44,6 +44,18 @@ def _resolve_mount(sensor: "ISensor") -> SensorMount | None:
     return None
 
 
+def _gz_sensor_topic(sensor_name: str, cfg: dict, kind: str) -> str:
+    """Return the Gazebo transport topic matching ROS2 SensorRig defaults."""
+    namespace = str(cfg.get("namespace", f"/{sensor_name}")).strip().rstrip("/")
+    if not namespace.startswith("/"):
+        namespace = f"/{namespace}"
+    if kind == "camera":
+        rel = str(cfg.get("rgb", "image_raw")).lstrip("/")
+        return f"{namespace}/{rel}"
+    rel = str(cfg.get("wrench_topic", cfg.get("topic", "wrench"))).lstrip("/")
+    return f"{namespace}/{rel}"
+
+
 def _sensor_kind(sensor: "ISensor") -> str:
     name = str(getattr(sensor, "name", "")).lower()
     cls = type(sensor).__name__.lower()
@@ -94,7 +106,7 @@ def inject_sensors_into_urdf(urdf_text: str, sensors: list["ISensor"]) -> str:
         ET.SubElement(gz_sensor, "always_on").text = "true"
         ET.SubElement(gz_sensor, "update_rate").text = "30"
         topic_elem = ET.SubElement(gz_sensor, "topic")
-        topic_elem.text = sensor_name
+        topic_elem.text = _gz_sensor_topic(sensor_name, cfg, kind)
         if kind == "camera":
             width = int(cfg.get("width", cfg.get("image_width", 640)))
             height = int(cfg.get("height", cfg.get("image_height", 480)))

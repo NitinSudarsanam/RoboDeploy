@@ -60,10 +60,10 @@ class ExportRecordedEpisodeTests(unittest.TestCase):
 
 class PresetValidationTests(unittest.TestCase):
     def test_load_preset_requires_keys(self):
-        from robodeploy.config import load_preset
+        from examples.config import load_preset
 
         with patch(
-            "robodeploy.config._load_all_presets",
+            "examples.config._load_all_presets",
             return_value={"bad": {"robot": "kuka"}},
         ):
             with self.assertRaises(ValueError):

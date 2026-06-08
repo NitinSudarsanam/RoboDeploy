@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<robot name="test_arm">
+  <link name="base_link"/>
+  <link name="ee_link"/>
+  <joint name="joint1" type="revolute">
+    <parent link="base_link"/>
+    <child link="ee_link"/>
+    <origin xyz="0 0 0.3" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="10" velocity="1"/>
+  </joint>
+</robot>

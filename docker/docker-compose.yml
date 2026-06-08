@@ -1,0 +1,24 @@
+services:
+  robodeploy:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cpu
+    image: robodeploy/robodeploy:cpu
+    working_dir: /app
+    command: ["robodeploy", "run-episode", "--dummy", "--steps", "10"]
+
+  robodeploy-gpu:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gpu
+    image: robodeploy/robodeploy:gpu
+    working_dir: /app
+    profiles: ["gpu"]
+
+  robodeploy-ros2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ros2
+    image: robodeploy/robodeploy:ros2
+    working_dir: /app
+    profiles: ["ros2"]

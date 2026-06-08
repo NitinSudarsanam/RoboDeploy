@@ -1,0 +1,32 @@
+package:
+  name: robodeploy
+  version: "{{ environ.get('GIT_DESCRIBE_TAG', '0.2.0') }}"
+
+# Use git source so conda-build copies tracked files only (avoids local .venv copies).
+source:
+  git_url: ..
+  git_rev: HEAD
+
+build:
+  number: 0
+  script: python -m pip install . -vv
+  noarch: false
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - setuptools >=61
+  run:
+    - python >=3.10
+    - numpy
+    - mujoco
+
+test:
+  imports:
+    - robodeploy
+
+about:
+  home: https://github.com/anthropic-ai/robodeploy
+  license: MIT
+  summary: Deploy robot policies across simulators and real hardware.

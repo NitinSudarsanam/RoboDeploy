@@ -1,0 +1,5 @@
+peg_insertion:
+  phases:
+    - reach: {target: peg, threshold: 0.05}
+    - align: {object: peg, target: hole, threshold: 0.04}
+    - insert: {predicate: peg_in_hole, peg: peg, hole: hole, threshold: 0.03}

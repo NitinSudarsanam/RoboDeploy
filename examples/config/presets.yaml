@@ -1,30 +1,32 @@
 # Example RoboDeploy presets (not part of the installed robodeploy package).
 # Requires repo root on PYTHONPATH (pip install -e . from the repo).
+# Shared fragments: examples/presets/{base_sim,base_real,manipulate}.yaml
 
-kuka_pick_mujoco:
-  robot: kuka
-  backend: mujoco
-  task: pick_place
-  policy: example_reach_pick
-  backend_kwargs:
-    config:
-      allow_actuator_name_fallback: true
+include:
+  - ../presets/base_sim.yaml
+  - ../presets/manipulate.yaml
+
+_base_kuka_mujoco: &base_kuka_mujoco
+  <<: *base_kuka
+  <<: *manipulate_pick
+  <<: *arm_sensors
+  <<: *manipulate_modules
+
+_base_franka_mujoco: &base_franka_mujoco
+  <<: *base_franka
+  <<: *manipulate_pick
+  <<: *arm_sensors
   custom_modules:
     - examples.tasks
-    - examples.policies
-
-franka_pick_mujoco:
-  robot: example_franka_mujoco
-  backend: mujoco
-  task: pick_place
-  policy: example_reach_pick
-  backend_kwargs:
-    config:
-      allow_actuator_name_fallback: true
-  custom_modules:
-    - examples.tasks
+    - examples.sensors
     - examples.policies
     - examples.franka_pick_place_mujoco.components
+
+kuka_pick_mujoco:
+  <<: *base_kuka_mujoco
+
+franka_pick_mujoco:
+  <<: *base_franka_mujoco
 
 kuka_sinusoid_mujoco:
   robot: user_kuka
@@ -51,6 +53,40 @@ kuka_sensor_pick_mujoco:
   sensor_rigs:
     - rig_id: arm_sensors
       ee_link: robot0/ee_link
+      prop_pose:
+        prop_names: [source, target]
+  custom_modules:
+    - examples.tasks
+    - examples.sensors
+    - examples.policies
+
+kuka_ft_imu_pick_mujoco:
+  robot: kuka
+  backend: mujoco
+  task: pick_place
+  policy: example_reach_pick
+  task_kwargs:
+    require_objects: true
+    grasp_success_force_min: 1.0
+  policy_kwargs:
+    config:
+      carry_mode: follow
+      grasp_detection: ft
+      force_threshold: 1.5
+      grasp_force_window: 3
+      imu_omega_max: 0.5
+      imu_settle_steps: 3
+  backend_kwargs:
+    config:
+      allow_actuator_name_fallback: true
+      enable_viewer: false
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      wrist_ft: {}
+      wrist_imu: {}
+      wrist_contact:
+        prop_name: source
       prop_pose:
         prop_names: [source, target]
   custom_modules:
@@ -106,4 +142,213 @@ kuka_sensor_ros2_rviz:
       wrist_ft: {}
   custom_modules:
     - examples.tasks
+    - examples.policies
+
+kuka_sensor_gazebo:
+  robot: kuka
+  backend: ros2_gazebo
+  task: pick_place
+  policy: example_joint_track
+  backend_kwargs:
+    config:
+      sim:
+        kind: gazebo
+        headless: true
+        readiness_timeout_s: 30.0
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      wrist_rgbd:
+        width: 64
+        height: 48
+        depth: false
+      wrist_ft: {}
+  custom_modules:
+    - examples.tasks
+    - examples.policies
+
+kuka_ft_imu_multimodal_ros2:
+  robot: kuka
+  backend: ros2_rviz
+  task: pick_place
+  policy: example_reach_pick
+  task_kwargs:
+    grasp_success_force_min: 1.5
+  policy_kwargs:
+    config:
+      grasp_detection: ft
+      force_threshold: 1.5
+      imu_omega_max: 0.5
+      halt_on_sensor_failure: true
+      critical_sensors: [wrist_ft, wrist_imu]
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      wrist_ft: {}
+      wrist_imu: {}
+      wrist_contact:
+        force_threshold_N: 1.5
+  custom_modules:
+    - examples.tasks
+    - examples.policies
+
+kuka_ft_imu_multimodal_real:
+  robot: kuka
+  backend: ros2
+  is_real: true
+  task: pick_place
+  policy: example_reach_pick
+  task_kwargs:
+    grasp_success_force_min: 2.0
+  policy_kwargs:
+    config:
+      grasp_detection: ft
+      force_threshold: 2.0
+      imu_omega_max: 0.4
+      halt_on_sensor_failure: true
+      critical_sensors: [wrist_ft, wrist_imu]
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      wrist_ft: {}
+      wrist_imu: {}
+      wrist_contact:
+        force_threshold_N: 2.0
+  custom_modules:
+    - examples.tasks
+    - examples.policies
+
+mujoco_showcase_kuka:
+  robot: kuka
+  backend: mujoco
+  task: showcase_scene
+  policy: example_joint_track
+  task_kwargs:
+    require_objects: true
+    require_rgb: true
+  obs_spec_policy: raise
+  backend_kwargs:
+    config:
+      allow_actuator_name_fallback: true
+      enable_viewer: false
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      wrist_rgbd:
+        width: 64
+        height: 48
+        depth: true
+        allow_camera_fallback: true
+      overhead_rgbd:
+        mount:
+          parent_link: world
+          position: [0.0, -0.8, 0.9]
+          orientation: [1.0, 0.0, 0.0, 0.0]
+        width: 64
+        height: 48
+        depth: false
+        allow_camera_fallback: true
+      wrist_ft: {}
+      wrist_imu: {}
+      prop_pose:
+        prop_names: [showcase_box, showcase_cylinder, showcase_sphere, showcase_capsule]
+  custom_modules:
+    - examples.tasks
+    - examples.sensors
+    - examples.policies
+
+mujoco_showcase_franka:
+  robot: example_franka_mujoco
+  backend: mujoco
+  task: showcase_scene
+  policy: example_joint_track
+  task_kwargs:
+    require_objects: true
+    require_rgb: true
+  obs_spec_policy: raise
+  backend_kwargs:
+    config:
+      allow_actuator_name_fallback: true
+      enable_viewer: false
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      wrist_rgbd:
+        width: 64
+        height: 48
+        depth: true
+        allow_camera_fallback: true
+      overhead_rgbd:
+        mount:
+          parent_link: world
+          position: [0.0, -0.8, 0.9]
+          orientation: [1.0, 0.0, 0.0, 0.0]
+        width: 64
+        height: 48
+        depth: false
+        allow_camera_fallback: true
+      wrist_ft: {}
+      wrist_imu: {}
+      prop_pose:
+        prop_names: [showcase_box, showcase_cylinder, showcase_sphere, showcase_capsule]
+  custom_modules:
+    - examples.tasks
+    - examples.sensors
+    - examples.policies
+    - examples.franka_pick_place_mujoco.components
+
+two_franka_pick_mujoco:
+  backend: mujoco
+  backend_kwargs:
+    config:
+      allow_actuator_name_fallback: true
+      enable_viewer: false
+  max_episode_steps: 120
+  robots:
+    - robot_id: franka_left
+      robot: example_franka_mujoco
+      base_pose:
+        position: [-0.55, 0.0, 0.4]
+      task: pick_place
+      policy: example_joint_track
+      policy_kwargs:
+        target_qpos: [0.15, -0.3, 0.0, -2.2, 0.0, 2.0, 0.8]
+    - robot_id: franka_right
+      robot: example_franka_mujoco
+      base_pose:
+        position: [0.55, 0.0, 0.4]
+      task: pick_place
+      policy: example_joint_track
+      policy_kwargs:
+        target_qpos: [-0.15, -0.3, 0.0, -2.2, 0.0, 2.0, 0.8]
+  custom_modules:
+    - examples.tasks
+    - examples.policies
+    - examples.franka_pick_place_mujoco.components
+
+mujoco_pick_kuka:
+  robot: kuka
+  backend: mujoco
+  task: pick_place
+  policy: example_sensor_reach_pick
+  task_kwargs:
+    require_objects: true
+  obs_spec_policy: raise
+  backend_kwargs:
+    config:
+      allow_actuator_name_fallback: true
+      enable_viewer: false
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      wrist_rgbd:
+        width: 64
+        height: 48
+        depth: true
+        allow_camera_fallback: true
+      prop_pose:
+        prop_names: [source, target]
+  custom_modules:
+    - examples.tasks
+    - examples.sensors
     - examples.policies

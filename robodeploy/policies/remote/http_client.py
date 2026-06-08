@@ -49,6 +49,32 @@ class HttpRemotePolicyClient:
         {"inputs": [to_jsonable(packet) for packet in packets]},
     )
 
+  def predict_stream(self, packet: dict[str, Any], *, chunk_size: int = 4):  # noqa: ANN201
+    """Yield first action chunk quickly from a streaming HTTP endpoint."""
+    stream_endpoint = self._endpoint.rstrip("/") + "/stream"
+    payload = {"inputs": to_jsonable(packet), "chunk_size": int(chunk_size)}
+    if self._transport is not self._default_transport:
+      response = self._transport(stream_endpoint, payload)
+      if isinstance(response, (list, tuple)):
+        for item in response:
+          yield item
+      else:
+        yield response
+      return
+    body = json.dumps(payload).encode("utf-8")
+    req = request.Request(
+        stream_endpoint,
+        data=body,
+        headers={"Content-Type": "application/json", "Accept": "application/x-ndjson"},
+        method="POST",
+    )
+    with request.urlopen(req, timeout=self._timeout_s) as resp:  # noqa: S310
+      for raw_line in resp:
+        line = raw_line.decode("utf-8").strip()
+        if not line:
+          continue
+        yield json.loads(line)
+
   def _default_transport(self, endpoint: str, payload: dict[str, Any]):  # noqa: ANN001
     body = json.dumps(payload).encode("utf-8")
     req = request.Request(

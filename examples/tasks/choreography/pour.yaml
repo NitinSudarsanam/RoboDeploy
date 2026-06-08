@@ -1,0 +1,5 @@
+pour:
+  phases:
+    - reach: {target: cup_source, threshold: 0.05}
+    - tilt: {axis: y, angle: 1.2, hold_steps: 30}
+    - verify: {predicate: liquid_in_target, source: cup_source, target: cup_target, threshold: 0.06}

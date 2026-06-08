@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "assets": [
+    {
+      "name": "franka_panda",
+      "format": "mjcf",
+      "path": "robodeploy/description/franka/assets/mjcf/panda.xml",
+      "sha256": "f45a640f8dc72d36a63fc94790b5bd5ff1f22958a3ab1f2d5f059ca4c93d80b1"
+    },
+    {
+      "name": "kuka_demo",
+      "format": "mjcf",
+      "path": "robodeploy/description/kuka/assets/mjcf/kuka.xml",
+      "sha256": "fd589b3c56c1461337d50d7d714b5dc3c594d6cc97f6c147fadf4cd441ec8755"
+    }
+  ]
+}

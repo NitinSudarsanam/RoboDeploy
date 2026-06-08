@@ -1,0 +1,11 @@
+# Base real-hardware preset fragments
+_base_real: &base_real
+  backend: ros2_rviz
+  obs_spec_policy: warn
+
+_base_kuka_real: &base_kuka_real
+  <<: *base_real
+  robot: kuka
+  custom_modules:
+    - examples.tasks
+    - examples.policies

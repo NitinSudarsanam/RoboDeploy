@@ -1,0 +1,14 @@
+robot: kuka
+backend: isaacsim
+task: showcase_scene
+policy: example_sensor_reach_pick
+task_kwargs:
+  require_objects: true
+obs_spec_policy: raise
+backend_kwargs:
+  config:
+    headless: true
+max_episode_steps: 1500
+custom_modules:
+  - examples.tasks
+  - examples.policies

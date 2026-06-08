@@ -1,0 +1,15 @@
+backend: dummy
+task: benchmark_reach_target
+policy: benchmark_reach_scripted
+task_kwargs:
+  target_q: 0.48
+  success_tol: 0.04
+  max_steps: 1500
+policy_kwargs:
+  target_q: 0.48
+  ramp_rate: 0.045
+max_episode_steps: 1500
+obs_spec_policy: warn
+custom_modules:
+  - benchmarks.manipulation_v1.reach_target.task
+  - benchmarks.manipulation_v1.cloth_fold.task

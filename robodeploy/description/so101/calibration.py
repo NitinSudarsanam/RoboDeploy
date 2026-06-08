@@ -207,6 +207,47 @@ class SO101Calibration:
     def bundled_example_path() -> Path:
         return _MODULE_DIR / "calibration" / "example.json"
 
+    def to_linear_kinematic_maps(self) -> list:
+        """Export per-joint maps for the generic calibration framework."""
+        from robodeploy.calibration.kinematic.linear import JointLinearMap
+
+        return [
+            JointLinearMap(
+                name=j.name,
+                zero=float(j.zero_ticks),
+                scale=float(j.ticks_per_rad),
+                soft_min=j.soft_min_rad,
+                soft_max=j.soft_max_rad,
+            )
+            for j in self.joints
+        ]
+
+    @classmethod
+    def from_linear_maps(
+        cls,
+        maps: list,
+        *,
+        gripper_open_rad: float | None = None,
+        gripper_closed_rad: float | None = None,
+    ) -> "SO101Calibration":
+        """Build SO-101 calibration from generic ``JointLinearMap`` entries."""
+        joints = [
+            JointCalibration(
+                name=m.name,
+                motor_id=i + 1,
+                zero_ticks=int(round(m.zero)),
+                ticks_per_rad=float(m.scale),
+                soft_min_rad=float(m.soft_min if m.soft_min is not None else -3.14),
+                soft_max_rad=float(m.soft_max if m.soft_max is not None else 3.14),
+            )
+            for i, m in enumerate(maps)
+        ]
+        return cls(
+            joints=tuple(joints),
+            gripper_open_rad=gripper_open_rad,
+            gripper_closed_rad=gripper_closed_rad,
+        )
+
     @classmethod
     def locate(
         cls,
@@ -218,10 +259,23 @@ class SO101Calibration:
 
         Search order:
         1. ``explicit_path`` if set
-        2. ``$ROBODEPLOY_SO101_CALIBRATION``
-        3. ``~/.robodeploy/so101_calibration.json``
-        4. bundled ``calibration/example.json`` (raises unless ``allow_template``)
+        2. ``CalibrationStore`` artifact ``so101/kinematic`` (generic framework)
+        3. ``$ROBODEPLOY_SO101_CALIBRATION``
+        4. ``~/.robodeploy/so101_calibration.json``
+        5. bundled ``calibration/example.json`` (raises unless ``allow_template``)
         """
+        try:
+            from robodeploy.calibration.store import CalibrationStore
+
+            store = CalibrationStore()
+            kin_path = store._path("kinematic", robot_id="so101")
+            if kin_path.is_file() and explicit_path is None:
+                payload = store.load("kinematic", robot_id="so101")
+                if "joints" in payload:
+                    return kin_path, cls.from_dict(payload)
+        except Exception:
+            pass
+
         candidates: list[Path] = []
         if explicit_path:
             candidates.append(Path(explicit_path).expanduser())
