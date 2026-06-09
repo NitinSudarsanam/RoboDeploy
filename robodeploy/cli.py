@@ -431,6 +431,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_bc.add_argument("--batch-size", type=int, default=32, help="Batch size.")
     p_bc.add_argument("--lr", type=float, default=1e-4, help="Learning rate.")
     p_bc.add_argument("--log-dir", default="./runs/bc", help="Checkpoint and log directory.")
+    p_bc.add_argument("--log", default="", help="Logging backend: wandb, tensorboard, or empty.")
     p_bc.add_argument("--out", default=None, help="Final checkpoint path (default: log-dir/bc_final.pt).")
     p_bc.add_argument("--dummy", action="store_true", help="Synthesize dummy demos if dataset is missing.")
     p_bc.add_argument("--json", action="store_true", help="Print structured JSON result.")
@@ -922,6 +923,7 @@ def _cmd_train_bc(
     batch_size: int,
     lr: float,
     log_dir: str,
+    log: str,
     out: str | None,
     dummy: bool,
     as_json: bool,
@@ -929,6 +931,7 @@ def _cmd_train_bc(
     from pathlib import Path as _Path
 
     from robodeploy.training.bc import train_bc
+    from robodeploy.training.callbacks import TensorBoardCallback, WandbCallback
     from robodeploy.training.dataset import DemoDataset
     from robodeploy.training.gym_adapter import GymRoboEnv
     from robodeploy.training.trainer import TrainerConfig
@@ -964,12 +967,23 @@ def _cmd_train_bc(
         checkpoint_interval=max(int(epochs), 1) * 1000,
     )
     eval_env = GymRoboEnv(_make_dummy_env(), max_episode_steps=50)
+    callbacks = []
+    if log == "wandb":
+        callbacks.append(
+            WandbCallback(
+                project="robodeploy-bc",
+                config={"dataset": str(dataset_path), "obs_keys": obs_keys},
+            )
+        )
+    elif log == "tensorboard":
+        callbacks.append(TensorBoardCallback(str(_Path(log_dir) / "tb")))
     train_bc(
         dataset=demo,
         obs_keys=obs_keys,
         action_dim=action_dim,
         config=cfg,
         eval_env=eval_env,
+        callbacks=callbacks,
     )
     out_path = _Path(out or _Path(log_dir) / "bc_final.pt")
     close_quietly(eval_env.robo_env)
@@ -1588,6 +1602,7 @@ def main(argv: list[str] | None = None) -> int:
                 batch_size=int(args.batch_size),
                 lr=float(args.lr),
                 log_dir=str(args.log_dir),
+                log=str(args.log),
                 out=args.out,
                 dummy=bool(args.dummy),
                 as_json=bool(args.json),

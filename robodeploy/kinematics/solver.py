@@ -68,6 +68,18 @@ class KinematicsSolver:
         urdf_path = str(self._description.asset_path(AssetFormat.URDF))
         self._model = pin.buildModelFromUrdf(urdf_path)
         self._data  = self._model.createData()
+        self._ee_frame_id = self._resolve_ee_frame_id(pin)
+
+    def _resolve_ee_frame_id(self, pin) -> int:  # noqa: ANN001
+        for candidate in (
+            self._description.ee_link_name,
+            self._description.ros_ee_frame_id(),
+        ):
+            if self._model.existFrame(str(candidate)):
+                return int(self._model.getFrameId(str(candidate)))
+        raise ValueError(
+            f"End-effector frame not found in URDF for {self._description.display_name!r}."
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -91,7 +103,7 @@ class KinematicsSolver:
         pin.forwardKinematics(self._model, self._data, q)
         pin.updateFramePlacements(self._model, self._data)
 
-        ee_id = self._model.getFrameId(self._description.ee_link_name)
+        ee_id = self._ee_frame_id
         placement = self._data.oMf[ee_id]
 
         position    = np.array(placement.translation)
@@ -143,7 +155,7 @@ class KinematicsSolver:
         R = pin.Quaternion(w, x, y, z).toRotationMatrix()
         target_se3 = pin.SE3(R, np.array(target_position, dtype=np.float64))
 
-        ee_id = self._model.getFrameId(self._description.ee_link_name)
+        ee_id = self._ee_frame_id
 
         for _ in range(max_iter):
             pin.forwardKinematics(self._model, self._data, q)
@@ -183,7 +195,7 @@ class KinematicsSolver:
         self._ensure_loaded()
 
         q     = np.asarray(joint_positions, dtype=np.float64)
-        ee_id = self._model.getFrameId(self._description.ee_link_name)
+        ee_id = self._ee_frame_id
         pin.computeFrameJacobian(
             self._model, self._data, q, ee_id,
             pin.ReferenceFrame.LOCAL_WORLD_ALIGNED,

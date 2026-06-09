@@ -953,11 +953,23 @@ class RoboEnv:
         return primary_obs, info
 
     def _run_task_reset_routine(self, robot: Robot, robot_task: RobotTask) -> None:
+        if self._safety is not None and self._safety.tripped:
+            return
         try:
             for reset_action in robot_task.task.reset_routine(self._backend):
                 adapted = robot.action_adapter.process(reset_action)
                 action_space = robot_task.action_space()
                 safe = robot.description.get_safety_filter().filter(adapted, action_space)
+                if self._safety is not None:
+                    obs = self._last_obs_by_robot.get(robot.robot_id)
+                    if obs is None:
+                        obs = make_obs_fallback(robot)
+                    safe = self._safety.check_action(
+                        safe,
+                        obs,
+                        dt=self._control_dt(),
+                        robot_id=robot.robot_id,
+                    )
                 self._backend.step_multi([safe])
         except HumanInterventionRequired as e:
             if self._on_pause:

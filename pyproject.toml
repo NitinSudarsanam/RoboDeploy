@@ -49,6 +49,9 @@ robodeploy = "robodeploy.cli:main"
 sim = [
   "mujoco"
 ]
+kinematics = [
+  "pin"
+]
 real = [
   "pyrealsense2"
 ]
@@ -112,6 +115,7 @@ include = ["robodeploy*"]
 robodeploy = [
   "_assets/**/*.json",
   "description/**/*.urdf",
+  "description/**/*.yaml",
   "description/**/*.mjcf",
   "description/**/*.xml",
   "description/**/*.stl",

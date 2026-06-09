@@ -96,9 +96,13 @@ class EpisodeVideoRecorder:
         imageio.mimsave(str(out_path), self._frames, fps=self._fps)
         return out_path
 
-    @staticmethod
-    def embed_path(path: Path | None) -> str | None:
+    _EMBED_MAX_BYTES = 2 * 1024 * 1024
+
+    @classmethod
+    def embed_path(cls, path: Path | None) -> str | None:
         if path is None or not path.is_file():
+            return None
+        if path.stat().st_size > cls._EMBED_MAX_BYTES:
             return None
         data = base64.b64encode(path.read_bytes()).decode("ascii")
         return f"data:video/mp4;base64,{data}"
