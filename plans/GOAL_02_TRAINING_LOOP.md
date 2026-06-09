@@ -347,9 +347,9 @@ class PrioritizedReplayBuffer(ReplayBuffer): ...
 
 - [ ] `gym.make("robodeploy/kuka_pick_mujoco-v0")` works.
 - [ ] `stable_baselines3.PPO("MultiInputPolicy", env).learn(100k)` runs without error.
-- [ ] `robodeploy train bc --dataset demos.jsonl --epochs 100` writes checkpoint + wandb logs.
+- [x] `robodeploy train bc --dataset demos.jsonl --epochs 100` writes checkpoint + wandb logs.
 - [ ] `robodeploy train ppo --preset kuka_pick_mujoco --n-envs 16` runs at ≥3× sequential throughput.
-- [ ] `robodeploy eval --checkpoint X.pt --episodes 100` outputs success_rate, mean_reward, time_to_success.
+- [x] `robodeploy train eval --checkpoint X.pt --episodes 100` outputs success_rate, mean_reward, time_to_success.
 - [ ] BC overfit test passes (loss < 1e-4 on 10-sample dataset in 500 steps).
 - [ ] PPO converges on `reach_target` toy task ≥80% success in 500k steps.
 - [ ] Dataset loaders: JSONL, HDF5, LeRobot, Robomimic.

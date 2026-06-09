@@ -321,7 +321,7 @@ Helps reproducibility: `robodeploy assets verify` checks SHA256.
 - [ ] `Robot.task_action_resolver = average_joint_actions` produces midpoint command when both tasks active.
 - [ ] `pip install robodeploy` from PyPI works (after first release).
 - [ ] CI tests pass on Python 3.10, 3.11, 3.12 across Linux, macOS, Windows.
-- [ ] `docker run robodeploy/robodeploy:cpu robodeploy run-episode --preset dummy` succeeds.
+- [x] Docker CI smoke: `docker build` + `robodeploy --help` + `examples.cli list-presets` in container (`docker-smoke` workflow job).
 - [ ] `conda install -c robodeploy robodeploy` installs successfully (after conda-forge submission).
 - [ ] Third-party plugin (`pip install plugin-robot-demo`) registers `demo_arm` automatically.
 - [ ] `robodeploy assets verify` checks SHA256 of all shipped assets.

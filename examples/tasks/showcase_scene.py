@@ -3,19 +3,8 @@
 from __future__ import annotations
 
 from robodeploy.core.registry import register_task
-from robodeploy.core.types import (
-    Action,
-    CameraSpec,
-    GeomSpec,
-    LightSpec,
-    MaterialSpec,
-    ObsSpec,
-    Observation,
-    PropConfig,
-    SceneSpec,
-    TerrainSpec,
-    WorldSpec,
-)
+from robodeploy.core.types import Action, ObsSpec, Observation, SceneSpec
+from robodeploy.scene_builder import SceneBuilder
 from robodeploy.tasks.base import TaskBase
 
 
@@ -31,61 +20,43 @@ class ShowcaseSceneTask(TaskBase):
         return ObsSpec(rgb=False, depth=False)
 
     def scene_spec(self) -> SceneSpec:
-        return SceneSpec(
-            props=[
-                PropConfig(
-                    name="showcase_box",
-                    position=(0.50, -0.15, 0.38),
-                    is_fixed=False,
-                    mass=0.05,
-                    geom=GeomSpec(kind="box", size=(0.03, 0.03, 0.03)),
-                    material=MaterialSpec(rgba=(1.0, 0.1, 0.1, 1.0)),
-                ),
-                PropConfig(
-                    name="showcase_cylinder",
-                    position=(0.55, 0.15, 0.38),
-                    is_fixed=True,
-                    geom=GeomSpec(kind="cylinder", size=(0.025, 0.04)),
-                    material=MaterialSpec(rgba=(0.1, 0.3, 1.0, 1.0)),
-                ),
-                PropConfig(
-                    name="showcase_sphere",
-                    position=(0.62, -0.05, 0.40),
-                    is_fixed=False,
-                    mass=0.04,
-                    geom=GeomSpec(kind="sphere", size=(0.03,)),
-                    material=MaterialSpec(rgba=(1.0, 0.9, 0.1, 1.0)),
-                ),
-                PropConfig(
-                    name="showcase_capsule",
-                    position=(0.68, 0.10, 0.42),
-                    is_fixed=True,
-                    geom=GeomSpec(kind="capsule", size=(0.02, 0.05)),
-                    material=MaterialSpec(rgba=(1.0, 0.5, 0.0, 1.0)),
-                ),
-            ],
-            table_height=0.0,
-            lighting="default",
-            world=WorldSpec(
-                lights=[
-                    LightSpec(
-                        position=(0.5, -0.5, 1.5),
-                        direction=(0.0, 0.3, -1.0),
-                        diffuse=(0.85, 0.85, 0.85),
-                        kind="directional",
-                    )
-                ],
-                cameras=[
-                    CameraSpec(
-                        name="scene_overview",
-                        position=(0.0, -1.2, 0.9),
-                        orientation=(1.0, 0.0, 0.0, 0.0),
-                        fov_deg=70.0,
-                        resolution=(320, 240),
-                    )
-                ],
-                terrain=TerrainSpec(kind="flat", size=(4.0, 4.0)),
-            ),
+        return (
+            SceneBuilder()
+            .add_box(
+                "showcase_box",
+                size=(0.03, 0.03, 0.03),
+                pos=(0.50, -0.15, 0.38),
+                mass=0.05,
+                rgba=(1.0, 0.1, 0.1, 1.0),
+            )
+            .add_cylinder(
+                "showcase_cylinder",
+                radius=0.025,
+                height=0.04,
+                pos=(0.55, 0.15, 0.38),
+                fixed=True,
+                rgba=(0.1, 0.3, 1.0, 1.0),
+            )
+            .add_sphere(
+                "showcase_sphere",
+                radius=0.03,
+                pos=(0.62, -0.05, 0.40),
+                mass=0.04,
+                rgba=(1.0, 0.9, 0.1, 1.0),
+            )
+            .add_capsule(
+                "showcase_capsule",
+                radius=0.02,
+                length=0.05,
+                pos=(0.68, 0.10, 0.42),
+                fixed=True,
+                rgba=(1.0, 0.5, 0.0, 1.0),
+            )
+            .set_table_height(0.0)
+            .set_lighting("minimal")
+            .set_cameras("overview")
+            .set_terrain("flat", size=(4.0, 4.0))
+            .build_spec()
         )
 
     def language_instruction(self) -> str:

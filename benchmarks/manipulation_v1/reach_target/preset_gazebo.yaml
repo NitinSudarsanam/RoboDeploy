@@ -1,11 +1,20 @@
 robot: kuka
 backend: gazebo
-task: user_kuka_sinusoid
-policy: user_sinusoid
+task: benchmark_reach_target
+policy: benchmark_reach_scripted
+task_kwargs:
+  target_q: 0.4
+  success_tol: 0.05
+  max_steps: 300
+policy_kwargs:
+  target_q: 0.4
+  ramp_rate: 0.08
 backend_kwargs:
   config:
-    headless: true
+    sim:
+      kind: gazebo
+      headless: true
 max_episode_steps: 300
 obs_spec_policy: warn
 custom_modules:
-  - examples.user_kuka_sinusoid.components
+  - benchmarks.manipulation_v1.reach_target.task

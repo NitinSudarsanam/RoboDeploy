@@ -348,7 +348,7 @@ Surface in `info.extra["policy_diagnostics"]` (used by Goal 10).
 - [ ] `RoboEnv` with DELTA_EE policy + JOINT_POS backend auto-inserts adapter without code change.
 - [ ] `HFModelRegistry.from_name("openvla-7b")` downloads from HF Hub on first call.
 - [ ] `RobomimicPolicy`, `DiffusionPolicy`, `VLAPolicy` ≤ 50 lines each after refactor (currently 100-200).
-- [ ] `info.extra["policy_diagnostics"]` shows action stats per step.
+- [x] `info.extra["policy_diagnostics"]` shows action stats per step.
 - [ ] Streaming HTTP client receives first action chunk within 50ms of large-VLA call.
 
 ## Dependencies

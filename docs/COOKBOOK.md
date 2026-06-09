@@ -188,7 +188,7 @@ Point preset `policy_kwargs.reach_dsl_path` at the YAML file. Phases reference s
 ```bash
 robodeploy scene validate my_scene.yaml --backend mujoco
 robodeploy config validate examples/config/presets.yaml
-robodeploy config diff kuka_pick_mujoco kuka_pick_gazebo
+robodeploy config diff kuka_pick_mujoco kuka_ft_imu_pick_gazebo
 ```
 
 ## Scaffold a runnable example

@@ -311,7 +311,7 @@ For users on 0.1.x. Show old→new for:
 ## Acceptance Criteria
 
 - [ ] New user runs `pip install robodeploy && robodeploy run-episode --preset dummy` and sees output in < 60 seconds.
-- [ ] Tutorial 02 produces working custom task in <30 lines from scratch.
+- [ ] Tutorial 02 produces working custom task in <30 lines from scratch (`docs/tutorials/02_your_first_task.md`; uses `examples.cli`, no CI integration test yet).
 - [ ] `robodeploy scaffold task --name X --template pick_place` produces compilable file.
 - [ ] `robodeploy scaffold policy --name X --template reach_dsl` produces working YAML + loader.
 - [ ] `robodeploy lint task examples/tasks/pick_place.py` reports no issues; introducing a missing method triggers error.

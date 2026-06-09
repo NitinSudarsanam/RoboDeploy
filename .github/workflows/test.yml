@@ -22,8 +22,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+      # Proves: registry, benchmarks YAML, eval harness (incl. test_benchmarks.py, test_backend_registry.py).
       - name: Run unit tests
-        run: python -m pytest tests/ -q --ignore=tests/test_sensors_and_scenes_e2e.py --ignore=tests/test_live_ros2_sensors.py --ignore=tests/test_live_gazebo_sensors.py --ignore=tests/test_plugin_discovery.py
+        run: python -m pytest tests/ -q -m "not hardware" --ignore=tests/test_sensors_and_scenes_e2e.py --ignore=tests/test_live_ros2_sensors.py --ignore=tests/test_live_gazebo_sensors.py --ignore=tests/test_plugin_discovery.py
 
   sensor-e2e-linux:
     runs-on: ubuntu-latest
@@ -36,25 +37,38 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev,sim]"
+      # Proves: non-dummy examples.cli preset smoke, MuJoCo sensor/scene e2e, benchmark preset env build (mujoco).
       - name: MuJoCo sensor e2e (Linux)
         env:
           MUJOCO_GL: egl
-        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py tests/test_gazebo_urdf_mount.py tests/test_gazebo_sensor_rig_smoke.py tests/test_mujoco_grasp.py tests/test_mujoco_grasp_welds.py tests/test_example_envs.py -q
+        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py tests/test_gazebo_urdf_mount.py tests/test_gazebo_sensor_rig_smoke.py tests/test_mujoco_grasp.py tests/test_mujoco_grasp_welds.py tests/test_example_envs.py tests/test_benchmarks.py::BenchmarkPresetBuildTests -q
+      - name: Examples CLI non-dummy smoke (kuka_pick_mujoco)
+        env:
+          MUJOCO_GL: egl
+        run: python -m examples.cli run-episode --preset kuka_pick_mujoco --steps 50 --json
 
-  mujoco-smoke:
+  eval-mujoco-smoke:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install with sim extra
+      - name: Install with sim + eval extras
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,sim]"
-      - name: MuJoCo smoke tests
-        run: python -m unittest tests.test_mujoco_smoke -q
+          pip install -e ".[dev,sim,eval]"
+      # Proves: manipulation_v1 reach_target builds and runs on MuJoCo (not dummy-only fiction).
+      - name: MuJoCo benchmark eval smoke (3 episodes)
+        env:
+          MUJOCO_GL: egl
+        run: |
+          python -m robodeploy.cli eval \
+            --benchmark manipulation_v1/reach_target \
+            --policy scripted \
+            --backend mujoco \
+            --episodes 3 \
+            --benchmarks-root benchmarks
 
   sensor-live-ros2:
     runs-on: ubuntu-latest
@@ -159,6 +173,18 @@ jobs:
         env:
           MUJOCO_GL: egl
         run: python -m pytest tests/test_multirobot_mujoco.py tests/test_registry_duplicate.py -q
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build CPU Docker image
+        run: docker build -f docker/Dockerfile.cpu -t robodeploy-cpu:ci .
+      # Proves: installed package + examples presets discoverable in container (not just --help).
+      - name: Smoke test container entrypoint and example presets
+        run: |
+          docker run --rm robodeploy-cpu:ci robodeploy --help
+          docker run --rm robodeploy-cpu:ci python -m examples.cli list-presets --json
 
   conda-recipe:
     runs-on: ubuntu-latest

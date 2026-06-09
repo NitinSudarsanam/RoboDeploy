@@ -144,6 +144,7 @@ kuka_sensor_ros2_rviz:
     - examples.tasks
     - examples.policies
 
+# Sensor smoke only (joint track + wrist sensors). For multimodal pick-place use kuka_ft_imu_pick_gazebo.
 kuka_sensor_gazebo:
   robot: kuka
   backend: ros2_gazebo
@@ -229,8 +230,11 @@ kuka_ft_imu_multimodal_ros2:
       wrist_imu: {}
       wrist_contact:
         force_threshold_N: 1.5
+      prop_pose:
+        prop_names: [source, target]
   custom_modules:
     - examples.tasks
+    - examples.sensors
     - examples.policies
 
 kuka_ft_imu_multimodal_real:
@@ -255,8 +259,32 @@ kuka_ft_imu_multimodal_real:
       wrist_imu: {}
       wrist_contact:
         force_threshold_N: 2.0
+      prop_pose:
+        prop_names: [source, target]
   custom_modules:
     - examples.tasks
+    - examples.sensors
+    - examples.policies
+
+my_kitchen_pick_mujoco:
+  robot: kuka
+  backend: mujoco
+  task: my_kitchen_pick
+  policy: example_reach_pick
+  task_kwargs:
+    require_objects: true
+  backend_kwargs:
+    config:
+      allow_actuator_name_fallback: true
+      enable_viewer: false
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      prop_pose:
+        prop_names: [source, target]
+  custom_modules:
+    - examples.tasks.my_kitchen_pick
+    - examples.sensors
     - examples.policies
 
 mujoco_showcase_kuka:

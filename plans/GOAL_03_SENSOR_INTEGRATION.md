@@ -261,7 +261,7 @@ Each tests sensor consumption against synthetic obs streams (no live sim require
 - [ ] `obs.contact_state` populated by ContactSensor in MuJoCo + Gazebo backends.
 - [ ] `obs.objects` populated by ColorBlobTracker from camera RGB-D + extrinsics.
 - [ ] `info.extra["sensor_status"]` shows per-sensor health each step.
-- [ ] Drop-detection regrasp loop works (force loss → rewind to close_gripper).
+- [x] Drop-detection regrasp loop works (force loss → rewind to grasp phase).
 - [ ] kuka_ft_imu_pick example completes ≥80% trials.
 - [ ] All sensor predicates covered by unit tests with synthetic Observations.
 

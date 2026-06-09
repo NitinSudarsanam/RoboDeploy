@@ -414,8 +414,8 @@ robodeploy safety status                    # show current monitor state if runn
 - [ ] `EStop.trip()` from any source (SIGINT, key, mp event) halts env on next step.
 - [ ] `RoboEnv.emergency_stop()` API drives robot to safe state + ends episode.
 - [ ] Sim safety injector reproduces force spike, joint excursion, collision, state timeout.
-- [ ] Force above 50N for 3 consecutive steps → `SafetyError` + episode terminated.
-- [ ] Workspace violation → action clamped to boundary (clamp mode) or `SafetyError` (raise mode).
+- [x] Force above 50N for 3 consecutive steps → `SafetyError` + episode terminated.
+- [x] Workspace violation → action clamped to boundary (clamp mode) or `SafetyError` (raise mode).
 - [ ] ROS2 connection loss → recovery manager retries with backoff; succeeds within 5 retries OR raises Hazard.CONNECTION_LOST.
 - [ ] Command ACK timeout detected within `ack_timeout_s`.
 - [ ] `info.extra["safety"]` populated every step.

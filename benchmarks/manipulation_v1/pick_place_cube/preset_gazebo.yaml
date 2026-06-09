@@ -7,7 +7,10 @@ task_kwargs:
 obs_spec_policy: raise
 backend_kwargs:
   config:
-    headless: true
+    sim:
+      kind: gazebo
+      headless: true
+      readiness_timeout_s: 60.0
 sensor_rigs:
   - rig_id: arm_sensors
     ee_link: robot0/ee_link

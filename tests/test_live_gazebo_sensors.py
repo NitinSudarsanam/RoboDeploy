@@ -76,6 +76,24 @@ class GazeboSensorOfflineTests(unittest.TestCase):
         self.assertTrue(cfg["backend_kwargs"]["config"]["sim"].get("require_sensors"))
         self.assertEqual(cfg["policy_kwargs"]["config"]["force_threshold"], 0.5)
 
+    def test_kuka_ft_imu_pick_gazebo_env_builds_offline(self):
+        from examples.config import load_example_preset
+        from robodeploy.backends.real.ros2.sensors.camera_rgbd import Ros2RgbdCameraISensor
+        from robodeploy.backends.real.ros2.sensors.wrench import Ros2WrenchISensor
+        from robodeploy.env import RoboEnv
+
+        cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
+        cfg = {**cfg, "max_episode_steps": 5}
+        env = RoboEnv.from_config(cfg)
+        try:
+            sensors = env.robots[0].sensors
+            kinds = {type(s) for s in sensors}
+            self.assertIn(Ros2RgbdCameraISensor, kinds)
+            self.assertIn(Ros2WrenchISensor, kinds)
+            self.assertIn("pick_place", env.robots[0].tasks)
+        finally:
+            env.close()
+
 
 @unittest.skipUnless(LIVE, "set ROBODEPLOY_LIVE_GAZEBO=1 to run live Gazebo sensor tests")
 @unittest.skipUnless(gazebo_binary_available(), "gz binary not on PATH")
@@ -146,6 +164,39 @@ class LiveGazeboSensorTests(unittest.TestCase):
             assert img is not None
             self.assertGreater(float(np.sum(img)), 0.0)
             self.assertIn("wrist_camera", obs.camera_intrinsics)
+        finally:
+            env.close()
+
+    def test_kuka_ft_imu_pick_gazebo_obs_keys(self):
+        """Live: multimodal preset populates wrist sensors after reset (no synthetic pubs)."""
+        from examples.config import load_example_preset
+        from robodeploy.env import RoboEnv
+
+        cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
+        cfg = {
+            **cfg,
+            "max_episode_steps": 30,
+            "backend_kwargs": {
+                "config": {
+                    "sim": _gazebo_sim_cfg(
+                        world=EMPTY_WORLD,
+                        wait_for_topics=["/joint_states", "/wrist_ft/wrench"],
+                    )
+                }
+            },
+        }
+        env = RoboEnv.from_config(cfg)
+        try:
+            obs, _ = env.reset()
+            deadline = time.monotonic() + 60.0
+            while time.monotonic() < deadline:
+                has_ft = obs.ft_forces.get("wrist_ft") is not None
+                has_objects = bool(getattr(obs, "objects", {}))
+                if has_ft and has_objects:
+                    break
+                obs, _, _, _ = env.step()
+            self.assertIn("source", getattr(obs, "objects", {}))
+            self.assertIsNotNone(obs.ft_forces.get("wrist_ft"))
         finally:
             env.close()
 

@@ -46,7 +46,7 @@ Use [`backend_for_simulator`](../robodeploy/backends/simulator.py) so the librar
 
 - **`"mujoco"`** — `MuJoCoBackend` with viewer + actuator fallback defaults (single robot).
 - **`"ros2_rviz"`** — `ROS2RvizBackend`, a simulated ROS2/RViz transport with joint-position drivers under `/<robot_id>/`.
-- **`"gazebo"`** — `ROS2GazeboBackend`; requires `RobotDescription.gazebo_sim_launch_config()` and/or `config_overrides["sim"]`.
+- **`"gazebo"`** — `ROS2GazeboBackend` (registered as `ros2_gazebo`; presets and `RoboEnv.from_config` accept the alias `gazebo` via `get_backend()`); requires `RobotDescription.gazebo_sim_launch_config()` and/or `config_overrides["sim"]` with `sim.kind: gazebo`.
 
 Optional **`local_ros_graph=True`** (ROS2+RViz only) starts the built-in `dev_fake_sim` joint-position devtool.
 
@@ -195,6 +195,7 @@ Troubleshooting:
 - **No joint states / arm frozen** — confirm `/joint_states` is publishing (not only `/robot0/joint_states`). Check `joint_state_broadcaster` is active.
 - **JTC deaf** — echo `/joint_trajectory_controller/joint_trajectory` while stepping; commands should appear.
 - **FT never triggers grasp** — tune `force_threshold` in `kuka_ft_imu_pick_gazebo` preset; arm links need URDF `<collision>` (bundled in `kuka.urdf`).
+- **Contact never fires** — `gz topic -e -t /world/<world>/contacts` (or bare `contacts`); contact names use fuzzy `::` / link-token matching.
 - **Carry invisible** — Gazebo `follow` mode uses kinematic bookkeeping + `set_pose`; weld grasp is not supported. Cube may clip through gripper in GUI.
 
 **Limitations:** single-robot Gazebo (one URDF spawn); multi-robot Gazebo is not supported yet.

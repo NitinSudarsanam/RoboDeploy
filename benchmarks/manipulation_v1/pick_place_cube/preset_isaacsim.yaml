@@ -8,7 +8,13 @@ obs_spec_policy: raise
 backend_kwargs:
   config:
     headless: true
+sensor_rigs:
+  - rig_id: arm_sensors
+    ee_link: robot0/ee_link
+    prop_pose:
+      prop_names: [source, target]
 max_episode_steps: 500
 custom_modules:
   - examples.tasks
+  - examples.sensors
   - examples.policies

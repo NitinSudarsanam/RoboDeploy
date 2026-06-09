@@ -256,8 +256,10 @@ def run_benchmark_eval(
     config: EvalConfig,
     manifest_extra: dict[str, Any] | None = None,
 ) -> EvalReport:
+    from robodeploy.core.registry import canonical_backend_name
     from robodeploy.evaluation.env_builder import build_env_from_preset, make_env_factory
 
+    backend = canonical_backend_name(str(preset.get("backend", backend)))
     sample_env = build_env_from_preset(preset, seed=int(config.base_seed))
     try:
         primary_task = next(iter(sample_env.primary_robot.tasks.values())).task

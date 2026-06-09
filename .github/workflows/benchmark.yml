@@ -95,6 +95,7 @@ jobs:
           print(f"Validated {len(files)} submission file(s).")
           PY
 
+  # Dummy backend only — does not claim MuJoCo/Gazebo manipulation_v1 success (see plans/INTEGRATION_STATUS.md).
   manipulation-v1-dummy:
     needs: validate-schemas
     runs-on: ubuntu-latest

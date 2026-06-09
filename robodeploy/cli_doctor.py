@@ -165,6 +165,26 @@ def run_doctor_checks(*, repo_root: Path | None = None) -> list[DoctorCheck]:
         )
     )
 
+    gz_ok = shutil.which("gz") is not None
+    checks.append(
+        DoctorCheck(
+            "ok" if gz_ok else "warn",
+            "Gazebo Harmonic (gz)",
+            "gz CLI found" if gz_ok else "not detected",
+            fix="" if gz_ok else "Install Gazebo Harmonic; see docs/BACKEND_SETUP.md",
+        )
+    )
+
+    pin_ok, pin_detail = _try_import("pinocchio")
+    checks.append(
+        DoctorCheck(
+            "ok" if pin_ok else "warn",
+            "Pinocchio (kinematics)",
+            pin_detail if pin_ok else "not installed",
+            fix="" if pin_ok else 'pip install -e ".[kinematics]" for URDF reach IK',
+        )
+    )
+
     cal = _calibration_dir()
     if cal.exists() and os.access(cal, os.W_OK):
         checks.append(DoctorCheck("ok", f"{cal}", "writable"))

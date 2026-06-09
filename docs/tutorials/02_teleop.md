@@ -1,4 +1,6 @@
-# Tutorial 2 — Teleoperation and Demo Collection
+# Tutorial 2b — Teleoperation and Demo Collection
+
+> For defining a custom task with `SceneBuilder`, see [02_your_first_task.md](02_your_first_task.md).
 
 **Time:** ~20 minutes  
 **Goal:** Control a Kuka arm in MuJoCo with the keyboard and record demonstrations.
