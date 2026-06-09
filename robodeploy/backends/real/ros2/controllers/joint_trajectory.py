@@ -40,13 +40,13 @@ class JointTrajectoryControllerAdapter(JointPositionControllerAdapter):
 
         self._cmd_pub = node.create_publisher(
             JointTrajectory,
-            f"{self._ns}/{self._cmd_topic}" if self._ns else f"/{self._cmd_topic}",
+            self._resolved_cmd_topic,
             10,
         )
 
         node.create_subscription(
             JointState,
-            f"{self._ns}/{self._joint_states_topic}" if self._ns else f"/{self._joint_states_topic}",
+            self._resolved_joint_states_topic,
             self._on_joint_state,
             10,
         )

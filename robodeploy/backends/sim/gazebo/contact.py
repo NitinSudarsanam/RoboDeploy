@@ -47,12 +47,45 @@ class GazeboContactMonitor:
                 return value
         return str(entity)
 
+    @staticmethod
+    def _contact_tokens(name: str) -> list[str]:
+        normalized = str(name).replace("::", "/")
+        parts = [p for p in normalized.split("/") if p]
+        tokens: list[str] = []
+        for part in parts:
+            if part not in tokens:
+                tokens.append(part)
+        return tokens
+
+    @classmethod
+    def _matches(cls, name: str, pattern: str) -> bool:
+        if not name or not pattern:
+            return False
+        if name == pattern:
+            return True
+        if pattern in name or name in pattern:
+            return True
+        name_tokens = cls._contact_tokens(name)
+        pattern_tokens = cls._contact_tokens(pattern)
+        if not pattern_tokens:
+            return False
+        pattern_tail = pattern_tokens[-1]
+        if pattern_tail in name_tokens:
+            return True
+        if len(pattern_tokens) > 1 and all(tok in name_tokens for tok in pattern_tokens):
+            return True
+        return False
+
     def has_contact(self, body_a: str, body_b: str | None = None) -> bool:
         a = str(body_a)
         b = str(body_b) if body_b else None
         for left, right in self._contacts:
-            if b is None and a in (left, right):
-                return True
-            if {left, right} == {a, b}:
+            if b is None:
+                if self._matches(left, a) or self._matches(right, a):
+                    return True
+                continue
+            if (self._matches(left, a) and self._matches(right, b)) or (
+                self._matches(left, b) and self._matches(right, a)
+            ):
                 return True
         return False

@@ -18,6 +18,11 @@ for _p in (str(REPO_ROOT), str(_TESTS_DIR)):
 
 from live_sensor_fixtures import LiveRos2SensorPublishers, gazebo_binary_available, rclpy_available
 
+from robodeploy.backends.real.ros2.sim_launchers.ros_gz_bridge import imu_bridge_rules
+from robodeploy.backends.sim.gazebo.urdf_sensors import inject_sensors_into_urdf
+from robodeploy.core.types import SensorMount
+from robodeploy.sensors.imu.sim.mujoco_imu import MuJoCoIMUSensor
+
 LIVE = os.environ.get("ROBODEPLOY_LIVE_GAZEBO", "").strip() in {"1", "true", "yes"}
 EMPTY_WORLD = REPO_ROOT / "tests" / "fixtures" / "gazebo_empty.sdf"
 CAMERA_FT_WORLD = REPO_ROOT / "tests" / "fixtures" / "gazebo_camera_ft.sdf"
@@ -41,6 +46,35 @@ def _gazebo_sim_cfg(
         sim["robot_urdf"] = str(robot_urdf)
         sim["robot_name"] = "robot0"
     return sim
+
+
+class GazeboSensorOfflineTests(unittest.TestCase):
+    def test_multimodal_preset_yaml_includes_imu_and_depth(self):
+        from examples.config import load_example_preset
+
+        cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
+        rig = cfg["sensor_rigs"][0]
+        self.assertTrue(rig["wrist_rgbd"]["depth"])
+        self.assertIn("wrist_imu", rig)
+        self.assertIn("prop_pose", rig)
+
+    def test_imu_urdf_and_bridge_rules_offline(self):
+        imu = MuJoCoIMUSensor("wrist_imu", mount=SensorMount(parent_link="ee_link"))
+        patched = inject_sensors_into_urdf(
+            '<?xml version="1.0"?><robot name="arm"><link name="ee_link"/></robot>',
+            [imu],
+        )
+        self.assertIn('type="imu"', patched)
+        rules = imu_bridge_rules("/wrist_imu/imu")
+        self.assertTrue(any("sensor_msgs/msg/Imu" in r for r in rules))
+
+    def test_kuka_ft_imu_pick_gazebo_preset_loads(self):
+        from examples.config import load_example_preset
+
+        cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
+        self.assertEqual(cfg["backend"], "ros2_gazebo")
+        self.assertTrue(cfg["backend_kwargs"]["config"]["sim"].get("require_sensors"))
+        self.assertEqual(cfg["policy_kwargs"]["config"]["force_threshold"], 0.5)
 
 
 @unittest.skipUnless(LIVE, "set ROBODEPLOY_LIVE_GAZEBO=1 to run live Gazebo sensor tests")

@@ -6,7 +6,7 @@ For environment setup (MuJoCo / ROS2+RViz / Isaac Sim), see [docs/BACKEND_SETUP.
 
 Named YAML presets and demo policies live here, **not** in the `robodeploy` package:
 
-- [config/presets.yaml](config/presets.yaml) — `kuka_pick_mujoco` (sensor-first default), `franka_pick_mujoco`, `mujoco_showcase_kuka`, `mujoco_showcase_franka`, `mujoco_pick_kuka`, `kuka_sensor_pick_mujoco`, `kuka_sensor_ros2_rviz`, `kuka_sensor_gazebo`, `kuka_sinusoid_mujoco`
+- [config/presets.yaml](config/presets.yaml) — `kuka_pick_mujoco` (sensor-first default), `franka_pick_mujoco`, `mujoco_showcase_kuka`, `mujoco_showcase_franka`, `mujoco_pick_kuka`, `kuka_sensor_pick_mujoco`, `kuka_ft_imu_pick_mujoco`, `kuka_ft_imu_pick_gazebo`, `kuka_sensor_ros2_rviz`, `kuka_sensor_gazebo`, `kuka_sinusoid_mujoco`
 - [catalog/](catalog/) — MuJoCo Universe catalog YAML + [README](catalog/README.md)
 - [tasks/](tasks/) — `pick_place`, `pour`, `peg_insertion` (import `examples.tasks` to register)
 - [policies/](policies/) — `example_reach_pick`, `example_sensor_reach_pick`, `example_joint_track` (import `examples.policies` to register)
@@ -38,7 +38,11 @@ Pick-place demos use **`example_sensor_reach_pick`** and `SimPropPoseSensor` by 
 | Kuka + sensors + MuJoCo (alias preset) | `python -m examples.cli run-episode --preset kuka_sensor_pick_mujoco` |
 | Legacy thin wrappers | `python -m examples.kuka_pick_place_mujoco.run_mujoco` (etc.) |
 | Kuka + ROS2 RViz sensors | `python -m examples.kuka_sensor_ros2_rviz.run_ros2_rviz` |
-| Kuka + Gazebo sensors | `python -m examples.kuka_sensor_gazebo.run_gazebo` |
+| Kuka + Gazebo sensors (smoke) | `python -m examples.kuka_sensor_gazebo.run_gazebo` |
+| **Kuka multimodal pick-place (Gazebo)** | `python -m examples.kuka_ft_imu_pick_gazebo.run_gazebo` |
+
+Requires Linux: ROS 2 Jazzy, Gazebo Harmonic, `ros_gz_bridge`, `gz_ros2_control`. Optional: `pip install -e ".[kinematics]"` for Pinocchio reach IK. See [BACKEND_SETUP.md](../docs/BACKEND_SETUP.md#gazebo-harmonic-gz-sim-simulator-path) for troubleshooting (`/joint_states`, JTC, FT threshold tuning).
+
 | Sensor diagnostics smoke | `python -m examples.sensor_diagnostics_demo.run` |
 | **Multi-sensor showcase** (PNG + JSON) | `python -m examples.sensor_showcase.run` |
 | **MuJoCo Universe** (catalog + all geoms/sensors) | `python -m examples.mujoco_universe.run` |

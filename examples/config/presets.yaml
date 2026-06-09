@@ -167,6 +167,47 @@ kuka_sensor_gazebo:
     - examples.tasks
     - examples.policies
 
+kuka_ft_imu_pick_gazebo:
+  robot: kuka
+  backend: ros2_gazebo
+  task: pick_place
+  policy: example_reach_pick
+  task_kwargs:
+    require_objects: true
+    grasp_success_force_min: 1.0
+  policy_kwargs:
+    config:
+      carry_mode: follow
+      grasp_detection: ft
+      force_threshold: 0.5
+      grasp_force_window: 3
+      imu_omega_max: 0.5
+      imu_settle_steps: 3
+  backend_kwargs:
+    config:
+      sim:
+        kind: gazebo
+        headless: false
+        require_sensors: true
+        readiness_timeout_s: 60.0
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      wrist_rgbd:
+        width: 64
+        height: 48
+        depth: true
+      wrist_ft: {}
+      wrist_imu: {}
+      wrist_contact:
+        prop_name: source
+      prop_pose:
+        prop_names: [source, target]
+  custom_modules:
+    - examples.tasks
+    - examples.sensors
+    - examples.policies
+
 kuka_ft_imu_multimodal_ros2:
   robot: kuka
   backend: ros2_rviz

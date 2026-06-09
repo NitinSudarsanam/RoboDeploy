@@ -1,8 +1,7 @@
 """
 KukaDescription — minimal robot description for the demo KUKA arm.
 
-This is intentionally a stub that matches the architecture's RobotDescription
-contract. MJCF is provided for MuJoCo simulation; URDF/USD are not yet added.
+MJCF is provided for MuJoCo simulation; URDF enables Gazebo + Pinocchio IK.
 """
 
 from __future__ import annotations
@@ -43,8 +42,31 @@ class KukaDescription(RobotDescription):
                 raise FileNotFoundError(f"Kuka MJCF not found at {path}")
             return path
 
-        raise FileNotFoundError(
-            f"KukaDescription does not provide {fmt.value} yet. "
-            "Add a URDF under description/kuka/assets/urdf/ to enable Pinocchio FK/IK."
-        )
+        if fmt == AssetFormat.URDF:
+            path = assets / "urdf" / "kuka.urdf"
+            if not path.exists():
+                raise FileNotFoundError(f"Kuka URDF not found at {path}")
+            return path
+
+        raise FileNotFoundError(f"KukaDescription does not provide {fmt.value}.")
+
+    def gazebo_sim_launch_config(self) -> dict | None:
+        assets = Path(__file__).parent / "assets" / "urdf"
+        return {
+            "kind": "gazebo",
+            "headless": False,
+            "robot_urdf": str(assets / "kuka.urdf"),
+            "robot_name": "robot0",
+            "controllers_to_spawn": ["joint_state_broadcaster", "joint_trajectory_controller"],
+            "wait_for_topics": ["/clock", "/joint_states"],
+        }
+
+    def gazebo_ros2_extra_config(self, robot_id: str) -> dict | None:
+        return {
+            f"{robot_id}.preset": "kuka_jtc",
+            f"{robot_id}.controller": "joint_trajectory",
+            # gz_ros2_control publishes at root namespace; use absolute topics.
+            f"{robot_id}.joint_states_topic": "/joint_states",
+            f"{robot_id}.joint_cmd_topic": "/joint_trajectory_controller/joint_trajectory",
+        }
 

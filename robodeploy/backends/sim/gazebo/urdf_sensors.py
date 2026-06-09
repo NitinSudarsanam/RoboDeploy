@@ -52,6 +52,9 @@ def _gz_sensor_topic(sensor_name: str, cfg: dict, kind: str) -> str:
     if kind == "camera":
         rel = str(cfg.get("rgb", "image_raw")).lstrip("/")
         return f"{namespace}/{rel}"
+    if kind == "imu":
+        rel = str(cfg.get("imu_topic", cfg.get("topic", "imu"))).lstrip("/")
+        return f"{namespace}/{rel}"
     rel = str(cfg.get("wrench_topic", cfg.get("topic", "wrench"))).lstrip("/")
     return f"{namespace}/{rel}"
 
@@ -63,7 +66,20 @@ def _sensor_kind(sensor: "ISensor") -> str:
         return "camera"
     if "ft" in cls or "ft" in name or "wrench" in name:
         return "ft"
+    if "imu" in cls or "imu" in name:
+        return "imu"
     return "unknown"
+
+
+def patch_urdf_controller_yaml(urdf_text: str, urdf_path: str | Path) -> str:
+    """Replace ``__CONTROLLER_YAML__`` with the bundled controllers file path."""
+    placeholder = "__CONTROLLER_YAML__"
+    if placeholder not in urdf_text:
+        return urdf_text
+    yaml_path = Path(urdf_path).resolve().parent / "kuka_controllers.yaml"
+    if not yaml_path.exists():
+        return urdf_text
+    return urdf_text.replace(placeholder, str(yaml_path))
 
 
 def inject_sensors_into_urdf(urdf_text: str, sensors: list["ISensor"]) -> str:
@@ -75,7 +91,7 @@ def inject_sensors_into_urdf(urdf_text: str, sensors: list["ISensor"]) -> str:
 
     for sensor in sensors:
         kind = _sensor_kind(sensor)
-        if kind not in ("camera", "ft"):
+        if kind not in ("camera", "ft", "imu"):
             continue
         mount = _resolve_mount(sensor)
         if mount is None or not mount.parent_link:
@@ -98,10 +114,19 @@ def inject_sensors_into_urdf(urdf_text: str, sensors: list["ISensor"]) -> str:
 
         cfg = dict(getattr(sensor, "config", {}) or {})
         gazebo = ET.SubElement(robot, "gazebo", {"reference": link_name})
+        depth_enabled = bool(cfg.get("depth", False))
+        if kind == "camera" and depth_enabled:
+            sensor_type = "rgbd_camera"
+        elif kind == "camera":
+            sensor_type = "camera"
+        elif kind == "imu":
+            sensor_type = "imu"
+        else:
+            sensor_type = "force_torque"
         gz_sensor = ET.SubElement(
             gazebo,
             "sensor",
-            {"name": sensor_name, "type": "camera" if kind == "camera" else "force_torque"},
+            {"name": sensor_name, "type": sensor_type},
         )
         ET.SubElement(gz_sensor, "always_on").text = "true"
         ET.SubElement(gz_sensor, "update_rate").text = "30"
@@ -120,13 +145,25 @@ def inject_sensors_into_urdf(urdf_text: str, sensors: list["ISensor"]) -> str:
             clip = ET.SubElement(cam, "clip")
             ET.SubElement(clip, "near").text = "0.01"
             ET.SubElement(clip, "far").text = "10.0"
+            if depth_enabled:
+                depth_topic = ET.SubElement(gz_sensor, "depth_topic")
+                namespace = str(cfg.get("namespace", f"/{sensor_name}")).strip().rstrip("/")
+                if not namespace.startswith("/"):
+                    namespace = f"/{namespace}"
+                depth_val = cfg.get("depth")
+                if depth_val in (True, "true"):
+                    rel = str(cfg.get("depth_topic", "depth/image_raw")).lstrip("/")
+                else:
+                    rel = str(depth_val or "depth/image_raw").lstrip("/")
+                depth_topic.text = f"{namespace}/{rel}"
 
     return ET.tostring(robot, encoding="unicode")
 
 
 def write_urdf_with_sensors(urdf_path: str | Path, sensors: list["ISensor"]) -> Path:
     """Patch a URDF file with sensor links and return the temp output path."""
-    text = Path(urdf_path).read_text(encoding="utf-8")
+    src = Path(urdf_path)
+    text = patch_urdf_controller_yaml(src.read_text(encoding="utf-8"), src)
     patched = inject_sensors_into_urdf(text, sensors)
     fd, out = tempfile.mkstemp(prefix="robodeploy_gazebo_robot_", suffix=".urdf")
     Path(out).write_text(patched, encoding="utf-8")

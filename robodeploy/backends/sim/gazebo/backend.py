@@ -8,6 +8,7 @@ from the ROS2RealBackend transport implementation.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
     from robodeploy.core.robot import Robot
     from robodeploy.core.types import SceneSpec
 
+logger = logging.getLogger(__name__)
+
 
 @register_backend("ros2_gazebo")
 class ROS2GazeboBackend(ROS2RealBackend):
@@ -34,9 +37,23 @@ class ROS2GazeboBackend(ROS2RealBackend):
     sensor_backend_name = "gazebo"
 
     def initialize_multi(self, robots: list["Robot"], scene: "SceneSpec", shared_sensors: list["ISensor"]) -> None:  # type: ignore[override]
-        sim_cfg = self.config.get("sim", None)
-        if not isinstance(sim_cfg, dict) or str(sim_cfg.get("kind", "")).lower() != "gazebo":
+        if len(robots) > 1:
+            raise ValueError(
+                "Gazebo backend supports single robot until multi-spawn is implemented."
+            )
+        from robodeploy.backends.simulator import merge_simulator_config
+
+        sim_cfg = dict(self.config.get("sim", None) or {})
+        if str(sim_cfg.get("kind", "")).lower() != "gazebo":
             raise ValueError("ROS2GazeboBackend requires config.sim.kind == 'gazebo'.")
+
+        for robot in robots:
+            launch_cfg = robot.description.gazebo_sim_launch_config()
+            if isinstance(launch_cfg, dict):
+                sim_cfg = merge_simulator_config(launch_cfg, sim_cfg)
+            extra = robot.description.gazebo_ros2_extra_config(robot.robot_id)
+            if isinstance(extra, dict):
+                self.config = merge_simulator_config(self.config, extra)
 
         from robodeploy.backends.real.ros2.sim_launchers.gazebo import GazeboLaunchConfig, GazeboLauncher
         from robodeploy.backends.real.ros2.sim_launchers.ros_gz_bridge import (
@@ -45,7 +62,11 @@ class ROS2GazeboBackend(ROS2RealBackend):
             imu_bridge_rules,
             wrench_bridge_rules,
         )
-        from robodeploy.backends.sim.gazebo.urdf_sensors import write_urdf_with_sensors
+        from robodeploy.backends.sim.gazebo.prop_pose_sync import PropPoseSyncer
+        from robodeploy.backends.sim.gazebo.urdf_sensors import (
+            patch_urdf_controller_yaml,
+            write_urdf_with_sensors,
+        )
         from robodeploy.backends.sim.gazebo.scene_builder import GazeboSceneBuilder
 
         bridge_rules = [*tuple(sim_cfg.get("bridge_rules", ()) or ())]
@@ -61,18 +82,32 @@ class ROS2GazeboBackend(ROS2RealBackend):
                 topics = self._image_topics_from_sensor_object(robot.robot_id, sensor)
                 bridge_rules.extend(image_bridge_rules(*topics))
                 wait_for_topics.extend(topics)
+                info_topics = self._camera_info_topics_from_sensor_object(robot.robot_id, sensor)
+                bridge_rules.extend(camera_info_bridge_rules(*info_topics))
+                wait_for_topics.extend(info_topics)
                 wrench_topic = self._wrench_topic_from_sensor_object(robot.robot_id, sensor)
                 if wrench_topic:
                     bridge_rules.extend(wrench_bridge_rules(wrench_topic))
                     wait_for_topics.append(wrench_topic)
+                imu_topic = self._imu_topic_from_sensor_object(robot.robot_id, sensor)
+                if imu_topic:
+                    bridge_rules.extend(imu_bridge_rules(imu_topic))
+                    wait_for_topics.append(imu_topic)
         for sensor in shared_sensors:
             topics = self._image_topics_from_sensor_object(None, sensor)
             bridge_rules.extend(image_bridge_rules(*topics))
             wait_for_topics.extend(topics)
+            info_topics = self._camera_info_topics_from_sensor_object(None, sensor)
+            bridge_rules.extend(camera_info_bridge_rules(*info_topics))
+            wait_for_topics.extend(info_topics)
             wrench_topic = self._wrench_topic_from_sensor_object(None, sensor)
             if wrench_topic:
                 bridge_rules.extend(wrench_bridge_rules(wrench_topic))
                 wait_for_topics.append(wrench_topic)
+            imu_topic = self._imu_topic_from_sensor_object(None, sensor)
+            if imu_topic:
+                bridge_rules.extend(imu_bridge_rules(imu_topic))
+                wait_for_topics.append(imu_topic)
 
         robot_urdf = sim_cfg.get("robot_urdf")
         if not robot_urdf and robots:
@@ -81,20 +116,40 @@ class ROS2GazeboBackend(ROS2RealBackend):
             except Exception:
                 robot_urdf = None
         self._generated_robot_urdf_path = None
-        if robot_urdf and all_robot_sensors:
+        if robot_urdf:
             try:
-                patched = write_urdf_with_sensors(robot_urdf, all_robot_sensors)
+                if all_robot_sensors:
+                    patched = write_urdf_with_sensors(robot_urdf, all_robot_sensors)
+                else:
+                    import os
+                    import tempfile
+
+                    text = patch_urdf_controller_yaml(Path(robot_urdf).read_text(encoding="utf-8"), robot_urdf)
+                    fd, out = tempfile.mkstemp(prefix="robodeploy_gazebo_robot_", suffix=".urdf")
+                    Path(out).write_text(text, encoding="utf-8")
+                    os.close(fd)
+                    patched = Path(out)
                 self._generated_robot_urdf_path = str(patched)
                 robot_urdf = str(patched)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to patch URDF for Gazebo sensors: %s", exc)
+                if bool(sim_cfg.get("require_sensors", False)):
+                    raise
         self._generated_world_path = None
         world_path = sim_cfg.get("world")
+        scene_builder = GazeboSceneBuilder()
         if not world_path:
-            world_path = str(GazeboSceneBuilder().write_temp_world(scene.to_world()))
+            world_path = str(scene_builder.write_temp_world(scene.to_world()))
             self._generated_world_path = world_path
 
         world = scene.to_world()
+        self._gz_world_name = str(scene_builder.world_name)
+        gz_node = sim_cfg.get("gz_transport_node")
+        if gz_node is None:
+            gz_node = self._default_gz_transport_node()
+        self._gz_transport_node = gz_node
+        self._prop_pose_syncer = PropPoseSyncer(gz_node=gz_node)
+        self._pending_gz_prop_sync: set[str] = set()
         self._scene_prop_poses = {
             prop.name: (tuple(prop.position), tuple(prop.orientation))
             for prop in world.props
@@ -106,9 +161,11 @@ class ROS2GazeboBackend(ROS2RealBackend):
             robots[0].description.ee_link_name if robots else self.config.get("ee_link", "ee_link")
         )
         self._contact_monitor = GazeboContactMonitor()
-        gz_node = sim_cfg.get("gz_transport_node")
         if gz_node is not None:
-            self._contact_monitor.bind_transport(gz_node)
+            self._contact_monitor.bind_transport(
+                gz_node,
+                topic=f"/world/{self._gz_world_name}/contacts",
+            )
 
         self._sim_launcher = GazeboLauncher(
             GazeboLaunchConfig(
@@ -137,6 +194,7 @@ class ROS2GazeboBackend(ROS2RealBackend):
     def step_multi(self, actions: list[Action]) -> list[Observation]:
         out = super().step_multi(actions)
         self._sync_grasped_prop()
+        self._flush_pending_gz_prop_sync()
         return out
 
     def get_prop_pose(self, name: str):
@@ -149,7 +207,36 @@ class ROS2GazeboBackend(ROS2RealBackend):
         poses = getattr(self, "_scene_prop_poses", {})
         if name not in poses:
             raise KeyError(f"Unknown Gazebo prop '{name}'.")
-        poses[name] = (tuple(float(v) for v in position), tuple(float(v) for v in orientation))
+        pos = tuple(float(v) for v in position)
+        quat = tuple(float(v) for v in orientation)
+        poses[name] = (pos, quat)
+        self._pending_gz_prop_sync.add(str(name))
+
+    def _flush_pending_gz_prop_sync(self) -> None:
+        pending = getattr(self, "_pending_gz_prop_sync", None)
+        syncer = getattr(self, "_prop_pose_syncer", None)
+        world = getattr(self, "_gz_world_name", None)
+        if not pending or syncer is None or not world:
+            return
+        poses = getattr(self, "_scene_prop_poses", {})
+        for name in list(pending):
+            if name not in poses:
+                pending.discard(name)
+                continue
+            pos, quat = poses[name]
+            ok = syncer.set_entity_pose(
+                world_name=str(world),
+                entity_name=str(name),
+                position=pos,
+                orientation=quat,
+            )
+            if not ok:
+                logger.debug("Gazebo prop pose sync failed for '%s'", name)
+            pending.discard(name)
+
+    def _sync_gz_entity_pose(self, name: str, position, orientation) -> None:  # noqa: ANN001
+        del name, position, orientation
+        self._flush_pending_gz_prop_sync()
 
     def teleport_object(self, name: str, position: tuple[float, float, float]) -> None:
         _, quat = self.get_prop_pose(name)
@@ -190,7 +277,9 @@ class ROS2GazeboBackend(ROS2RealBackend):
             float(ee_pos[2]) + self._grasp_offset[2],
         )
         _, quat = self.get_prop_pose(self._grasp_prop)
-        self.set_prop_pose(self._grasp_prop, pos, ee_quat if ee_quat is not None else quat)
+        poses = getattr(self, "_scene_prop_poses", {})
+        poses[self._grasp_prop] = (pos, ee_quat if ee_quat is not None else quat)
+        self._pending_gz_prop_sync.add(str(self._grasp_prop))
 
     def _get_ee_pose(self) -> tuple[np.ndarray, np.ndarray | None]:
         drivers = getattr(self, "_drivers", {})
@@ -234,6 +323,15 @@ class ROS2GazeboBackend(ROS2RealBackend):
         return f"{ns}/{raw.lstrip('/')}"
 
     @classmethod
+    def _depth_topic_from_cfg(cls, namespace: str, cfg: dict) -> str | None:
+        depth_val = cfg.get("depth")
+        if depth_val in (False, None, "false"):
+            return None
+        if depth_val in (True, "true"):
+            return cls._qualify_topic(namespace, cfg.get("depth_topic", "depth/image_raw"))
+        return cls._qualify_topic(namespace, depth_val)
+
+    @classmethod
     def _image_topics_from_sensor_config(cls, robot_id: str, sensors_cfg) -> list[str]:
         if not isinstance(sensors_cfg, list):
             return []
@@ -242,10 +340,12 @@ class ROS2GazeboBackend(ROS2RealBackend):
         for item in sensors_cfg:
             if not isinstance(item, dict):
                 continue
-            for key in ("rgb", "depth"):
-                topic = cls._qualify_topic(namespace, item.get(key))
-                if topic:
-                    out.append(topic)
+            topic = cls._qualify_topic(namespace, item.get("rgb"))
+            if topic:
+                out.append(topic)
+            depth_topic = cls._depth_topic_from_cfg(namespace, item)
+            if depth_topic:
+                out.append(depth_topic)
         return list(dict.fromkeys(out))
 
     @classmethod
@@ -255,10 +355,12 @@ class ROS2GazeboBackend(ROS2RealBackend):
         if not isinstance(namespace, str) or not namespace.strip():
             namespace = f"/{robot_id}" if robot_id else ""
         out: list[str] = []
-        for key in ("rgb", "depth"):
-            topic = cls._qualify_topic(namespace, cfg.get(key))
-            if topic:
-                out.append(topic)
+        topic = cls._qualify_topic(namespace, cfg.get("rgb"))
+        if topic:
+            out.append(topic)
+        depth_topic = cls._depth_topic_from_cfg(namespace, cfg)
+        if depth_topic:
+            out.append(depth_topic)
         return list(dict.fromkeys(out))
 
     @classmethod
@@ -282,6 +384,16 @@ class ROS2GazeboBackend(ROS2RealBackend):
             namespace = f"/{robot_id}" if robot_id else ""
         rel = cfg.get("imu_topic") or cfg.get("topic") or "imu"
         return cls._qualify_topic(namespace, rel)
+
+    @staticmethod
+    def _default_gz_transport_node():
+        for module_name in ("gz.transport13", "gz.transport12", "gz.transport"):
+            try:
+                module = __import__(module_name, fromlist=["Node"])
+                return module.Node()
+            except Exception:
+                continue
+        return None
 
     @classmethod
     def _wrench_topic_from_sensor_object(cls, robot_id: str | None, sensor: "ISensor") -> str | None:

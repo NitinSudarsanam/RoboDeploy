@@ -152,12 +152,52 @@ RoboDeploy can **optionally** launch Gazebo Harmonic (`gz sim`) for you when usi
 Prereqs (high level):
 
 - `gz` available on PATH (Gazebo Harmonic)
-- `ros_gz_bridge` installed (for `/clock` and additional bridges)
-- a `ros2_control` setup in your world that exposes `/<robot_id>/joint_states` and a controller command topic
+- `ros_gz_bridge` installed (for `/clock`, images, IMU, wrench bridges)
+- `ros_gz_sim` for URDF spawn (`ros2 run ros_gz_sim create`)
+- `gz_ros2_control` + `ros2_control` controllers (`joint_state_broadcaster`, `joint_trajectory_controller`)
+- Optional Pinocchio for Cartesian reach on URDF: `pip install -e ".[kinematics]"` (`pin` package on Linux)
 
-Canonical example:
+Bundled Kuka URDF with `ros2_control` lives at
+`robodeploy/description/kuka/assets/urdf/kuka.urdf` (used automatically by `KukaDescription`).
 
-- [examples/user_kuka_sinusoid/run_gazebo.py](../examples/user_kuka_sinusoid/run_gazebo.py)
+Canonical examples:
+
+- [examples/user_kuka_sinusoid/run_gazebo.py](../examples/user_kuka_sinusoid/run_gazebo.py) — sinusoid joint motion
+- [examples/kuka_ft_imu_pick_gazebo/run_gazebo.py](../examples/kuka_ft_imu_pick_gazebo/run_gazebo.py) — multimodal pick-place (RGB-D + FT + IMU + contact + prop_pose)
+
+Live sensor CI gate (Linux):
+
+```bash
+ROBODEPLOY_LIVE_GAZEBO=1 pytest tests/test_live_gazebo_sensors.py -q
+```
+
+**Multimodal pick-place demo** (Linux + GUI or headless):
+
+```bash
+pip install -e ".[kinematics]"   # Pinocchio IK for reach on URDF
+python -m examples.kuka_ft_imu_pick_gazebo.run_gazebo
+```
+
+Expected `obs` keys after reset: `images`, `ft_forces`, `imu_angular_velocity`, `contact_state`, `objects`.
+Controllers from `gz_ros2_control` publish at the **root** namespace (`/joint_states`, `/joint_trajectory_controller/joint_trajectory`).
+`KukaDescription.gazebo_ros2_extra_config()` sets absolute topics so drivers do not double-prefix `/robot0//joint_states`.
+
+Verify on Linux:
+
+```bash
+ros2 topic list | grep joint
+ros2 topic echo /joint_states --once
+ros2 control list
+```
+
+Troubleshooting:
+
+- **No joint states / arm frozen** — confirm `/joint_states` is publishing (not only `/robot0/joint_states`). Check `joint_state_broadcaster` is active.
+- **JTC deaf** — echo `/joint_trajectory_controller/joint_trajectory` while stepping; commands should appear.
+- **FT never triggers grasp** — tune `force_threshold` in `kuka_ft_imu_pick_gazebo` preset; arm links need URDF `<collision>` (bundled in `kuka.urdf`).
+- **Carry invisible** — Gazebo `follow` mode uses kinematic bookkeeping + `set_pose`; weld grasp is not supported. Cube may clip through gripper in GUI.
+
+**Limitations:** single-robot Gazebo (one URDF spawn); multi-robot Gazebo is not supported yet.
 
 The example uses:
 

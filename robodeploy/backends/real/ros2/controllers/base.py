@@ -83,6 +83,16 @@ class ControllerConfig:
     joint_velocity_limits: Optional[tuple[float, ...]] = None
 
 
+def resolve_ros_topic(namespace: str, topic: str) -> str:
+    """Join namespace + topic without double slashes; absolute topics pass through."""
+    t = str(topic).strip()
+    if t.startswith("/"):
+        return t
+    ns = str(namespace).strip().rstrip("/")
+    rel = t.lstrip("/")
+    return f"{ns}/{rel}" if ns else f"/{rel}"
+
+
 @runtime_checkable
 class IControllerAdapter(Protocol):
     """Controller-family adapter surface used by ROS2Backend."""
