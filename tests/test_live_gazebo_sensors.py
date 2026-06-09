@@ -90,7 +90,9 @@ class GazeboSensorOfflineTests(unittest.TestCase):
             kinds = {type(s) for s in sensors}
             self.assertIn(Ros2RgbdCameraISensor, kinds)
             self.assertIn(Ros2WrenchISensor, kinds)
-            self.assertIn("pick_place", env.robots[0].tasks)
+            self.assertGreaterEqual(len(env.robots[0].tasks), 1)
+            task = next(iter(env.robots[0].tasks.values()))
+            self.assertEqual(task.task.__class__.__name__, "PickPlaceTask")
         finally:
             env.close()
 
