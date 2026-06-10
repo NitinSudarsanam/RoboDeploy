@@ -40,12 +40,22 @@ def _reach_target_mujoco_env_factory(*, max_episode_steps: int = 300, seed: int 
     return GymRoboEnv(robo, max_episode_steps=max_episode_steps)
 
 
+def _kuka_pick_mujoco_env_factory(*, max_episode_steps: int = 1000, seed: int = 0):
+    del seed
+    from robodeploy.training.gym_register import make_kuka_pick_mujoco
+
+    return make_kuka_pick_mujoco(max_episode_steps=max_episode_steps)
+
+
 def _make_env_factory(
     backend: str,
     *,
+    preset: str = "",
     max_episode_steps: int,
     seed: int,
 ) -> Callable[[], Any]:
+    if preset == "kuka_pick_mujoco":
+        return partial(_kuka_pick_mujoco_env_factory, max_episode_steps=max_episode_steps, seed=seed)
     if backend == "dummy":
         from robodeploy.training.gym_register import reach_target_dummy_gym_env_factory
 
@@ -112,6 +122,11 @@ class EvalCheckpointCallback:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Train PPO on reach_target (dummy or MuJoCo).")
     parser.add_argument("--backend", choices=("dummy", "mujoco"), default="dummy")
+    parser.add_argument(
+        "--preset",
+        default="",
+        help="Example preset (e.g. kuka_pick_mujoco); overrides --backend when set.",
+    )
     parser.add_argument("--total-steps", type=int, default=500_000)
     parser.add_argument("--n-envs", type=int, default=16)
     parser.add_argument("--rollout-steps", type=int, default=2048)
@@ -126,6 +141,7 @@ def main() -> int:
     checkpoint_out = Path(args.checkpoint_out or log_dir / "ppo_reach_best.pt")
     env_fn = _make_env_factory(
         args.backend,
+        preset=str(args.preset or ""),
         max_episode_steps=int(args.max_episode_steps),
         seed=int(args.seed),
     )
@@ -171,6 +187,7 @@ def main() -> int:
 
     summary = {
         "backend": args.backend,
+        "preset": str(args.preset or "") or None,
         "total_steps": int(args.total_steps),
         "n_envs": int(args.n_envs),
         "best_checkpoint": str(checkpoint_out),

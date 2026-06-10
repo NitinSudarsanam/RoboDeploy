@@ -65,6 +65,7 @@ obs = [
 dev = [
   "build",
   "pytest",
+  "pytest-rerunfailures>=14.0",
   "jax[cpu]",
   "pyyaml",
   "h5py",
@@ -134,5 +135,6 @@ testpaths = ["tests"]
 markers = [
   "hardware: tests that require physical robot hardware",
   "slow: long-running training integration tests (SB3 100k, PPO reach_target)",
+  "optional_nightly: long proxy runs mirrored in ppo-nightly.yml (skip locally unless needed)",
   "live_gazebo: live Gazebo + ROS2 tests (ROBODEPLOY_LIVE_GAZEBO=1, Linux CI)",
 ]

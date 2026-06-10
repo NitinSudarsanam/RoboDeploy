@@ -385,7 +385,7 @@ class RoboEnv:
 
                 return load_policy_from_ref(ref, config=kwargs or {})
             PolicyClass = get_policy(ref)
-            return PolicyClass(**(kwargs or {}))
+            return PolicyClass(config=kwargs or {})
         obj = cls._instantiate_component(value, kwargs)
         if not isinstance(obj, IPolicy):
             raise TypeError("policy must be a registry name, policy class, or IPolicy instance.")
