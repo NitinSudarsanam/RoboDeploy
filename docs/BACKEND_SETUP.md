@@ -384,6 +384,54 @@ backend_kwargs={"config": {
 }}
 ```
 
+### Isaac Sim self-hosted CI {#isaac-sim-self-hosted-ci}
+
+GitHub-hosted `ubuntu-latest` runners have **no NVIDIA GPU**. The
+`isaacsim-smoke` job exercises mocked import/parity tests only
+(`continue-on-error: true`). Live Kit runtime validation requires a
+**self-hosted runner** with GPU access.
+
+**Runner requirements** (mirrors `.github/workflows/test.yml` `isaacsim-gpu-live`):
+
+| Requirement | Notes |
+|-------------|-------|
+| NVIDIA GPU + driver | Kit renderer and physics need CUDA-capable hardware |
+| `nvidia-container-toolkit` | Required for Docker-based Isaac Sim images |
+| Isaac Sim 4.1+ | Native install **or** `nvcr.io/nvidia/isaac-sim:4.1.0` container |
+| Kit Python runtime | `isaacsim.simulation_app.SimulationApp` importable |
+
+**Enable GPU smoke on your runner**
+
+1. Register a self-hosted runner with labels: `self-hosted`, `gpu`, `isaacsim`.
+2. In `.github/workflows/test.yml`, change `isaacsim-gpu-live` to:
+
+   ```yaml
+   isaacsim-gpu-live:
+     runs-on: [self-hosted, gpu, isaacsim]
+   ```
+
+3. Replace the blocker `echo` step with a headless smoke invocation (native or container).
+
+**Manual smoke (adopter workstation)**
+
+Run with Isaac Sim's Kit Python, not system `python`:
+
+```bash
+# Native install (Linux)
+/path/to/isaac-sim/python.sh scripts/isaacsim_headless_smoke.py
+
+# Docker (GPU host with nvidia-container-toolkit)
+docker run --gpus all -it --rm \
+  -v "$PWD:/workspace" -w /workspace \
+  nvcr.io/nvidia/isaac-sim:4.1.0 \
+  ./python.sh scripts/isaacsim_headless_smoke.py
+```
+
+Expected: `isaacsim_headless_smoke: OK (reset + 1 physics step)` and exit 0.
+Capture output in `docs/isaacsim_gpu_smoke_log.example.txt` for org maintainers.
+
+Mocked parity remains the upstream merge gate; GPU smoke is manual evidence for adopters.
+
 ---
 
 ## Live sensor CI (GitHub Actions)

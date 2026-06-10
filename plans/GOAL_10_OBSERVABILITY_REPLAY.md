@@ -371,7 +371,7 @@ robodeploy manifest show runs/<name>/manifest.json
 - [x] `robodeploy manifest show runs/X/manifest.json` displays human-readable run.
 - [x] Trajectory checkpoint format for Goal 11 (`robodeploy/observability/trajectory_checkpoint.py`, `tests/test_trajectory_checkpoint.py`).
 - [x] EvalReport uses Goal 10 `RunManifest` — no duplicate type (`tests/test_eval_runmanifest.py`).
-- [ ] D9 Dashboard — **deferred** (`robodeploy/observability/DASHBOARD_DEFERRAL.md`).
+- [ ] D9 Dashboard — **deferred** (`robodeploy/observability/DASHBOARD_DEFERRAL.md`). Wave 2 sign-off: 2026-06-09.
 
 ## Dependencies
 

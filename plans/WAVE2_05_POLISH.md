@@ -126,3 +126,26 @@ Three **non-blocking but credibility** gaps remain after wave 1 integration:
 | PR parity | `pytest tests/test_backend_parity.py -q` | Pass |
 | GPU manual | `python scripts/isaacsim_headless_smoke.py` on self-hosted runner | Pass (documented) |
 | Dashboard | N/A if defer reaffirmed | Sign-off in deferral doc |
+
+## Wave 2 closeout (2026-06-09)
+
+**Decision**: Defer learned-policy LOC refactor; reaffirm dashboard deferral; document Isaac GPU playbook (stub). No behavior-changing refactors in this wave.
+
+### Learned policies (GOAL 09)
+
+- LOC ≤50 per shim **deferred** — current 56 / 86 / 69 lines (`robomimic.py` / `diffusion.py` / `vla.py`).
+- Supporting modules (`loader.py`, `helpers.py`, `factory.py`, `adapter.py`, `negotiation.py`) already extracted.
+- GOAL 09 LOC checkbox stays `[ ]`; revisit when helper extraction can move queueing/camera/heuristic paths without test changes.
+
+### Dashboard (GOAL 10)
+
+- D9 **reaffirmed deferred** 2026-06-09 (`robodeploy/observability/DASHBOARD_DEFERRAL.md`).
+- JSONL + `robodeploy logs tail/summary` + W&B/TensorBoard/MLflow sinks suffice for wave 2.
+- GOAL 10 D9 checkbox stays `[ ]` with wave-2 sign-off date.
+
+### Isaac Sim (GOAL 06)
+
+- Mocked CI remains merge gate (`isaacsim-smoke`).
+- GPU live path documented: `docs/BACKEND_SETUP.md#isaac-sim-self-hosted-ci`.
+- `scripts/isaacsim_headless_smoke.py` + `docs/isaacsim_gpu_smoke_log.example.txt` added for self-hosted adopters.
+- EE/torque obs fixes and full GOAL 06 parity (USD, multi-robot, IMU) **deferred** to follow-up.
