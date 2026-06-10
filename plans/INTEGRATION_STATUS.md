@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-09 on branch `feat/plans-2-3-integration-core`.
 
-What presets and benchmarks claim vs what CI actually exercises. **611 tests passed** locally with `pytest -m "not hardware"` (17 skipped).
+What presets and benchmarks claim vs what CI actually exercises. **619 tests passed** locally with `pytest -m "not hardware"` (19 skipped).
 
 ## CI jobs → what they prove
 
