@@ -34,6 +34,24 @@ class EnvEstopTests(unittest.TestCase):
         self.assertTrue(info.extra.get("safety", {}).get("tripped", False))
         self.assertIsNotNone(obs.joint_positions)
 
+    def test_emergency_stop_holds_last_position(self):
+        backend = DummyBackend()
+        robot = Robot(
+            robot_id="robot0",
+            description=DummyRobot(),
+            tasks={"task0": RobotTask(task=DummyTask(), policies={"p": DummyPolicy(0.0)})},
+        )
+        env = RoboEnv(backend=backend, robots=[robot])
+        env.reset()
+        env.step(Action(joint_positions=jnp.asarray([0.3, 0.4], dtype=jnp.float32)))
+        hold_before = backend.last_actions["robot0"]
+        env.emergency_stop("hold-test")
+        hold_after = backend.last_actions["robot0"]
+        self.assertIsNotNone(hold_after.joint_positions)
+        sent = jnp.asarray(hold_after.joint_positions, dtype=jnp.float32)
+        self.assertAlmostEqual(float(sent[0]), float(hold_before.joint_positions[0]), places=3)
+        env.close()
+
     def test_safety_payload_on_normal_step(self):
         robot = Robot(
             robot_id="robot0",
