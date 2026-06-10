@@ -395,6 +395,9 @@ class MuJoCoBackend(BackendBase):
                 continue
             for i, addr in enumerate(state.qpos_addr):
                 self._data.qpos[addr] = float(home[i])
+            for i, aid in enumerate(state.actuator_ids):
+                if i < len(home):
+                    self._data.ctrl[aid] = float(home[i])
 
     def _obs_for_robot(self, robot_id: str) -> Observation:
         state = self._robot_states[robot_id]

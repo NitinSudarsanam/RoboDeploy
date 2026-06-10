@@ -209,6 +209,15 @@ class ExampleEnvTests(unittest.TestCase):
         finally:
             env.close()
 
+    def test_joint_track_policy_reads_target_from_config_dict(self):
+        from examples.policies.joint_track import JointTrackPolicy
+
+        home = [0.0, -0.3, 0.0, -2.2, 0.0, 2.0, 0.8]
+        target = [0.15, -0.3, 0.0, -2.2, 0.0, 2.0, 0.8]
+        policy = JointTrackPolicy(config={"home_qpos": home, "target_qpos": target})
+        self.assertAlmostEqual(float(policy._target[0]), 0.15)
+        self.assertAlmostEqual(float(policy._home[1]), -0.3)
+
     def test_two_franka_pick_mujoco_runs_when_mujoco_installed(self):
         try:
             import mujoco  # noqa: F401
