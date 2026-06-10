@@ -6,9 +6,8 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - "benchmarks/leaderboard/submissions/**"
-      - "benchmarks/manipulation_v1/spec.json"
-      - "benchmarks/leaderboard/schema.json"
+      - "benchmarks/**"
+      - "robodeploy/evaluation/**"
 
 permissions:
   contents: read
