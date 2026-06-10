@@ -17,7 +17,16 @@ class GymRegisterTests(unittest.TestCase):
         register_robodeploy_envs()
         env = gym.make("robodeploy/kuka_pick_mujoco-v0")
         try:
-            env.reset()
+            obs, info = env.reset()
+            self.assertIn("proprio", obs)
+            self.assertIsInstance(info, dict)
+            action = env.action_space.sample()
+            obs, reward, terminated, truncated, info = env.step(action)
+            self.assertIn("proprio", obs)
+            self.assertIsInstance(reward, float)
+            self.assertIsInstance(terminated, bool)
+            self.assertIsInstance(truncated, bool)
+            self.assertIsInstance(info, dict)
         finally:
             env.close()
 
