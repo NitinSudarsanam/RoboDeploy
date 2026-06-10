@@ -312,6 +312,9 @@ class FailureClassifierTests(unittest.TestCase):
                 _traj([0.2, 0.5, 0.55, 0.56, 0.30, 0.28, 0.25]),
             ),
             (_metrics(success=True), "other", None),
+            (_metrics(collision_count=1, max_force_N=60.0), "collision", None),
+            (_metrics(distance_to_goal_final=0.06), "off_target", None),
+            (_metrics(metadata={"failure_category": "missed_grasp"}), "missed_grasp", None),
         ]
         clf = FailureClassifier()
         correct = sum(1 for metrics, label, traj in fixtures if clf.classify(metrics, traj) == label)
@@ -363,6 +366,27 @@ class RenderTests(unittest.TestCase):
             text = html.read_text(encoding="utf-8")
             self.assertIn(report.benchmark_name, text)
             self.assertIn("Success rate", text)
+
+    def test_html_report_embeds_recorded_video(self):
+        from robodeploy.evaluation.render import render_report
+        from robodeploy.evaluation.runner import run_eval
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            video = tmp_path / "ep_0.mp4"
+            video.write_bytes(b"tiny-mp4-fixture")
+            report = run_eval(
+                benchmark="manipulation_v1/reach_target",
+                policy="scripted",
+                backend="dummy",
+                episodes=2,
+                benchmarks_root=str(REPO_ROOT / "benchmarks"),
+            )
+            html = render_report(report, out=tmp_path / "with_video.html", video_paths=[str(video)])
+            self.assertIn("<video controls", html)
+            self.assertIn("data:video/mp4;base64,", html)
+            saved = (tmp_path / "with_video.html").read_text(encoding="utf-8")
+            self.assertIn("Episode videos", saved)
 
 
 class EvalCliTests(unittest.TestCase):
