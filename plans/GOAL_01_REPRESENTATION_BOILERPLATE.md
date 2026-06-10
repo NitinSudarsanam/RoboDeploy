@@ -407,14 +407,14 @@ YAML library with 4 presets (`minimal`, `bright`, `dark`, `randomized`). Referen
 
 ## Acceptance Criteria
 
-- [ ] `examples/policies/reach_pick_place.py` ≤ 50 lines (loads YAML).
-- [ ] `examples/tasks/pick_place.py` ≤ 25 lines (uses `PickPlaceTemplate`).
+- [x] `examples/policies/reach_pick_place.py` ≤ 50 lines (loads YAML; 36 lines).
+- [x] `examples/tasks/pick_place.py` ≤ 25 lines (uses `PickPlaceTemplate`; 17 lines).
 - [ ] A new prop = 1 line: `.add_box("X", size=..., pos=..., mass=...)`.
-- [ ] `robodeploy scene validate scene.yaml --backend mujoco` exits non-zero on bad scene.
+- [x] `robodeploy scene validate scene.yaml --backend mujoco` exits non-zero on bad scene (`tests/test_cli.py::test_scene_validate_bad_scene_exits_nonzero`).
 - [ ] `SceneIR` round-trips MuJoCo + Gazebo + Isaac with identical prop counts.
 - [ ] Reward function composable in ≤ 5 lines for pick-place.
 - [ ] All existing example scenes work unchanged (back-compat shim).
-- [ ] `tests/` adds: scene_ir, scene_validator, scene_builder, asset_loader, reach_dsl, policy_builder, reward_builder, task_templates.
+- [x] `tests/` adds: scene_ir, scene_validator, scene_builder, asset_loader, reach_dsl, policy_builder, reward_builder, task_templates.
 
 ## Risks
 
