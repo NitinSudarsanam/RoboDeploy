@@ -213,3 +213,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pytest tests/test_conda_recipe.py::CondaRecipeTests::test_meta_yaml_exists_and_lists_robodeploy tests/test_conda_recipe.py::CondaRecipeTests::test_recipe_source_install_imports -q
+
+  package-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Proves: sdist/wheel build, twine metadata check, wheel install + CLI entrypoint (no PyPI upload).
+      - name: Sdist and wheel build smoke
+        run: |
+          python -m pip install --upgrade pip
+          python -m pytest tests/test_package_build.py -q
