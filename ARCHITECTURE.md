@@ -4,9 +4,11 @@ Modular runtime for robot learning and deployment. Swap simulators, hardware sta
 and policies without rewriting user code. Primary goal: **sim-to-real transfer** through
 shared `Observation` / `Action` contracts.
 
-**Canonical references:** [CONTRACTS.md](CONTRACTS.md) (public API behavior),
+**Canonical references:** [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) (comprehensive guide),
+[CONTRACTS.md](CONTRACTS.md) (public API behavior),
+[docs/PLATFORM_STATUS.md](docs/PLATFORM_STATUS.md) (maturity and CI),
 [examples/README.md](examples/README.md) (demos and presets),
-[history.json](history.json) (current state and gaps).
+[plans/INTEGRATION_STATUS.md](plans/INTEGRATION_STATUS.md) (contributor audit).
 
 ---
 

@@ -1,6 +1,8 @@
 # Examples index
 
-For environment setup (MuJoCo / ROS2+RViz / Isaac Sim), see [docs/BACKEND_SETUP.md](../docs/BACKEND_SETUP.md).
+Runnable demos, YAML presets, and example tasks/policies. These live **outside** the `robodeploy` PyPI package — clone the repo or vendor this tree.
+
+**Also read:** [docs/PROJECT_GUIDE.md](../docs/PROJECT_GUIDE.md) (configuration paths), [docs/BACKEND_SETUP.md](../docs/BACKEND_SETUP.md) (MuJoCo / ROS2 / Gazebo / Isaac setup).
 
 ## Presets and example policies
 
