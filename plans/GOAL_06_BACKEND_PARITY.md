@@ -399,11 +399,11 @@ Same `SceneIR` (from Goal 1) loaded into MuJoCo, IsaacSim, Gazebo; assertions:
 - [ ] `.usd` asset loads without `NotImplementedError`.
 - [ ] IsaacSim multi-robot reach example runs 2 robots concurrently.
 - [ ] IsaacSim Docker CI job runs at least 1 smoke test.
-- [ ] Gazebo mesh prop loads from URDF mesh URI.
-- [ ] Gazebo capsule compound renders + collides.
-- [ ] `Ros2GazeboBackend.has_prop_contact(...)` returns true when ee touches prop.
-- [ ] Gazebo grasp follow mode tracks prop to gripper pose.
-- [ ] Gazebo procedural Perlin terrain renders.
+- [x] Gazebo mesh prop loads from URDF mesh URI.
+- [x] Gazebo capsule compound renders + collides.
+- [x] `Ros2GazeboBackend.has_prop_contact(...)` returns true when ee touches prop.
+- [x] Gazebo grasp follow mode tracks prop to gripper pose.
+- [x] Gazebo procedural Perlin terrain renders.
 - [ ] ROS2 `JointVelocityController.send_action(action)` publishes to controller topic.
 - [ ] `Action(joint_velocities=...)` accepted by ROS2 backend with velocity controller.
 - [ ] Gripper controller maps gripper=1.0 to close command.
