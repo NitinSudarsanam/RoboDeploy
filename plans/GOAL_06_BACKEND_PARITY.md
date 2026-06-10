@@ -404,9 +404,9 @@ Same `SceneIR` (from Goal 1) loaded into MuJoCo, IsaacSim, Gazebo; assertions:
 - [x] `Ros2GazeboBackend.has_prop_contact(...)` returns true when ee touches prop.
 - [x] Gazebo grasp follow mode tracks prop to gripper pose.
 - [x] Gazebo procedural Perlin terrain renders.
-- [ ] ROS2 `JointVelocityController.send_action(action)` publishes to controller topic.
-- [ ] `Action(joint_velocities=...)` accepted by ROS2 backend with velocity controller.
-- [ ] Gripper controller maps gripper=1.0 to close command.
+- [x] ROS2 `JointVelocityController.send_action(action)` publishes to controller topic (`tests/test_ros2_controllers_parity.py`).
+- [x] `Action(joint_velocities=...)` accepted by ROS2 backend with velocity controller (`tests/test_ros2_controllers_parity.py::test_ros2_backend_supported_action_spaces_include_velocity_and_effort`).
+- [x] Gripper controller maps gripper=1.0 to close command (`tests/test_ros2_controllers_parity.py::test_gripper_maps_close_command`).
 - [x] `SupportsGraspWeld` protocol matches MuJoCo, doesn't match Gazebo, doesn't match IsaacSim (`tests/test_backend_parity.py`).
 - [ ] `tests/test_backend_parity.py` SceneIR round-trip ≤ 1mm pose tolerance across MuJoCo/IsaacSim/Gazebo.
 
