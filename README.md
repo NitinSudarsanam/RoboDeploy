@@ -28,6 +28,30 @@ The same `RoboEnv` loop runs everywhere:
 reset → observe → (safety) → policy → (adapter) → step → reward / success
 ```
 
+```mermaid
+flowchart LR
+  subgraph user [User code]
+    Preset[Preset / from_config]
+    Robot[Robot + RobotTask]
+  end
+  subgraph runtime [RoboEnv]
+    Obs[ObsPipeline]
+    Safety[SafetyMonitor]
+    Policy[IPolicy]
+  end
+  subgraph backend [IBackend]
+    Sim[MuJoCo / Gazebo / Isaac]
+    HW[ROS2 real]
+  end
+  Preset --> Robot
+  Robot --> runtime
+  runtime --> backend
+  backend --> Obs
+  Obs --> Policy
+  Policy --> Safety
+  Safety --> backend
+```
+
 ---
 
 ## Features (v0.2)
@@ -67,6 +91,7 @@ python -m pip install -e .
 | `learned` | `pip install -e ".[learned]"` | HF hub + transformers policies |
 | `rl` | `pip install -e ".[rl]"` | Stable-Baselines3 smoke |
 | `teleop` | `pip install -e ".[teleop]"` | Keyboard / SpaceMouse / LeRobot (WIP) |
+| `obs` | `pip install -e ".[obs]"` | wandb, tensorboard, mlflow sinks |
 | `docs` | `pip install -e ".[docs]"` | MkDocs site build |
 
 **Recommended dev setup:**
@@ -99,22 +124,26 @@ python -m examples.cli run-episode --preset kuka_pick_mujoco --steps 50
 robodeploy eval --benchmark manipulation_v1/reach_target --backend dummy --episodes 5
 ```
 
----
-
-## Core API
-
-### Preset-based (recommended for demos)
+**Preset → env → step** (Python):
 
 ```python
 from examples.env_from_preset import env_from_preset
 
 env = env_from_preset("kuka_pick_mujoco")
 obs, info = env.reset()
-obs, reward, done, info = env.step()  # policy from preset runs if no action passed
+obs, reward, done, info = env.step()  # policy from preset when action is None
 env.close()
 ```
 
 Presets live in [`examples/config/presets.yaml`](examples/config/presets.yaml). They wire backend, task, policy, sensor rigs, and optional `obs_pipeline` / `custom_modules`.
+
+---
+
+## Core API
+
+### Preset-based (recommended for demos)
+
+See quick start above. Full preset catalog: [examples/README.md](examples/README.md).
 
 ### Programmatic
 
@@ -148,8 +177,9 @@ from robodeploy import RoboEnv, use
 use("my_project.components")
 env = RoboEnv.from_config({
     "backend": "mujoco",
-    "robots": [{"id": "robot0", "description": "franka", "task": "pick_place", "policy": "my_policy"}],
+    "robots": [{"id": "robot0", "description": "kuka", "task": "pick_place", "policy": "example_sensor_reach_pick"}],
     "sensor_rigs": [...],
+    "custom_modules": ["examples.tasks", "examples.policies"],
 })
 ```
 
@@ -164,9 +194,19 @@ See [CONTRACTS.md](CONTRACTS.md) for construction rules and [docs/PROJECT_GUIDE.
 | `robodeploy doctor` | Check MuJoCo, ROS2, Gazebo, torch, calibration dirs |
 | `robodeploy list-registry` | Backends, robots, tasks, policies, sensors |
 | `robodeploy run-episode --dummy` | Simulator-free smoke |
-| `robodeploy eval --benchmark ...` | Run manipulation_v1 benchmarks |
-| `robodeploy train bc` / `train ppo` | Train policies (dummy or preset backends) |
-| `robodeploy scaffold task` | Generate task/policy boilerplate |
+| `robodeploy export-episode --dummy` | Record dummy episode to JSONL/HDF5 |
+| `robodeploy eval --benchmark ...` | Run `manipulation_v1` benchmarks |
+| `robodeploy eval-compare` | Diff two eval JSON reports → HTML |
+| `robodeploy list-benchmarks` | List suites and tasks |
+| `robodeploy leaderboard submit/show` | Leaderboard JSON workflow |
+| `robodeploy train bc` / `train ppo` / `train eval` | Train or eval checkpoints |
+| `robodeploy scaffold task|policy|preset|...` | Generate boilerplate |
+| `robodeploy calibrate kinematic|extrinsic|handeye|system-id` | Calibration CLIs |
+| `robodeploy dr-sweep` / `transfer-eval` | Sim2real sweeps (dummy) |
+| `robodeploy safety check|test|status` | Safety monitor tooling |
+| `robodeploy serve-policy` | ZMQ/gRPC policy server |
+| `robodeploy config show|resolve|validate|diff` | Preset inspection |
+| `robodeploy assets list|resolve|verify` | Bundled asset helpers |
 | `python -m examples.cli run-episode --preset ...` | Run YAML presets from `examples/` |
 
 Full reference: [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md).
@@ -217,25 +257,92 @@ Expect `obs.images`, `obs.ft_forces`, `obs.imu_angular_velocity`, `obs.contact_s
 
 ---
 
+## Sensors
+
+Declare **`SensorRig`** entries in preset YAML or `from_config`. The registry resolves backend-appropriate `ISensor` implementations (not a simple sim/real flag).
+
+| Logical sensor | Typical mount | Observation fields |
+|----------------|---------------|-------------------|
+| `wrist_camera` | `ee_link` | `images`, `depths`, intrinsics/extrinsics |
+| `wrist_ft` | `ee_link` | `ft_forces`, `ft_torques` |
+| `wrist_imu` / `base_imu` | link | `imu_acceleration`, `imu_angular_velocity` |
+| `wrist_contact` | `ee_link` | `contact_state` |
+| `sim_prop_pose` | — | `objects` (example oracle; sim only) |
+
+`ObsPipeline` applies sync, noise (domain randomization), and transforms such as color-blob → `obs.objects`. Policies should consume **`obs.objects`** and camera data — not `backend.get_prop_pose()` in new code.
+
+Guide: [docs/SENSOR_INTEGRATION.md](docs/SENSOR_INTEGRATION.md). Audit checklist: [SENSOR_INTEGRATION_TODO.md](SENSOR_INTEGRATION_TODO.md).
+
+---
+
+## Safety
+
+`SafetyMonitor` runs before actions reach the backend on both `step()` and `reset_routine()` paths:
+
+- Workspace and slew-rate limits via robot description filters
+- Force, velocity, collision, and e-stop guards
+- `env.emergency_stop()` / `env.reset_safety()` for operator control
+
+```bash
+robodeploy safety check --preset kuka_pick_mujoco
+robodeploy safety test --dummy
+```
+
+Guide: [docs/SAFETY.md](docs/SAFETY.md).
+
+---
+
+## Benchmarks
+
+```bash
+robodeploy list-benchmarks
+robodeploy eval --benchmark manipulation_v1/reach_target --backend dummy --episodes 20 --output report.json
+robodeploy eval --benchmark manipulation_v1 --backend dummy --episodes 10 --output suite.json
+```
+
+Tier 1 `reach_target` is the primary live task. Tiers 2–8 are labeled `task_status: placeholder` in `benchmarks/manipulation_v1/spec.json` — see [benchmarks/README.md](benchmarks/README.md) before interpreting scores.
+
+---
+
 ## Project layout
 
 ```text
-robodeploy/           Installable package
-  backends/           MuJoCo, Gazebo, Isaac, ROS2, dummy
-  core/               Types, registry, sensor rigs, transforms
-  description/        Robot URDF/MJCF assets (Kuka, Franka, SO-101, …)
-  env.py              RoboEnv control loop
-  training/           Gym adapter, BC, PPO, datasets
-  evaluation/         Benchmark harness, metrics, reports
-  policies/learned/   BC, diffusion, VLA, robomimic adapters
-  safety/             SafetyMonitor and guards
-  observability/      Replay, manifests, seeding
-examples/             Presets, demo tasks/policies, examples.cli
-benchmarks/           manipulation_v1, sim2real suites
-tests/                ~620 tests (pytest -m "not hardware")
-docs/                 MkDocs guides and tutorials
-plans/                Goal plans + integration status (for contributors)
+robodeploy/              Installable package (see table below)
+examples/                Presets, demo tasks/policies, examples.cli (not on PyPI)
+benchmarks/              manipulation_v1, sim2real suites, leaderboard schema
+tests/                   Unit, smoke, hardware-gated tests
+docs/                    MkDocs guides and tutorials
+plans/                   Strategic goal plans + integration status
+docker/                  CPU image for CI smoke
+conda-recipe/            conda-forge recipe metadata
 ```
+
+### `robodeploy/` package map
+
+| Path | Purpose |
+|------|---------|
+| `env.py` | `RoboEnv` — episode loop, safety, obs validation |
+| `bridge.py` | `RoboBridge` — decoupled control vs inference loops (real hardware) |
+| `core/` | Types, registry, `Robot`/`RobotTask`, sensor rigs, scene validation |
+| `backends/` | MuJoCo, Gazebo, Isaac Sim, ROS2 RViz, real ROS2, dummy |
+| `description/` | Robot URDF/MJCF assets (Kuka, Franka, SO-101, …) |
+| `tasks/` | `TaskBase`, templates, domain randomization, success predicates |
+| `policies/` | Policy base, reach DSL, learned adapters, remote serving |
+| `sensors/` | Camera, FT, IMU, contact — sim and real drivers |
+| `obs_pipeline/` | Transforms, sync buffers, fusion |
+| `perception/` | Vision predicates and helpers |
+| `kinematics/` | MuJoCo IK, Pinocchio, policy IK attachment |
+| `training/` | Gym adapter, BC, PPO, datasets, `SubprocVecEnv` |
+| `evaluation/` | Benchmark harness, metrics, HTML reports, video |
+| `safety/` | `SafetyMonitor`, guards, violation types |
+| `sim2real/` | Calibration store, DR, transfer metrics |
+| `calibration/` | Kinematic, extrinsic, hand-eye, system-ID |
+| `teleop/` | Teleop session contract (keyboard stub; full IL WIP) |
+| `observability/` | Replay, manifests, seeding, health |
+| `ros2/` | `Ros2Runtime`, topic helpers, devtools |
+| `multirobot/` | Multi-arm scene helpers |
+| `viz/` | RViz markers and traces |
+| `testing/` | `DummyBackend`, dummy task/policy for smoke tests |
 
 `examples/` is **not** shipped as importable package data on PyPI; clone the repo or vendor presets for demos.
 
@@ -253,6 +360,8 @@ plans/                Goal plans + integration status (for contributors)
 | [docs/PLATFORM_STATUS.md](docs/PLATFORM_STATUS.md) | What CI proves vs what is planned |
 | [docs/RELEASE.md](docs/RELEASE.md) | Versioning, PyPI, PR checklist |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
+| [BROAD_GOALS.md](BROAD_GOALS.md) | Strategic goals index (see plans/ for current status) |
+| [plans/INTEGRATION_STATUS.md](plans/INTEGRATION_STATUS.md) | CI ↔ preset honesty audit |
 
 **Build docs locally:**
 
@@ -268,8 +377,16 @@ mkdocs serve
 ```bash
 python -m pytest -m "not hardware" -q          # full suite (~620 tests)
 python -m pytest tests/training/ -q            # training only
+python -m pytest tests/test_cli.py tests/test_presets.py -q   # quick smoke
 python -m compileall robodeploy tests examples
 ```
+
+| Marker | Meaning |
+|--------|---------|
+| `hardware` | Real robot — skipped by default |
+| `slow` | PPO convergence — minutes |
+| `live_gazebo` | Linux + Gazebo (`ROBODEPLOY_LIVE_GAZEBO=1`) |
+| `optional_nightly` | 50k PPO proxy — mirrors `ppo-nightly.yml` |
 
 Hardware-gated tests: [tests/HARDWARE_TESTS.md](tests/HARDWARE_TESTS.md).
 
@@ -277,16 +394,15 @@ Hardware-gated tests: [tests/HARDWARE_TESTS.md](tests/HARDWARE_TESTS.md).
 
 ## Roadmap and honesty
 
-v0.2 delivers a credible integration core (~65% of strategic goals). Remaining work includes teleop/IL data collection, live Gazebo pick at ≥70% over 10 seeds, PyPI `v0.2.0` tag, Isaac GPU parity, and real-hardware benchmark automation.
+v0.2 on `main` delivers a credible integration core (~65% of strategic goals). Remaining work includes teleop/IL data collection, live Gazebo pick at ≥70% over 10 seeds, PyPI `v0.2.0` tag, Isaac GPU parity, and real-hardware benchmark automation.
 
 - Strategic plans: [plans/README.md](plans/README.md)
 - Wave 2 follow-ups: `plans/WAVE2_0N_*.md`
 - Contributor integration audit: [plans/INTEGRATION_STATUS.md](plans/INTEGRATION_STATUS.md)
+- Representation/sensor upgrade notes: [REPRESENTATION_UPGRADE_PLAN.md](REPRESENTATION_UPGRADE_PLAN.md), [SENSOR_INTEGRATION_TODO.md](SENSOR_INTEGRATION_TODO.md)
 
 ---
 
 ## Contributing
 
-Issues and PRs welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before large changes. Compare branch to `main`:
-
-https://github.com/RahulSajnani/RoboDeploy/compare/main...feat/plans-2-3-integration-core
+Issues and PRs welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before large changes.

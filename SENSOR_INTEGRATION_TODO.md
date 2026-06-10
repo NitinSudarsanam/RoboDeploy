@@ -1,6 +1,8 @@
 # Sensor Integration TODO
 
-Audit of sensor coverage across backends, policies, tasks. Status as of 2026-06-08.
+> **Maintained audit checklist.** User-facing guide: [docs/SENSOR_INTEGRATION.md](docs/SENSOR_INTEGRATION.md). Platform maturity: [docs/PLATFORM_STATUS.md](docs/PLATFORM_STATUS.md). Contracts: [CONTRACTS.md](CONTRACTS.md#sensor-contract).
+
+Audit of sensor coverage across backends, policies, tasks. Status as of 2026-06-08; software deliverables marked complete below.
 
 ## Status Summary
 

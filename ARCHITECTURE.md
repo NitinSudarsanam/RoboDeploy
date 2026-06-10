@@ -201,14 +201,50 @@ use("examples.tasks")   # registers @register_task, @register_policy, etc.
 
 ```text
 robodeploy/
-  backends/     Simulator and ROS2 adapters
-  core/         Types, registry, robot/task model, sensor_rig
-  description/  Robot assets and metadata
-  policies/     Policy base, VLA, diffusion, remote serving
-  sensors/      Camera, FT, IMU implementations
-  tasks/        TaskBase, domain randomization
-  viz/          RViz markers and traces
-  ros2/         Runtime, topic helpers, devtools
-examples/       Presets, catalog, demo tasks/policies, examples.cli
-tests/          Unit, smoke, hardware-gated tests
+  env.py            RoboEnv episode loop
+  bridge.py         RoboBridge (control vs inference decoupling)
+  cli.py            robodeploy CLI entry point
+  backends/         MuJoCo, Gazebo, Isaac Sim, ROS2 RViz, real ROS2, dummy
+  core/             types, registry, Robot/RobotTask, sensor_rig, scene_validator
+  description/      URDF/MJCF assets per robot family
+  tasks/            TaskBase, templates, randomization, success_predicates
+  policies/         PolicyBase, reach_dsl, learned/, remote/
+  sensors/          camera, ft_sensor, imu, contact (sim/ and real/)
+  obs_pipeline/     ObsPipeline, transforms/, fusion
+  perception/         vision_predicates, color-blob helpers
+  kinematics/       mujoco_ik, pin_ik, policy_ik attachment
+  training/         gym_adapter, bc, ppo, dataset, parallel_vec_env
+  evaluation/       benchmark harness, metrics, render, video
+  safety/           SafetyMonitor, guards, violation types
+  sim2real/         calibration store, DR, transfer metrics
+  calibration/      kinematic, extrinsic, handeye, system_id
+  teleop/           session contract (keyboard stub; IL WIP)
+  observability/    replay, manifests, seeding, health, snapshots
+  ros2/             Ros2Runtime, adapters, devtools
+  multirobot/       multi-arm scene helpers
+  viz/              RViz markers and traces
+  testing/          DummyBackend, DummyTask, DummyPolicy
+  config/           env config parsing helpers
+  _assets/          bundled meshes, manifest SHA256
+examples/           presets, catalog, demo tasks/policies, examples.cli
+benchmarks/           manipulation_v1, sim2real, leaderboard
+tests/              unit, smoke, hardware-gated
+docs/               MkDocs site (PROJECT_GUIDE, tutorials, guides)
+plans/              GOAL_0N + WAVE2 plans, INTEGRATION_STATUS
 ```
+
+### Module responsibilities (quick reference)
+
+| Module | Owns | Does not own |
+|--------|------|--------------|
+| `backends/` | Physics step, sensor read merge, scene build | Task rewards, policy logic |
+| `core/` | Shared types, registry, robot model | Simulator SDK calls |
+| `description/` | Assets, joint names, limits, launch metadata | Opening simulators or serial ports |
+| `tasks/` | Reward/success, scene props, obs_spec | Backend I/O |
+| `policies/` | `get_action`, action_space, bind_runtime | Physics |
+| `sensors/` | `ISensor.read()` → `SensorData` | Policy decisions |
+| `obs_pipeline/` | Transforms before policy | Backend physics |
+| `safety/` | Pre-step action checks | Post-contact physics repair |
+| `training/` | BC/PPO loops, Gym registration | Benchmark HTML (see `evaluation/`) |
+| `evaluation/` | `robodeploy eval`, reports, leaderboard | Training loss |
+| `bridge.py` | Fast control loop + trajectory buffer | Single-process `RoboEnv.step` |

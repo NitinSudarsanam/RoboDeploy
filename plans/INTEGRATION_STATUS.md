@@ -1,6 +1,6 @@
 # Integration status (honest)
 
-Last updated: 2026-06-10 on branch `feat/plans-2-3-integration-core`.
+Last updated: 2026-06-10 on branch **`main`** (Wave 2 integration merged).
 
 What presets and benchmarks claim vs what CI actually exercises. Run `pytest -m "not hardware"` for current counts.
 

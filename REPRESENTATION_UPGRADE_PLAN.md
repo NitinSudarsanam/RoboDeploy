@@ -1,6 +1,8 @@
 # Representation Upgrade Plan
 
-Plan to upgrade policies, tasks, and scene/3D env representations. Goal: complete, validated, easy for users. State as of 2026-06-08.
+> **Planning doc (2026-06-08).** Partially implemented on `main` v0.2: `robodeploy/policies/reach_dsl.py`, `robodeploy/core/policy_config.py`, `robodeploy/scene_builder.py`, `robodeploy scaffold`, `robodeploy lint`, `robodeploy scene validate`. Remaining items below are roadmap, not missing modules. See [plans/GOAL_01_REPRESENTATION_BOILERPLATE.md](plans/GOAL_01_REPRESENTATION_BOILERPLATE.md) and [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md).
+
+Plan to upgrade policies, tasks, and scene/3D env representations. Goal: complete, validated, easy for users.
 
 ## Pain Point Summary
 

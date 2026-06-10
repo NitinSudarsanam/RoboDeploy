@@ -26,6 +26,14 @@ nav:
   - Home: index.md
   - Project Guide: PROJECT_GUIDE.md
   - Platform status: PLATFORM_STATUS.md
+  - Repository:
+      - README (GitHub): https://github.com/RahulSajnani/RoboDeploy/blob/main/README.md
+      - Architecture: https://github.com/RahulSajnani/RoboDeploy/blob/main/ARCHITECTURE.md
+      - Contracts: https://github.com/RahulSajnani/RoboDeploy/blob/main/CONTRACTS.md
+      - Contributing: https://github.com/RahulSajnani/RoboDeploy/blob/main/CONTRIBUTING.md
+      - Examples index: https://github.com/RahulSajnani/RoboDeploy/blob/main/examples/README.md
+      - Benchmarks: https://github.com/RahulSajnani/RoboDeploy/blob/main/benchmarks/README.md
+      - Integration status: https://github.com/RahulSajnani/RoboDeploy/blob/main/plans/INTEGRATION_STATUS.md
   - Getting started:
       - Tutorial 1 — Hello RoboDeploy: tutorials/01_getting_started.md
       - Tutorial 2 — Teleop: tutorials/02_teleop.md

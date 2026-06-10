@@ -425,7 +425,59 @@ Wave 2 plans: `plans/WAVE2_0N_*.md`.
 
 ---
 
-## 21. Documentation index
+## 21. Package modules (`robodeploy/`)
+
+Every installable subpackage and its role:
+
+| Module | Responsibility |
+|--------|----------------|
+| `env.py` | `RoboEnv` — reset/step/close, safety, obs validation, demo recording |
+| `bridge.py` | `RoboBridge` — separate control and inference processes for real hardware |
+| `vec_env.py` | Sequential vector env wrapper (training uses `training/parallel_vec_env.py` for parallelism) |
+| `core/` | `Observation`, `Action`, registry, `Robot`, `SensorRig`, scene validation |
+| `backends/` | `IBackend` implementations: MuJoCo, Gazebo, Isaac, ROS2, dummy |
+| `description/` | `RobotDescription` assets: Kuka, Franka, SO-101, user_kuka, … |
+| `tasks/` | `TaskBase`, templates (`pick_place`, `pour`, `insertion`), `randomization.py` |
+| `policies/` | `PolicyBase`, `reach_dsl`, `learned/`, `remote/` serving |
+| `sensors/` | `ISensor` drivers: camera, FT, IMU, contact (`sim/` + `real/`) |
+| `obs_pipeline/` | `ObsPipeline`, sync buffers, `transforms/` (noise, fusion, color blob) |
+| `perception/` | Vision predicates (`vision_predicates.py`) |
+| `kinematics/` | MuJoCo damped LS, Pinocchio, `attach_policy_ik` |
+| `training/` | Gym adapter, BC, PPO, datasets, `SubprocVecEnv` |
+| `evaluation/` | `robodeploy eval` harness, HTML reports, leaderboard helpers |
+| `safety/` | `SafetyMonitor`, workspace/force/velocity/collision/e-stop guards |
+| `sim2real/` | Calibration store, latency injection, transfer evaluator |
+| `calibration/` | CLI-backed kinematic, extrinsic, hand-eye, system-ID |
+| `teleop/` | Session contract; keyboard stub (`pip install -e ".[teleop]"`) |
+| `observability/` | Episode export, run manifests, deterministic seeding, health |
+| `ros2/` | `Ros2Runtime`, namespaced topics, dev fake joint sim |
+| `multirobot/` | Multi-arm MJCF/scene helpers |
+| `viz/` | RViz marker publishers |
+| `testing/` | `DummyBackend`, `DummyTask`, `DummyPolicy` for CI smoke |
+| `config/` | Env config parsing used by `from_config` |
+| `presets_loader.py` | Shared preset YAML loading (library side; demo presets in `examples/`) |
+| `scaffold.py` | `robodeploy scaffold` code generation |
+| `builtins.py` | Built-in registry population |
+
+**Not in the package:** `examples/` (demos), `benchmarks/` (eval specs), `plans/` (roadmap).
+
+### Backend parity matrix
+
+| Capability | MuJoCo | Gazebo | Isaac Sim | ROS2 RViz | Real |
+|------------|--------|--------|-----------|-----------|------|
+| Physics step | Yes | Yes | Partial (mock CI) | Fake joint sim | ROS2 controllers |
+| RGB-D camera | Yes | Yes | Yes | Yes | RealSense / ROS |
+| FT sensor | Yes | Yes | Yes | Yes | ATI / ROS wrench |
+| IMU | Yes | Yes | Yes | Yes | ROS / Xsens stub |
+| Contact | Yes | Yes | — | FT threshold | FT threshold |
+| Multi-robot | Yes | Single-arm only | Partial | Per-robot topics | Per-robot |
+| Grasp assist (examples) | follow/contact/weld | kinematic bookkeeping | follow | — | — |
+
+Details: [BACKEND_SETUP.md](BACKEND_SETUP.md), [../plans/INTEGRATION_STATUS.md](../plans/INTEGRATION_STATUS.md).
+
+---
+
+## 22. Documentation index
 
 | Doc | Topic |
 |-----|-------|
@@ -434,7 +486,11 @@ Wave 2 plans: `plans/WAVE2_0N_*.md`.
 | [POLICY_CREATION.md](POLICY_CREATION.md) | Scripted policies |
 | [SCENE_DEFINITION.md](SCENE_DEFINITION.md) | Props and Scene IR |
 | [SENSOR_INTEGRATION.md](SENSOR_INTEGRATION.md) | Rigs and pipelines |
+| [TRAINING.md](TRAINING.md) | BC/PPO production paths |
 | [COOKBOOK.md](COOKBOOK.md) | Recipes |
 | [CLI_REFERENCE.md](CLI_REFERENCE.md) | All commands |
 | [API_REFERENCE.md](API_REFERENCE.md) | Module index |
 | [MIGRATION_0.2.md](MIGRATION_0.2.md) | Upgrade from 0.1.x |
+| [../ARCHITECTURE.md](../ARCHITECTURE.md) | Design principles |
+| [../CONTRACTS.md](../CONTRACTS.md) | Public API contracts |
+| [../benchmarks/README.md](../benchmarks/README.md) | Eval suites |

@@ -1,6 +1,6 @@
 # Platform status (v0.2)
 
-Honest summary of what RoboDeploy v0.2 delivers today, what CI proves, and what remains planned. Updated for branch `feat/plans-2-3-integration-core`.
+Honest summary of what RoboDeploy v0.2 delivers today, what CI proves, and what remains planned. Updated for **`main`** (Wave 2 integration merged, 2026-06-10).
 
 For contributor-level job tables, see [plans/INTEGRATION_STATUS.md](../plans/INTEGRATION_STATUS.md).
 

@@ -15,6 +15,16 @@ robodeploy run-episode --dummy --steps 5
 python -m examples.cli run-episode --preset kuka_pick_mujoco --steps 50
 ```
 
+Preset → env → step in Python:
+
+```python
+from examples.env_from_preset import env_from_preset
+env = env_from_preset("kuka_pick_mujoco")
+obs, info = env.reset()
+obs, reward, done, info = env.step()
+env.close()
+```
+
 ---
 
 ## Documentation map
@@ -62,17 +72,18 @@ python -m examples.cli run-episode --preset kuka_pick_mujoco --steps 50
 | [Migration 0.2](MIGRATION_0.2.md) | Upgrade from 0.1.x |
 | [Release](RELEASE.md) | Versioning and PyPI |
 
-### Repository docs (outside MkDocs root)
+### Repository docs (repo root — not duplicated in this site)
 
 | Doc | Topic |
 |-----|-------|
-| [README.md](../README.md) | Repo landing page |
-| [ARCHITECTURE.md](../ARCHITECTURE.md) | Design principles |
-| [CONTRACTS.md](../CONTRACTS.md) | Public API contracts |
-| [examples/README.md](../examples/README.md) | Demos and presets |
-| [benchmarks/README.md](../benchmarks/README.md) | Eval suites |
-| [CONTRIBUTING.md](../CONTRIBUTING.md) | Contributor guide |
-| [plans/INTEGRATION_STATUS.md](../plans/INTEGRATION_STATUS.md) | CI ↔ claims audit |
+| [README.md](https://github.com/RahulSajnani/RoboDeploy/blob/main/README.md) | Repo landing, install, quickstart |
+| [ARCHITECTURE.md](https://github.com/RahulSajnani/RoboDeploy/blob/main/ARCHITECTURE.md) | Layer diagram, design principles |
+| [CONTRACTS.md](https://github.com/RahulSajnani/RoboDeploy/blob/main/CONTRACTS.md) | Public API contracts |
+| [CONTRIBUTING.md](https://github.com/RahulSajnani/RoboDeploy/blob/main/CONTRIBUTING.md) | Contributor guide, test markers |
+| [examples/README.md](https://github.com/RahulSajnani/RoboDeploy/blob/main/examples/README.md) | Preset catalog, runnable demos |
+| [benchmarks/README.md](https://github.com/RahulSajnani/RoboDeploy/blob/main/benchmarks/README.md) | Eval suites |
+| [plans/INTEGRATION_STATUS.md](https://github.com/RahulSajnani/RoboDeploy/blob/main/plans/INTEGRATION_STATUS.md) | CI ↔ claims audit |
+| [BROAD_GOALS.md](https://github.com/RahulSajnani/RoboDeploy/blob/main/BROAD_GOALS.md) | Strategic goals index |
 
 ---
 

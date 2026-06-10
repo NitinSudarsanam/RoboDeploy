@@ -1,6 +1,6 @@
 # Contributing
 
-RoboDeploy is in active development (v0.2 beta). Keep changes small enough to review and preserve the main boundary: user code builds a `Robot` and `RoboEnv`; backends adapt that contract to a simulator or real hardware.
+RoboDeploy is in active development (v0.2 beta on `main`). Keep changes small enough to review and preserve the main boundary: user code builds a `Robot` and `RoboEnv`; backends adapt that contract to a simulator or real hardware.
 
 **Read first:**
 
@@ -11,6 +11,44 @@ RoboDeploy is in active development (v0.2 beta). Keep changes small enough to re
 | [CONTRACTS.md](CONTRACTS.md) | Public API contracts |
 | [plans/INTEGRATION_STATUS.md](plans/INTEGRATION_STATUS.md) | What CI proves vs claims |
 | [history.json](history.json) | Machine-readable gap list |
+
+## Repository layout
+
+```text
+robodeploy/       Installable library — see module table below
+examples/         Presets, demo tasks/policies (not shipped on PyPI)
+benchmarks/       manipulation_v1, sim2real, leaderboard schema
+tests/            pytest suite (~620 tests, `not hardware`)
+docs/             MkDocs source (guides, tutorials)
+plans/            GOAL_0N + WAVE2 strategic plans
+.github/workflows/  CI: test.yml, benchmark.yml, docs.yml, publish.yml
+docker/           Dockerfile.cpu for smoke
+conda-recipe/     conda-forge metadata
+```
+
+### `robodeploy/` module layout
+
+| Directory | Add code here when… |
+|-----------|---------------------|
+| `backends/` | Integrating a simulator or ROS2 hardware stack |
+| `core/` | Shared types, registry, robot model, sensor rig |
+| `description/` | New robot URDF/MJCF assets and metadata |
+| `tasks/` | Reusable task base, templates, predicates (not one-off demos) |
+| `policies/` | Reusable policy base, learned loaders, reach DSL |
+| `sensors/` | New sensor modality with sim + real pair |
+| `obs_pipeline/` | Observation transforms shared across backends |
+| `training/` | BC/PPO, datasets, Gym registration |
+| `evaluation/` | Benchmark harness, metrics, reports |
+| `safety/` | Guards and monitor wiring |
+| `sim2real/`, `calibration/` | Transfer and calibration tooling |
+| `teleop/` | Input devices and recording (IL path) |
+| `observability/` | Replay, manifests, seeding |
+| `kinematics/` | IK solvers attached via `policy_ik` |
+| `perception/` | Vision helpers consumed by tasks/policies |
+| `ros2/` | Shared ROS2 runtime (not backend-specific I/O) |
+| `testing/` | Dummy backend for smoke tests only |
+
+**Demo tasks and policies** belong under `examples/`, registered via `custom_modules` in preset YAML.
 
 ## Architecture rules
 
@@ -39,6 +77,8 @@ The codebase uses NumPy, JAX arrays, and optional PyTorch depending on the bound
 - Registered placeholder policies and controllers should use names that make their stub status clear.
 - If a component needs optional dependencies such as `rclpy`, `mujoco`, `torch`, or Isaac Sim, import them lazily or raise an actionable `ImportError`.
 
+Entry points in `pyproject.toml`: `robodeploy.backends`, `robodeploy.robots`, `robodeploy.tasks`, `robodeploy.policies`, `robodeploy.sensors`.
+
 ## Tests
 
 Run the focused tests that cover your change:
@@ -47,10 +87,11 @@ Run the focused tests that cover your change:
 python -m compileall robodeploy tests examples
 python -m pytest tests/ -q -m "not hardware"    # full suite (~620 tests)
 python -m pytest tests/path/to/test_foo.py -q   # narrow
+python -m pytest tests/test_cli.py tests/test_presets.py -q   # quick CLI/preset smoke
 git diff --check
 ```
 
-**Markers:**
+**Markers** (`pyproject.toml` → `[tool.pytest.ini_options]`):
 
 | Marker | Meaning |
 |--------|---------|
@@ -70,7 +111,7 @@ User-facing docs live under `docs/` and are built with MkDocs:
 ```bash
 pip install -e ".[docs]"
 mkdocs serve
-mkdocs build --strict
+mkdocs build          # omit --strict if external GitHub links warn
 ```
 
 When adding features, update:
@@ -78,5 +119,9 @@ When adding features, update:
 - [README.md](README.md) for install/quickstart changes
 - [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) for architectural or workflow changes
 - [docs/PLATFORM_STATUS.md](docs/PLATFORM_STATUS.md) if CI coverage or maturity changes
+- [ARCHITECTURE.md](ARCHITECTURE.md) / [CONTRACTS.md](CONTRACTS.md) if public API behavior changes
 - Relevant guide (`docs/SENSOR_INTEGRATION.md`, `docs/TRAINING.md`, etc.)
 - [plans/INTEGRATION_STATUS.md](plans/INTEGRATION_STATUS.md) if presets or CI jobs change
+- [examples/README.md](examples/README.md) if presets or runnable demos change
+
+Do not commit `MUJOCO_LOG.TXT` or ad-hoc benchmark submission artifacts under `benchmarks/leaderboard/submissions/` unless intentionally contributing scores.

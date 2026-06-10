@@ -67,18 +67,16 @@ Recipe: [`conda-recipe/meta.yaml`](../conda-recipe/meta.yaml). CI validates the 
 
 CPU image: `docker/Dockerfile.cpu`. CI job `docker-smoke` builds the image and runs `robodeploy --help` plus `python -m examples.cli list-presets`.
 
-## Wave 2 release PR (0.2.0)
+## Wave 2 integration (0.2.0)
 
-Branch: `feat/plans-2-3-integration-core` (plans 2/3 integration + backend/training/benchmark parity).
+Wave 2 (training, sensors, Gazebo/Isaac parity, benchmarks honesty, package-build CI) is **merged to `main`**. Version in `pyproject.toml` is `0.2.0`.
 
-Open PR compare (when `gh` is unavailable):
+**Still open for 0.2.0 release:**
 
-https://github.com/RahulSajnani/RoboDeploy/compare/main...feat/plans-2-3-integration-core
+1. Configure [PyPI trusted publishing](https://docs.pypi.org/trusted-publishers/) for this repo.
+2. Confirm green [`tests` workflow](https://github.com/RahulSajnani/RoboDeploy/actions/workflows/test.yml) on the release commit.
+3. Tag: `git tag v0.2.0 && git push origin v0.2.0` → triggers `publish.yml`.
 
-With GitHub CLI:
+Until the tag is pushed, install from source: `pip install -e ".[sim]"`.
 
-```bash
-gh pr create --base main --head feat/plans-2-3-integration-core \
-  --title "release: RoboDeploy 0.2.0 wave 2 parity" \
-  --body "Wave 2 integration: training, sensors, Gazebo/Isaac parity, benchmarks honesty, package-build CI. Version 0.2.0; PyPI publish deferred until trusted publishing is configured."
-```
+Integration audit: [plans/INTEGRATION_STATUS.md](../plans/INTEGRATION_STATUS.md).

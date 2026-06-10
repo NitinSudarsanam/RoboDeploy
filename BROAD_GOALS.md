@@ -1,8 +1,15 @@
-# Broad Goals Remaining
+# Broad Goals — strategic index
 
-> **Stale vs `feat/plans-2-3-integration-core`.** Many signals below (no `training/`, no `benchmarks/`, no safety module) are resolved on that branch. For honest CI/preset coverage and per-goal completion, use [`plans/INTEGRATION_STATUS.md`](plans/INTEGRATION_STATUS.md) and the `plans/GOAL_0N_*.md` files instead of this doc.
+> **Historical snapshot (2026-06-08).** Many gaps listed below are **partially or fully addressed on `main` v0.2** — e.g. `robodeploy/training/`, `benchmarks/`, `safety/`, sensor-aware policies, scaffold CLI, and Docker/PyPI workflows exist. Do **not** treat the "Signals" bullets as current repo state.
+>
+> **Use instead:**
+> - [plans/INTEGRATION_STATUS.md](plans/INTEGRATION_STATUS.md) — CI ↔ preset honesty
+> - [docs/PLATFORM_STATUS.md](docs/PLATFORM_STATUS.md) — user-facing maturity
+> - [plans/README.md](plans/README.md) — per-goal plan files with acceptance criteria
+> - [SENSOR_INTEGRATION_TODO.md](SENSOR_INTEGRATION_TODO.md) — sensor audit (software ~complete)
+> - [REPRESENTATION_UPGRADE_PLAN.md](REPRESENTATION_UPGRADE_PLAN.md) — DSL/builder roadmap
 
-Strategic gaps blocking RoboDeploy from "complete." Ranked by ROI. State as of 2026-06-08.
+Strategic gaps that originally motivated the v0.2 goal plans. Ranked by ROI.
 
 ## Tier 1 — Highest Impact
 

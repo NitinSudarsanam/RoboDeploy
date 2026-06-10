@@ -4,7 +4,7 @@ Twelve goal plans (v0.2 platform) plus five wave-2 follow-up plans. Each file is
 
 **Honest integration state:** [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md)  
 **User-facing summary:** [docs/PLATFORM_STATUS.md](../docs/PLATFORM_STATUS.md)  
-**Note:** [BROAD_GOALS.md](../BROAD_GOALS.md) is stale vs current branch — prefer INTEGRATION_STATUS.
+**Historical goals index:** [BROAD_GOALS.md](../BROAD_GOALS.md) (superseded by per-goal files below for current status)
 
 | # | Goal | File | Effort | Tier |
 |---|---|---|---|---|
