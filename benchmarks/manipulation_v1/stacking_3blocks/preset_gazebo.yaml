@@ -1,14 +1,22 @@
 robot: kuka
 backend: gazebo
 task: showcase_scene
-policy: example_sensor_reach_pick
+policy: example_joint_track
 task_kwargs:
   require_objects: true
 obs_spec_policy: raise
 backend_kwargs:
   config:
-    headless: true
+    sim:
+      kind: gazebo
+      headless: true
+sensor_rigs:
+  - rig_id: arm_sensors
+    ee_link: robot0/ee_link
+    prop_pose:
+      prop_names: [showcase_box, showcase_cylinder, showcase_sphere]
 max_episode_steps: 800
 custom_modules:
   - examples.tasks
+  - examples.sensors
   - examples.policies

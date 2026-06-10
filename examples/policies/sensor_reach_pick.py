@@ -30,15 +30,18 @@ class SensorReachPickPlacePolicy(ReachPickPlacePolicy):
             np.array(tgt_pos, dtype=np.float32),
         )
 
-    def attach_mujoco(self, backend, description=None) -> None:
+    def bind_runtime(self, backend, description=None) -> None:
         """Bind IK only; do not read prop poses directly from the backend."""
         desc = description or self._description
         if desc is None:
             return
         self._backend = backend
-        from examples.policies.mujoco_ik import attach_mujoco_ik
+        from robodeploy.kinematics.policy_ik import attach_policy_ik
 
-        attach_mujoco_ik(self, backend, desc)
+        attach_policy_ik(self, backend, desc)
+
+    def attach_mujoco(self, backend, description=None) -> None:
+        self.bind_runtime(backend, description)
 
     def get_action(self, obs: Observation):
         self._update_targets_from_obs(obs)

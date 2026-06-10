@@ -28,6 +28,26 @@ class SB3SmokeTests(unittest.TestCase):
         finally:
             env.close()
 
+    @pytest.mark.slow
+    def test_ppo_learn_100k_on_tiny_env(self):
+        import gymnasium as gym
+
+        from robodeploy.training.gym_register import register_robodeploy_envs
+
+        register_robodeploy_envs()
+        env = gym.make("robodeploy/Tiny-v0")
+        try:
+            model = sb3.PPO(
+                "MultiInputPolicy",
+                env,
+                n_steps=256,
+                batch_size=256,
+                verbose=0,
+            )
+            model.learn(total_timesteps=100_000)
+        finally:
+            env.close()
+
 
 if __name__ == "__main__":
     unittest.main()

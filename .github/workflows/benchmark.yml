@@ -6,9 +6,8 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - "benchmarks/leaderboard/submissions/**"
-      - "benchmarks/manipulation_v1/spec.json"
-      - "benchmarks/leaderboard/schema.json"
+      - "benchmarks/**"
+      - "robodeploy/evaluation/**"
 
 permissions:
   contents: read
@@ -95,6 +94,9 @@ jobs:
           print(f"Validated {len(files)} submission file(s).")
           PY
 
+  # Dummy backend only — does not claim MuJoCo/Gazebo manipulation_v1 success (see plans/INTEGRATION_STATUS.md).
+  # MuJoCo manipulation_v1 subset (reach_target, 3 episodes) runs in tests.yml job eval-mujoco-smoke on every PR;
+  # full MuJoCo/Gazebo nightly suites are intentionally omitted here to limit CI cost.
   manipulation-v1-dummy:
     needs: validate-schemas
     runs-on: ubuntu-latest

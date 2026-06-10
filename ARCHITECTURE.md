@@ -4,9 +4,11 @@ Modular runtime for robot learning and deployment. Swap simulators, hardware sta
 and policies without rewriting user code. Primary goal: **sim-to-real transfer** through
 shared `Observation` / `Action` contracts.
 
-**Canonical references:** [CONTRACTS.md](CONTRACTS.md) (public API behavior),
+**Canonical references:** [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) (comprehensive guide),
+[CONTRACTS.md](CONTRACTS.md) (public API behavior),
+[docs/PLATFORM_STATUS.md](docs/PLATFORM_STATUS.md) (maturity and CI),
 [examples/README.md](examples/README.md) (demos and presets),
-[history.json](history.json) (current state and gaps).
+[plans/INTEGRATION_STATUS.md](plans/INTEGRATION_STATUS.md) (contributor audit).
 
 ---
 
@@ -131,6 +133,22 @@ Built-in / registered examples: joint trackers, `VLAPolicy`, `DiffusionPolicy`, 
 
 Example reach policies (`examples/policies`) support MuJoCo IK via `bind_runtime` and
 `carry_mode` (`kinematic`, `none`, `follow`, `contact`, `weld`) for grasp assist.
+
+### IK resolution order
+
+Policies call `robodeploy.kinematics.policy_ik.attach_policy_ik` from `bind_runtime`:
+
+1. **MuJoCo damped LS** — when the backend exposes `_model` (`robodeploy.kinematics.mujoco_ik`).
+2. **Pinocchio URDF** — when the robot description provides a kinematics solver (`robodeploy.kinematics.pin_ik`).
+3. **Delta-home fallback** — logged warning; joint tracking toward home without position IK.
+
+MuJoCo attach failure falls through to Pinocchio when both are available.
+
+### Safety paths
+
+- **`step()`** — `SafetyMonitor.check_action()` then per-task `transform_action()` before `backend.step_multi()`.
+- **`reset_routine()`** — skipped when the monitor is tripped (e-stop); otherwise each yielded action passes through the description safety filter and `SafetyMonitor.check_action()` before `step_multi()`.
+- **Gazebo multi-robot** — `ROS2GazeboBackend.initialize_multi()` raises if `len(robots) > 1` until multi-spawn exists.
 
 ---
 

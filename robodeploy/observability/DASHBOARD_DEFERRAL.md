@@ -24,3 +24,16 @@ robodeploy dashboard --logs runs/2026-06-08-1410/
 
 Revisit when benchmark eval HTML reports (Goal 11 D9) and JSONL volume justify
 an in-repo live viewer.
+
+## Revisited wave 2 (2026-06-09)
+
+Wave 2.05 reaffirms deferral of D9 hot-reload dashboard
+(`plans/WAVE2_05_POLISH.md` closeout). Benchmark nightly JSONL +
+`robodeploy logs tail/summary` and optional W&B/TensorBoard/MLflow sinks
+remain the supported observability path for wave 2.
+
+**Revisit trigger**: when eval HTML reports (Goal 11 D9) need a live step stream
+without external tooling, or JSONL volume makes CLI-only workflows painful for
+demo stakeholders.
+
+**GOAL 10 D9** checkbox stays `[ ]` — intentional defer, not a gap.

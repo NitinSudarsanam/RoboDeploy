@@ -410,18 +410,18 @@ robodeploy safety status                    # show current monitor state if runn
 
 ## Acceptance Criteria
 
-- [ ] `SafetyMonitor` aggregates ≥4 guards (filter, force, velocity, e-stop).
-- [ ] `EStop.trip()` from any source (SIGINT, key, mp event) halts env on next step.
-- [ ] `RoboEnv.emergency_stop()` API drives robot to safe state + ends episode.
-- [ ] Sim safety injector reproduces force spike, joint excursion, collision, state timeout.
-- [ ] Force above 50N for 3 consecutive steps → `SafetyError` + episode terminated.
-- [ ] Workspace violation → action clamped to boundary (clamp mode) or `SafetyError` (raise mode).
-- [ ] ROS2 connection loss → recovery manager retries with backoff; succeeds within 5 retries OR raises Hazard.CONNECTION_LOST.
-- [ ] Command ACK timeout detected within `ack_timeout_s`.
-- [ ] `info.extra["safety"]` populated every step.
-- [ ] Default `RoboEnv` builds safety monitor with description-derived limits.
-- [ ] `tests/safety/` covers each guard + integration.
-- [ ] SAFETY.md describes threat model + recovery flows + custom guard authoring.
+- [x] `SafetyMonitor` aggregates ≥4 guards (filter, force, velocity, e-stop).
+- [x] `EStop.trip()` from any source (SIGINT, key, mp event) halts env on next step.
+- [x] `RoboEnv.emergency_stop()` API drives robot to safe state + ends episode.
+- [x] Sim safety injector reproduces force spike, joint excursion, collision, state timeout.
+- [x] Force above 50N for 3 consecutive steps → `SafetyError` + episode terminated.
+- [x] Workspace violation → action clamped to boundary (clamp mode) or `SafetyError` (raise mode).
+- [x] ROS2 connection loss → recovery manager retries with backoff; succeeds within 5 retries OR raises Hazard.CONNECTION_LOST.
+- [x] Command ACK timeout detected within `ack_timeout_s`.
+- [x] `info.extra["safety"]` populated every step.
+- [x] Default `RoboEnv` builds safety monitor with description-derived limits.
+- [x] `tests/safety/` covers each guard + integration.
+- [x] SAFETY.md describes threat model + recovery flows + custom guard authoring.
 
 ## Dependencies
 

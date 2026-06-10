@@ -10,7 +10,6 @@ from robodeploy.core.registry import resolve_sensor_class
 from robodeploy.core.types import Observation, SensorData
 from robodeploy.obs_pipeline import ObsPipeline
 from robodeploy.sensors.contact.sim.gazebo_contact import GazeboContactSensor
-from robodeploy.sensors.contact.sim.gazebo_contact import GazeboContactSensor
 from robodeploy.sensors.contact.sim.mujoco_contact import MuJoCoContactSensor
 
 try:
@@ -32,12 +31,6 @@ class ContactSensorTests(unittest.TestCase):
             GazeboContactSensor,
         )
 
-    def test_resolve_wrist_contact_gazebo(self):
-        self.assertIs(
-            resolve_sensor_class("wrist_contact", is_real=False, backend_name="gazebo"),
-            GazeboContactSensor,
-        )
-
     def test_gazebo_contact_reads_monitor(self):
         sensor = GazeboContactSensor("wrist_contact", config={"prop_name": "source", "ee_link": "ee"})
         backend = mock.Mock()
@@ -46,6 +39,32 @@ class ContactSensorTests(unittest.TestCase):
         sensor.initialize(backend)
         reading = sensor.read()
         self.assertTrue(reading.contact_state.get("wrist_contact"))
+
+    def test_gazebo_contact_binds_world_scoped_topic(self):
+        sensor = GazeboContactSensor("wrist_contact", config={"prop_name": "source"})
+        monitor = mock.Mock()
+        monitor._subscriber = None
+        monitor.bind_transport = mock.Mock()
+        backend = mock.Mock()
+        backend._contact_monitor = monitor
+        backend._gz_transport_node = object()
+        backend._gz_world_name = "robodeploy_world"
+        sensor.initialize(backend)
+        monitor.bind_transport.assert_called_once_with(
+            backend._gz_transport_node,
+            topic="/world/robodeploy_world/contacts",
+        )
+
+    def test_gazebo_contact_skips_rebind_when_monitor_ready(self):
+        sensor = GazeboContactSensor("wrist_contact", config={"prop_name": "source"})
+        monitor = mock.Mock()
+        monitor._subscriber = object()
+        monitor.bind_transport = mock.Mock()
+        backend = mock.Mock()
+        backend._contact_monitor = monitor
+        backend._gz_transport_node = object()
+        sensor.initialize(backend)
+        monitor.bind_transport.assert_not_called()
 
     def test_mujoco_contact_reads_backend_state(self):
         sensor = MuJoCoContactSensor("wrist_contact", config={"prop_name": "source"})

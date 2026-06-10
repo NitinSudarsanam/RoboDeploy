@@ -1,6 +1,10 @@
 # RoboDeploy Strategic Plans
 
-Twelve goal plans. Each ~one focused topic. Source: `BROAD_GOALS.md`.
+Twelve goal plans (v0.2 platform) plus five wave-2 follow-up plans. Each file is one focused topic.
+
+**Honest integration state:** [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md)  
+**User-facing summary:** [docs/PLATFORM_STATUS.md](../docs/PLATFORM_STATUS.md)  
+**Note:** [BROAD_GOALS.md](../BROAD_GOALS.md) is stale vs current branch — prefer INTEGRATION_STATUS.
 
 | # | Goal | File | Effort | Tier |
 |---|---|---|---|---|
@@ -18,6 +22,16 @@ Twelve goal plans. Each ~one focused topic. Source: `BROAD_GOALS.md`.
 | 12 | Real-hw safety + recovery | [GOAL_12_SAFETY.md](GOAL_12_SAFETY.md) | ~30h | 3 |
 
 Total ~575h.
+
+## Wave 2 plans (remaining parity)
+
+| # | Focus | File |
+|---|--------|------|
+| W1 | Gazebo live pick E2E | [WAVE2_01_GAZEBO_LIVE_E2E.md](WAVE2_01_GAZEBO_LIVE_E2E.md) |
+| W2 | PyPI + conda-forge | [WAVE2_02_RELEASE_PYPI_CONDA.md](WAVE2_02_RELEASE_PYPI_CONDA.md) |
+| W3 | Vision + real hardware | [WAVE2_03_VISION_AND_REAL_HARDWARE.md](WAVE2_03_VISION_AND_REAL_HARDWARE.md) |
+| W4 | Training production | [WAVE2_04_TRAINING_PRODUCTION.md](WAVE2_04_TRAINING_PRODUCTION.md) |
+| W5 | Polish + Isaac GPU | [WAVE2_05_POLISH.md](WAVE2_05_POLISH.md) |
 
 ## Dependency Graph (Build Order)
 

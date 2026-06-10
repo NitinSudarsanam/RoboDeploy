@@ -80,6 +80,13 @@ class FTGatedTaskTests(unittest.TestCase):
         task = _GraspTask(config={"grasp_success_force_min": 0.0})
         self.assertTrue(task.grasp_confirmed(_obs()))
 
+    def test_pick_place_failure_fn_on_excessive_ft_force(self):
+        task = PickPlaceTask(config={"failure_force_max_N": 20.0})
+        safe = _obs(ft_force=jnp.asarray([5.0, 0.0, 0.0], dtype=jnp.float32))
+        collision = _obs(ft_force=jnp.asarray([25.0, 0.0, 0.0], dtype=jnp.float32))
+        self.assertFalse(task.failure_fn(safe))
+        self.assertTrue(task.failure_fn(collision))
+
 
 if __name__ == "__main__":
     unittest.main()

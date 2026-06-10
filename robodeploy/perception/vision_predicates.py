@@ -70,6 +70,15 @@ def _quat_rotate_wxyz(
     return (rx, ry, rz)
 
 
+def has_camera_extrinsics(extr: dict[str, object] | None) -> bool:
+    """True when extrinsics carry both world position and orientation (wxyz)."""
+    return (
+        isinstance(extr, dict)
+        and extr.get("position") is not None
+        and extr.get("orientation") is not None
+    )
+
+
 def _camera_to_world(
     point_cam: tuple[float, float, float],
     extr: dict[str, object] | None,
@@ -78,7 +87,18 @@ def _camera_to_world(
     fallback_scale: tuple[float, float, float],
     default_z: float,
 ) -> tuple[float, float, float]:
-    if isinstance(extr, dict) and extr.get("position") and extr.get("orientation"):
+    """Map a camera-frame point to world coordinates.
+
+    When ``extr`` has ``position`` and ``orientation`` (wxyz quaternion), the point is
+    rotated by the camera orientation and translated by the camera origin — the path
+    used with MuJoCo live mounts and ROS TF lookups.
+
+    Without both fields, falls back to axis-aligned scaling from ``fallback_origin``
+    using ``fallback_scale``. That heuristic guesses desk/workspace geometry and is
+    **not** metrically correct; enable it only via ``fallback_mode=True`` on
+    ``ColorBlobTracker`` / ``ColorBlobTrackerTransform``.
+    """
+    if has_camera_extrinsics(extr):
         pos = extr["position"]
         quat = extr["orientation"]
         origin = (float(pos[0]), float(pos[1]), float(pos[2]))
@@ -104,12 +124,14 @@ class ColorBlobTracker:
         default_z: float = 0.38,
         world_origin: tuple[float, float, float] = (0.55, 0.0, 0.38),
         camera_to_world_scale: tuple[float, float, float] = (0.15, 0.15, 1.0),
+        fallback_mode: bool = False,
     ) -> None:
         self._lower, self._upper = hsv_range
         self._min_pixels = int(min_pixels)
         self._default_z = float(default_z)
         self._world_origin = tuple(float(v) for v in world_origin)
         self._world_scale = tuple(float(v) for v in camera_to_world_scale)
+        self._fallback_mode = bool(fallback_mode)
 
     def detect(
         self,
@@ -156,9 +178,12 @@ class ColorBlobTracker:
 
         x_cam = (cx - icx) * z / max(fx, 1e-6)
         y_cam = (cy - icy) * z / max(fy, 1e-6)
+        extr = extrinsics if isinstance(extrinsics, dict) else None
+        if not has_camera_extrinsics(extr) and not self._fallback_mode:
+            return None
         pos = _camera_to_world(
             (x_cam, y_cam, z),
-            extrinsics if isinstance(extrinsics, dict) else None,
+            extr,
             fallback_origin=self._world_origin,
             fallback_scale=self._world_scale,
             default_z=self._default_z,
@@ -245,27 +270,26 @@ class ColorBlobTrackerTransform(ITransform):
         default_z: float = 0.38,
         world_origin: tuple[float, float, float] = (0.55, 0.0, 0.38),
         camera_to_world_scale: tuple[float, float, float] = (0.15, 0.15, 1.0),
+        fallback_mode: bool = False,
     ) -> None:
         self._camera = str(camera)
         self._object_name = str(object_name)
         self._target_rgb = np.asarray(target_rgb, dtype=np.int16)
         self._tolerance = int(tolerance)
+        tracker_kwargs = dict(
+            min_pixels=min_pixels,
+            default_z=default_z,
+            world_origin=world_origin,
+            camera_to_world_scale=camera_to_world_scale,
+            fallback_mode=fallback_mode,
+        )
         if hsv_range is not None:
-            self._tracker = ColorBlobTracker(
-                hsv_range,
-                min_pixels=min_pixels,
-                default_z=default_z,
-                world_origin=world_origin,
-                camera_to_world_scale=camera_to_world_scale,
-            )
+            self._tracker = ColorBlobTracker(hsv_range, **tracker_kwargs)
             self._use_rgb = False
         else:
             self._tracker = ColorBlobTracker(
                 ((0.0, 80.0, 80.0), (10.0, 255.0, 255.0)),
-                min_pixels=min_pixels,
-                default_z=default_z,
-                world_origin=world_origin,
-                camera_to_world_scale=camera_to_world_scale,
+                **tracker_kwargs,
             )
             self._use_rgb = True
 
@@ -307,9 +331,12 @@ class ColorBlobTrackerTransform(ITransform):
             icy = float(intr.get("cy", arr.shape[0] * 0.5))
             x_cam = (cx - icx) * z / max(fx, 1e-6)
             y_cam = (cy - icy) * z / max(fy, 1e-6)
+            extr_dict = extr if isinstance(extr, dict) else None
+            if not has_camera_extrinsics(extr_dict) and not self._tracker._fallback_mode:
+                return obs
             pos = _camera_to_world(
                 (x_cam, y_cam, z),
-                extr if isinstance(extr, dict) else None,
+                extr_dict,
                 fallback_origin=self._tracker._world_origin,
                 fallback_scale=self._tracker._world_scale,
                 default_z=self._tracker._default_z,

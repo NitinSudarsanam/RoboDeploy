@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Callable
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -17,11 +20,14 @@ class GazeboContactMonitor:
         """Subscribe to gz-transport contacts when available."""
         subscribe = getattr(node, "subscribe", None)
         if not callable(subscribe):
+            logger.debug("Gazebo contact monitor: transport node has no subscribe() for %s", topic)
             return
         try:
             subscribe(topic, self._on_contacts)
             self._subscriber = node
-        except Exception:
+            logger.debug("Gazebo contact monitor subscribed to %s", topic)
+        except Exception as exc:
+            logger.debug("Gazebo contact monitor subscribe failed for %s: %s", topic, exc)
             return
 
     def inject_contacts(self, pairs: list[tuple[str, str]]) -> None:

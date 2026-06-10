@@ -108,8 +108,15 @@ def _delta_row(label: str, current: float | None, baseline: float | None) -> str
 def _video_section(video_paths: list[str]) -> str:
     if not video_paths:
         return ""
-    items = "".join(f'<li><video controls width="320" src="{p}"></video></li>' for p in video_paths)
-    return f"<h3>Episode videos</h3><ul>{items}</ul>"
+    from pathlib import Path
+
+    from robodeploy.evaluation.video import EpisodeVideoRecorder
+
+    items: list[str] = []
+    for raw in video_paths:
+        src = EpisodeVideoRecorder.embed_path(Path(raw)) or raw
+        items.append(f'<li><video controls width="320" src="{src}"></video></li>')
+    return f"<h3>Episode videos</h3><ul>{''.join(items)}</ul>"
 
 
 def render_report(

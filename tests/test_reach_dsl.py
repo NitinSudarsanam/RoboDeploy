@@ -79,6 +79,76 @@ class ReachDSLTests(unittest.TestCase):
         action = policy.get_action(obs)
         self.assertIsNotNone(action.joint_positions or action.ee_position)
 
+    def test_drop_detection_rewinds_to_grasp_phase(self):
+        from robodeploy.core.types import Observation
+        from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
+
+        spec = ReachTrajectoryPolicy.default_pick_place_spec()
+        policy = ReachTrajectoryPolicy(
+            spec,
+            config={"grasp_detection": "ft", "grasp_force_loss_threshold": 1.0},
+        )
+        policy.reset()
+        grasp_idx = policy._grasp_phase_idx()
+        self.assertIsNotNone(grasp_idx)
+        lift_idx = next(i for i, p in enumerate(policy._phases) if p.spec.name == "lift")
+        policy._phase_idx = lift_idx
+        policy._carrying = True
+        try:
+            import jax.numpy as jnp
+        except Exception:
+            import numpy as jnp  # type: ignore[assignment]
+
+        obs = Observation(
+            joint_positions=jnp.array([0.0, -0.6, 0.0, -1.8, 0.0, 1.2, 0.0]),
+            joint_velocities=jnp.zeros(7),
+            joint_torques=jnp.zeros(7),
+            ee_position=jnp.array([0.55, 0.0, 0.5]),
+            ee_orientation=jnp.array([1.0, 0.0, 0.0, 0.0]),
+            ee_velocity=jnp.zeros(3),
+            ee_angular_velocity=jnp.zeros(3),
+            ft_force=jnp.array([0.1, 0.0, 0.0]),
+        )
+        policy._maybe_drop_carry(obs)
+        self.assertFalse(policy._carrying)
+        close_idx = next(i for i, p in enumerate(policy._phases) if p.spec.name == "close_gripper")
+        self.assertEqual(policy._phase_idx, close_idx)
+        self.assertEqual(policy._phase_step, 0)
+        self.assertEqual(policy._gripper_state, 1.0)
+
+    def test_bind_runtime_falls_through_to_pin_when_mujoco_fails(self):
+        from unittest.mock import MagicMock, patch
+
+        from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
+
+        spec = ReachTrajectoryPolicy.default_pick_place_spec()
+        policy = ReachTrajectoryPolicy(spec)
+        backend = MagicMock()
+        backend._model = object()
+        desc = MagicMock()
+        with patch(
+            "robodeploy.kinematics.mujoco_ik.attach_mujoco_ik",
+            side_effect=RuntimeError("mujoco ik failed"),
+        ):
+            with patch("robodeploy.kinematics.pin_ik.attach_pin_ik") as pin_attach:
+                pin_attach.return_value = MagicMock()
+                policy.bind_runtime(backend, desc)
+                pin_attach.assert_called_once()
+
+    def test_gazebo_weld_carry_maps_to_follow(self):
+        from unittest.mock import MagicMock
+
+        from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
+
+        spec = ReachTrajectoryPolicy.default_pick_place_spec()
+        spec["carry"] = {"mode": "weld"}
+        policy = ReachTrajectoryPolicy(spec)
+        backend = MagicMock()
+        backend.sensor_backend_name = "gazebo"
+        policy.bind_runtime(backend, MagicMock())
+        self.assertTrue(policy._backend_follow_carry)
+        self.assertFalse(policy._backend_weld_carry)
+
     def test_gripper_phase_sets_gripper_command(self):
         from robodeploy.core.types import Observation
         from robodeploy.policies.builder import PolicyBuilder
@@ -107,3 +177,23 @@ class ReachDSLTests(unittest.TestCase):
         policy.get_action(obs)  # settle
         action = policy.get_action(obs)  # close_gripper
         self.assertEqual(action.gripper, 1.0)
+
+    def test_fallback_delta_tracks_last_valid_q_not_home(self):
+        import numpy as np
+
+        from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
+
+        policy = ReachTrajectoryPolicy(
+            {
+                "home": [0.0, -0.6, 0.0, -1.8, 0.0, 1.2, 0.0],
+                "phases": [{"name": "reach", "kind": "reach", "target": "source"}],
+            }
+        )
+        q = np.array([0.4, -0.4, 0.1, -1.5, 0.0, 1.0, 0.0], dtype=np.float32)
+        policy._q_goal = q.copy()
+        target = np.array([0.6, 0.2, 0.5], dtype=np.float32)
+        toward_home = policy._track_toward(q, policy._home)
+        result = policy._fallback_delta(q, target)
+        self.assertFalse(np.allclose(result, toward_home, atol=1e-4))
+        expected = policy._track_toward(q, q)
+        np.testing.assert_allclose(result, expected, rtol=0.0, atol=1e-5)

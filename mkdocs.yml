@@ -1,8 +1,8 @@
 site_name: RoboDeploy
 site_description: Backend-agnostic robot learning runtime
 site_url: https://robodeploy.github.io/RoboDeploy/
-repo_url: https://github.com/anthropic-ai/robodeploy
-repo_name: robodeploy/RoboDeploy
+repo_url: https://github.com/RahulSajnani/RoboDeploy
+repo_name: RahulSajnani/RoboDeploy
 
 theme:
   name: material
@@ -24,6 +24,8 @@ theme:
 
 nav:
   - Home: index.md
+  - Project Guide: PROJECT_GUIDE.md
+  - Platform status: PLATFORM_STATUS.md
   - Getting started:
       - Tutorial 1 — Hello RoboDeploy: tutorials/01_getting_started.md
       - Tutorial 2 — Teleop: tutorials/02_teleop.md
@@ -35,6 +37,7 @@ nav:
       - Policy creation: POLICY_CREATION.md
       - Scene definition: SCENE_DEFINITION.md
       - Sensor integration: SENSOR_INTEGRATION.md
+      - Training: TRAINING.md
       - Sim2Real: SIM2REAL.md
       - Safety: SAFETY.md
       - Plugins: PLUGINS.md
@@ -42,6 +45,7 @@ nav:
       - CLI reference: CLI_REFERENCE.md
       - API reference: API_REFERENCE.md
       - Backend setup: BACKEND_SETUP.md
+      - Release: RELEASE.md
       - SO-101 real robot: SO101_REAL.md
   - Cookbook: COOKBOOK.md
   - Migration 0.2: MIGRATION_0.2.md

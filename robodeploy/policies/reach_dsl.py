@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
+
+_logger = logging.getLogger(__name__)
 
 from robodeploy.core.spaces import ActionSpace
 from robodeploy.core.types import Action, Observation, SceneSpec
@@ -225,12 +228,6 @@ class ReachTrajectoryPolicy(PolicyBase):
         self._settle_dist = float(spec.get("settle_threshold", 0.025))
         self._steps_per_phase = int(spec.get("steps_per_phase", 180))
         self._ik = None
-        self._pin_solver = None
-        if description is not None:
-            try:
-                self._pin_solver = description.get_kinematics_solver()
-            except Exception:
-                self._pin_solver = None
 
         self._waypoints = waypoints_from_scene(scene if scene is not None else SceneSpec())
         self._phase_specs_raw = list(spec.get("phases") or [])
@@ -289,19 +286,30 @@ class ReachTrajectoryPolicy(PolicyBase):
         return cls(spec, action_space=action_space, scene=scene, description=description, config=config)
 
     def bind_runtime(self, backend, description=None) -> None:
-        self.attach_mujoco(backend, description)
-
-    def attach_mujoco(self, backend, description=None) -> None:
         desc = description or self._description
         if desc is None:
             return
         self._backend = backend
-        try:
-            from examples.policies.mujoco_ik import attach_mujoco_ik
+        self._map_gazebo_carry_mode(backend)
+        from robodeploy.kinematics.policy_ik import attach_policy_ik
 
-            attach_mujoco_ik(self, backend, desc)
-        except Exception:
-            pass
+        attach_policy_ik(self, backend, desc)
+
+    def _map_gazebo_carry_mode(self, backend) -> None:
+        if not self._backend_weld_carry:
+            return
+        backend_name = str(getattr(backend, "sensor_backend_name", "") or "").lower()
+        if backend_name != "gazebo":
+            return
+        _logger.warning(
+            "carry_mode 'weld' is not supported on Gazebo; using 'follow' instead."
+        )
+        self._carry_mode = "follow"
+        self._backend_weld_carry = False
+        self._backend_follow_carry = True
+
+    def attach_mujoco(self, backend, description=None) -> None:
+        self.bind_runtime(backend, description)
 
     def set_ik_solver(self, solver) -> None:  # noqa: ANN001
         self._ik = solver
@@ -405,14 +413,14 @@ class ReachTrajectoryPolicy(PolicyBase):
     def _solve_ik(self, q_init: np.ndarray, target_pos: np.ndarray) -> np.ndarray:
         if self._ik is not None:
             return self._ik.solve(q_init, target_pos)
-        if self._pin_solver is not None:
-            _, quat = self._pin_solver.fk(q_init)
-            return self._pin_solver.ik(target_pos, quat, q_init=q_init).astype(np.float32)
         return self._fallback_delta(q_init, target_pos)
 
     def _fallback_delta(self, q: np.ndarray, target_pos: np.ndarray) -> np.ndarray:
         del target_pos
-        return self._track_toward(q, self._home)
+        q_goal = self._q_goal
+        if np.allclose(q_goal, self._home):
+            q_goal = q
+        return self._track_toward(q, q_goal)
 
     def _track_toward(self, q: np.ndarray, q_goal: np.ndarray) -> np.ndarray:
         err = q_goal - q
@@ -447,9 +455,39 @@ class ReachTrajectoryPolicy(PolicyBase):
             return
         offset = tuple(float(v) for v in self._carry_offset)
         if engage and self._backend_weld_carry:
-            self._backend.set_grasp_prop("source", offset=offset, mode="weld")
+            backend_name = str(getattr(self._backend, "sensor_backend_name", "") or "").lower()
+            mode = "follow" if backend_name == "gazebo" else "weld"
+            self._backend.set_grasp_prop("source", offset=offset, mode=mode)
         elif engage and (self._backend_follow_carry or self._contact_carry):
             self._backend.set_grasp_prop("source", offset=offset, mode="follow")
+
+    def _grasp_phase_idx(self) -> int | None:
+        for idx, phase in enumerate(self._phases):
+            spec = phase.spec
+            if spec.kind == "reach" and (spec.engage_carry or "grasp" in spec.name.lower()):
+                return idx
+        return None
+
+    def _close_gripper_phase_idx(self) -> int | None:
+        for idx, phase in enumerate(self._phases):
+            spec = phase.spec
+            if spec.name == "close_gripper":
+                return idx
+            if spec.kind == "gripper" and str(spec.gripper_command or "").lower() == "close":
+                return idx
+        return None
+
+    def _rewind_to_grasp_phase(self) -> None:
+        grasp_idx = self._grasp_phase_idx()
+        if grasp_idx is None or grasp_idx >= self._phase_idx:
+            return
+        close_idx = self._close_gripper_phase_idx()
+        self._phase_idx = close_idx if close_idx is not None else grasp_idx
+        self._phase_step = 0
+        self._force_history = []
+        self._gripper_state = 1.0
+        for phase in self._phases:
+            phase._fallback_active = False
 
     def _maybe_drop_carry(self, obs: Observation) -> None:
         if not self._carrying or self._grasp_detection != "ft":
@@ -463,6 +501,7 @@ class ReachTrajectoryPolicy(PolicyBase):
         self._force_history = []
         if self._backend is not None and hasattr(self._backend, "set_grasp_prop"):
             self._backend.set_grasp_prop(None)
+        self._rewind_to_grasp_phase()
 
     def get_action(self, obs: Observation) -> Action:
         self._observe_sensor_health(obs)

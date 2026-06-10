@@ -41,6 +41,21 @@ class SafetyInjectorTests(unittest.TestCase):
         violations = injector.synthetic_violations()
         self.assertEqual(len(violations), 1)
 
+    def test_joint_limit_excursion_injection(self):
+        injector = SafetyViolationInjector()
+        injector.joint_limit_excursion(joint_idx=0, magnitude_rad=9.0, duration_steps=1)
+        obs = injector.apply(_obs())
+        self.assertAlmostEqual(float(obs.joint_positions[0]), 9.0, places=3)
+
+    def test_state_timeout_stales_hw_timestamp(self):
+        injector = SafetyViolationInjector()
+        injector.state_timeout(duration_s=60.0)
+        base = _obs()
+        base.timestamp = 100.0
+        base.timestamp_hw = 100.0
+        obs = injector.apply(base)
+        self.assertLess(float(obs.timestamp_hw), float(obs.timestamp))
+
 
 if __name__ == "__main__":
     unittest.main()

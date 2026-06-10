@@ -340,16 +340,16 @@ Surface in `info.extra["policy_diagnostics"]` (used by Goal 10).
 
 ## Acceptance Criteria
 
-- [ ] `SafetyFilter` clamps action exceeding joint limits to nearest valid value.
-- [ ] `SafetyFilter(on_violation="raise")` raises `SafetyError` on workspace exit.
-- [ ] `RoboEnv` applies `SafetyFilter` to all policy actions before backend.step.
-- [ ] `ModelLoader.load(spec)` validates `action_dim` mismatch (raises `ModelContractError`).
-- [ ] `LearnedActionAdapter` converts DELTA_EE → JOINT_POS via IK; round-trip error <1mm.
-- [ ] `RoboEnv` with DELTA_EE policy + JOINT_POS backend auto-inserts adapter without code change.
-- [ ] `HFModelRegistry.from_name("openvla-7b")` downloads from HF Hub on first call.
-- [ ] `RobomimicPolicy`, `DiffusionPolicy`, `VLAPolicy` ≤ 50 lines each after refactor (currently 100-200).
-- [ ] `info.extra["policy_diagnostics"]` shows action stats per step.
-- [ ] Streaming HTTP client receives first action chunk within 50ms of large-VLA call.
+- [x] `SafetyFilter` clamps action exceeding joint limits to nearest valid value.
+- [x] `SafetyFilter(on_violation="raise")` raises `SafetyError` on workspace exit.
+- [x] `RoboEnv` applies `SafetyFilter` to all policy actions before backend.step.
+- [x] `ModelLoader.load(spec)` validates `action_dim` mismatch (raises `ModelContractError`).
+- [x] `LearnedActionAdapter` converts DELTA_EE → JOINT_POS via IK; round-trip error <1mm.
+- [x] `RoboEnv` with DELTA_EE policy + JOINT_POS backend auto-inserts adapter without code change.
+- [x] `HFModelRegistry.from_name("openvla-7b")` downloads from HF Hub on first call.
+- [ ] `RobomimicPolicy`, `DiffusionPolicy`, `VLAPolicy` ≤ 50 lines each after refactor — **deferred (wave 2.05, 2026-06-09)**: current 56 / 86 / 69 lines (`robomimic.py` / `diffusion.py` / `vla.py`); `loader.py`, `helpers.py`, `factory.py`, `adapter.py`, and `negotiation.py` already extracted; remaining inline smoothing (robomimic), plan queueing (diffusion), and camera/heuristic paths (VLA) stay until a behavior-preserving helper extraction follow-up.
+- [x] `info.extra["policy_diagnostics"]` shows action stats per step.
+- [x] Streaming HTTP client receives first action chunk within 50ms of large-VLA call.
 
 ## Dependencies
 

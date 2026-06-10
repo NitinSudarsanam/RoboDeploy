@@ -37,13 +37,19 @@ class GazeboContactSensor(ContactSensorBase):
     def _init_impl(self, backend) -> None:
         self._backend = backend
         monitor = getattr(backend, "_contact_monitor", None)
-        if monitor is not None and hasattr(monitor, "bind_transport"):
-            gz_node = getattr(backend, "_gz_transport_node", None)
-            if gz_node is None:
-                sim_cfg = getattr(backend, "config", {}) or {}
-                gz_node = sim_cfg.get("gz_transport_node")
-            if gz_node is not None:
-                monitor.bind_transport(gz_node, topic=self._contacts_topic)
+        if monitor is None or not hasattr(monitor, "bind_transport"):
+            return
+        if getattr(monitor, "_subscriber", None) is not None:
+            return
+        gz_node = getattr(backend, "_gz_transport_node", None)
+        if gz_node is None:
+            sim_cfg = getattr(backend, "config", {}) or {}
+            gz_node = sim_cfg.get("gz_transport_node")
+        if gz_node is None:
+            return
+        world = getattr(backend, "_gz_world_name", None)
+        topic = f"/world/{world}/contacts" if world else self._contacts_topic
+        monitor.bind_transport(gz_node, topic=topic)
 
     def _read_impl(self) -> SensorData:
         assert self._backend is not None

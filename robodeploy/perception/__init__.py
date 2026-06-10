@@ -6,6 +6,7 @@ from robodeploy.perception.vision_predicates import (
     ColorBlobTrackerTransform,
     LearnedPoseEstimator,
     count_hsv_pixels,
+    has_camera_extrinsics,
     rgb_to_hsv,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "ColorBlobTrackerTransform",
     "LearnedPoseEstimator",
     "count_hsv_pixels",
+    "has_camera_extrinsics",
     "rgb_to_hsv",
 ]

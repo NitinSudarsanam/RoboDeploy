@@ -46,7 +46,7 @@ Use [`backend_for_simulator`](../robodeploy/backends/simulator.py) so the librar
 
 - **`"mujoco"`** — `MuJoCoBackend` with viewer + actuator fallback defaults (single robot).
 - **`"ros2_rviz"`** — `ROS2RvizBackend`, a simulated ROS2/RViz transport with joint-position drivers under `/<robot_id>/`.
-- **`"gazebo"`** — `ROS2GazeboBackend`; requires `RobotDescription.gazebo_sim_launch_config()` and/or `config_overrides["sim"]`.
+- **`"gazebo"`** — `ROS2GazeboBackend` (registered as `ros2_gazebo`; presets and `RoboEnv.from_config` accept the alias `gazebo` via `get_backend()`); requires `RobotDescription.gazebo_sim_launch_config()` and/or `config_overrides["sim"]` with `sim.kind: gazebo`.
 
 Optional **`local_ros_graph=True`** (ROS2+RViz only) starts the built-in `dev_fake_sim` joint-position devtool.
 
@@ -195,6 +195,7 @@ Troubleshooting:
 - **No joint states / arm frozen** — confirm `/joint_states` is publishing (not only `/robot0/joint_states`). Check `joint_state_broadcaster` is active.
 - **JTC deaf** — echo `/joint_trajectory_controller/joint_trajectory` while stepping; commands should appear.
 - **FT never triggers grasp** — tune `force_threshold` in `kuka_ft_imu_pick_gazebo` preset; arm links need URDF `<collision>` (bundled in `kuka.urdf`).
+- **Contact never fires** — `gz topic -e -t /world/<world>/contacts` (or bare `contacts`); contact names use fuzzy `::` / link-token matching.
 - **Carry invisible** — Gazebo `follow` mode uses kinematic bookkeeping + `set_pose`; weld grasp is not supported. Cube may clip through gripper in GUI.
 
 **Limitations:** single-robot Gazebo (one URDF spawn); multi-robot Gazebo is not supported yet.
@@ -383,6 +384,54 @@ backend_kwargs={"config": {
 }}
 ```
 
+### Isaac Sim self-hosted CI {#isaac-sim-self-hosted-ci}
+
+GitHub-hosted `ubuntu-latest` runners have **no NVIDIA GPU**. The
+`isaacsim-smoke` job exercises mocked import/parity tests only
+(`continue-on-error: true`). Live Kit runtime validation requires a
+**self-hosted runner** with GPU access.
+
+**Runner requirements** (mirrors `.github/workflows/test.yml` `isaacsim-gpu-live`):
+
+| Requirement | Notes |
+|-------------|-------|
+| NVIDIA GPU + driver | Kit renderer and physics need CUDA-capable hardware |
+| `nvidia-container-toolkit` | Required for Docker-based Isaac Sim images |
+| Isaac Sim 4.1+ | Native install **or** `nvcr.io/nvidia/isaac-sim:4.1.0` container |
+| Kit Python runtime | `isaacsim.simulation_app.SimulationApp` importable |
+
+**Enable GPU smoke on your runner**
+
+1. Register a self-hosted runner with labels: `self-hosted`, `gpu`, `isaacsim`.
+2. In `.github/workflows/test.yml`, change `isaacsim-gpu-live` to:
+
+   ```yaml
+   isaacsim-gpu-live:
+     runs-on: [self-hosted, gpu, isaacsim]
+   ```
+
+3. Replace the blocker `echo` step with a headless smoke invocation (native or container).
+
+**Manual smoke (adopter workstation)**
+
+Run with Isaac Sim's Kit Python, not system `python`:
+
+```bash
+# Native install (Linux)
+/path/to/isaac-sim/python.sh scripts/isaacsim_headless_smoke.py
+
+# Docker (GPU host with nvidia-container-toolkit)
+docker run --gpus all -it --rm \
+  -v "$PWD:/workspace" -w /workspace \
+  nvcr.io/nvidia/isaac-sim:4.1.0 \
+  ./python.sh scripts/isaacsim_headless_smoke.py
+```
+
+Expected: `isaacsim_headless_smoke: OK (reset + 1 physics step)` and exit 0.
+Capture output in `docs/isaacsim_gpu_smoke_log.example.txt` for org maintainers.
+
+Mocked parity remains the upstream merge gate; GPU smoke is manual evidence for adopters.
+
 ---
 
 ## Live sensor CI (GitHub Actions)
@@ -392,7 +441,7 @@ Two optional jobs validate bridged ROS2 sensor topics end-to-end:
 | Job | Env flag | Test module |
 |-----|----------|-------------|
 | `sensor-live-ros2` | `ROBODEPLOY_LIVE_ROS2=1` | `tests/test_live_ros2_sensors.py` |
-| `sensor-live-gazebo` | `ROBODEPLOY_LIVE_GAZEBO=1` | `tests/test_live_gazebo_sensors.py` |
+| `sensor-live-gazebo` | `ROBODEPLOY_LIVE_GAZEBO=1` | `tests/test_live_gazebo_sensors.py` (`-m live_gazebo`: multimodal obs + relaxed pick-place) |
 
 **Local reproduction (Linux + ROS 2 Jazzy sourced):**
 
@@ -404,7 +453,7 @@ pip install -e ".[dev,sim]"
 ROBODEPLOY_LIVE_ROS2=1 python -m pytest tests/test_live_ros2_sensors.py -q
 
 # Headless Gazebo empty world + bridged wrist camera/FT topics
-ROBODEPLOY_LIVE_GAZEBO=1 python -m pytest tests/test_live_gazebo_sensors.py -q
+ROBODEPLOY_LIVE_GAZEBO=1 python -m pytest tests/test_live_gazebo_sensors.py -m live_gazebo -q
 ```
 
 Runnable demos:

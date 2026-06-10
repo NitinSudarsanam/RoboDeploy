@@ -48,6 +48,9 @@ T = TypeVar("T")
 
 # Internal stores: name → class
 _BACKENDS:  dict[str, type] = {}
+# Preset/CLI names → registered backend keys (canonical preset name is the alias key).
+_BACKEND_ALIASES: dict[str, str] = {"gazebo": "ros2_gazebo"}
+_CANONICAL_BACKEND_NAMES: dict[str, str] = {v: k for k, v in _BACKEND_ALIASES.items()}
 _ROBOTS:    dict[str, type] = {}
 _POLICIES:  dict[str, type] = {}
 _TASKS:     dict[str, type] = {}
@@ -194,11 +197,21 @@ def register_sensor_pair(
 # Lookup functions
 # ---------------------------------------------------------------------------
 
+def resolve_backend_name(name: str) -> str:
+    """Map preset/CLI backend name to the registered backend key."""
+    return _BACKEND_ALIASES.get(name, name)
+
+
+def canonical_backend_name(name: str) -> str:
+    """Map registered backend key to the preset/CLI canonical name."""
+    return _CANONICAL_BACKEND_NAMES.get(name, name)
+
+
 def get_backend(name: str) -> type:
     """Look up a registered backend class by name.
 
     Args:
-        name: Registered backend name.
+        name: Registered backend name or preset alias (e.g. ``gazebo`` → ``ros2_gazebo``).
 
     Returns:
         The backend class (not an instance — you instantiate it).
@@ -207,12 +220,13 @@ def get_backend(name: str) -> type:
         KeyError: If no backend with this name is registered.
                   Message includes all registered names to aid debugging.
     """
-    if name not in _BACKENDS:
+    resolved = resolve_backend_name(name)
+    if resolved not in _BACKENDS:
         raise KeyError(
             f"Backend '{name}' not found. Registered: {list(_BACKENDS)}\n"
             "Did you forget to import the backend module?"
         )
-    return _BACKENDS[name]
+    return _BACKENDS[resolved]
 
 
 def get_robot(name: str) -> type:

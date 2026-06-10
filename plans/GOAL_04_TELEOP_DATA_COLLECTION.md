@@ -291,7 +291,7 @@ Defer to phase 4.5 if time permits.
 - [ ] Recorded episodes round-trip: `teleop --record` → `replay` reproduces motion.
 - [ ] LeRobot export produces dataset loadable by `lerobot/datasets.LeRobotDataset`.
 - [ ] ROS2 `teleop_twist_keyboard` → `/cmd_vel` → `Ros2TwistTeleop` controls sim arm.
-- [ ] All teleop devices implement `ITeleopDevice` and pass `tests/test_teleop_contract.py`.
+- [x] All teleop devices implement `ITeleopDevice` and pass `tests/test_teleop_contract.py`.
 - [ ] Hot-key recording toggle (`Tab` default) + episode reset (`R` default) work in keyboard demo.
 - [ ] CLI `robodeploy replay demo.jsonl` plays back at configurable speed with pause/step.
 
