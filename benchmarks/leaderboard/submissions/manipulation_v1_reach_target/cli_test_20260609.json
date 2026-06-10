@@ -1,0 +1,51 @@
+{
+  "author": "cli_test",
+  "benchmark": "manipulation_v1/reach_target",
+  "benchmark_version": "1.0",
+  "manifest": {
+    "asset_manifest_hash": null,
+    "backend": "dummy",
+    "backend_version": null,
+    "benchmark": "manipulation_v1/reach_target",
+    "benchmark_version": "1.0",
+    "env_config": {
+      "benchmark": "manipulation_v1/reach_target",
+      "benchmark_version": "1.0",
+      "tier": 1,
+      "weight": 1.0
+    },
+    "extra": {
+      "tier": 1,
+      "weight": 1.0
+    },
+    "finished_at": null,
+    "git_dirty": false,
+    "git_hash": "83b80142d579",
+    "n_episodes": 3,
+    "package_version": "0.2.0",
+    "policy": "scripted",
+    "policy_checkpoint": null,
+    "preset_path": null,
+    "python_version": "3.14.2",
+    "robot": "",
+    "run_name": "eval-manipulation_v1-reach_target",
+    "seed": 0,
+    "seeds": {},
+    "sensor_rig": [],
+    "started_at": 1781024345.2993882,
+    "task": ""
+  },
+  "n_episodes": 3,
+  "policy_checkpoint": "",
+  "policy_name": "scripted",
+  "reproduce": {
+    "command": "robodeploy eval --benchmark manipulation_v1/reach_target --policy scripted --backend dummy --episodes 3",
+    "docker_image": "robodeploy/cpu:latest"
+  },
+  "submitted_at": "2026-06-09T16:59:05.516980+00:00",
+  "success_rate": 1.0,
+  "success_rate_ci95": [
+    1.0,
+    1.0
+  ]
+}
