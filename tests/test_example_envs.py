@@ -111,6 +111,36 @@ class ExampleEnvTests(unittest.TestCase):
         finally:
             env.close()
 
+    def test_kuka_vision_pick_mujoco_objects_from_color_blob_when_mujoco_installed(self):
+        import sys
+
+        if sys.platform == "win32":
+            self.skipTest("MuJoCo GLFW Renderer unstable on Windows")
+        try:
+            import mujoco  # noqa: F401
+        except ImportError:
+            self.skipTest("mujoco not installed")
+        from robodeploy.sensors.camera.sim.mujoco_gl import ensure_mujoco_gl_backend
+        from examples.env_from_preset import env_from_preset
+
+        ensure_mujoco_gl_backend()
+        try:
+            env = env_from_preset("kuka_vision_pick_mujoco", max_episode_steps=10)
+        except OSError as exc:
+            self.skipTest(f"MuJoCo Renderer unavailable headless: {exc}")
+        try:
+            try:
+                obs, _info = env.reset()
+            except OSError as exc:
+                self.skipTest(f"MuJoCo Renderer unavailable headless: {exc}")
+            self.assertIn("source", obs.objects, "color blob transform should populate source pose")
+            pos, _quat = obs.objects["source"]
+            self.assertEqual(len(pos), 3)
+            self.assertGreater(pos[2], 0.0)
+            self.assertIn("target", obs.objects, "prop_pose sensor should populate target pose")
+        finally:
+            env.close()
+
     def test_vision_preset_pick_succeeds_when_mujoco_installed(self):
         import sys
 

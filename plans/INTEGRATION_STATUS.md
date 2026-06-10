@@ -67,4 +67,3 @@ What presets and benchmarks claim vs what CI actually exercises. **606 tests pas
 - `pick_place_cube` dummy preset uses `benchmark_reach_scripted` — tier-2 success rate not meaningful on dummy until pick-place policy wired.
 - Isaac Sim live GPU eval requires self-hosted runner (`isaacsim-gpu-live` documents blocker).
 - Real-hardware benchmarks (`sim2real` real presets) need lab access.
-- ColorBlobTracker `obs.objects` not integrated (GOAL 03).

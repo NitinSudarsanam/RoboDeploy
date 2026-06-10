@@ -347,7 +347,7 @@ Surface in `info.extra["policy_diagnostics"]` (used by Goal 10).
 - [x] `LearnedActionAdapter` converts DELTA_EE → JOINT_POS via IK; round-trip error <1mm.
 - [x] `RoboEnv` with DELTA_EE policy + JOINT_POS backend auto-inserts adapter without code change.
 - [x] `HFModelRegistry.from_name("openvla-7b")` downloads from HF Hub on first call.
-- [ ] `RobomimicPolicy`, `DiffusionPolicy`, `VLAPolicy` ≤ 50 lines each after refactor (56 / 86 / 69 lines; queueing + camera heuristics kept inline).
+- [ ] `RobomimicPolicy`, `DiffusionPolicy`, `VLAPolicy` ≤ 50 lines each after refactor — **deferred**: current 46 / 72 / 56 lines (`robomimic.py` / `diffusion.py` / `vla.py`); plan-horizon queueing and VLA camera/heuristic paths stay inline until a follow-up extracts `helpers` without changing behavior.
 - [x] `info.extra["policy_diagnostics"]` shows action stats per step.
 - [x] Streaming HTTP client receives first action chunk within 50ms of large-VLA call.
 

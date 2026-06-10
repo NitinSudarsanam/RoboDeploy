@@ -259,7 +259,7 @@ Each tests sensor consumption against synthetic obs streams (no live sim require
 - [x] Task fails when FT force exceeds 20 N (collision avoidance reward).
 - [x] `imu_stable` predicate distinguishes settled vs swinging EE.
 - [x] `obs.contact_state` populated by ContactSensor in MuJoCo + Gazebo backends.
-- [ ] `obs.objects` populated by ColorBlobTracker from camera RGB-D + extrinsics.
+- [x] `obs.objects` populated by ColorBlobTracker from camera RGB-D + extrinsics.
 - [x] `info.extra["sensor_status"]` shows per-sensor health each step.
 - [x] Drop-detection regrasp loop works (force loss → rewind to grasp phase).
 - [x] kuka_ft_imu_pick example completes ≥80% trials.
