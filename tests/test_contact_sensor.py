@@ -10,7 +10,6 @@ from robodeploy.core.registry import resolve_sensor_class
 from robodeploy.core.types import Observation, SensorData
 from robodeploy.obs_pipeline import ObsPipeline
 from robodeploy.sensors.contact.sim.gazebo_contact import GazeboContactSensor
-from robodeploy.sensors.contact.sim.gazebo_contact import GazeboContactSensor
 from robodeploy.sensors.contact.sim.mujoco_contact import MuJoCoContactSensor
 
 try:
@@ -24,12 +23,6 @@ class ContactSensorTests(unittest.TestCase):
         self.assertIs(
             resolve_sensor_class("wrist_contact", is_real=False, backend_name="mujoco"),
             MuJoCoContactSensor,
-        )
-
-    def test_resolve_wrist_contact_gazebo(self):
-        self.assertIs(
-            resolve_sensor_class("wrist_contact", is_real=False, backend_name="gazebo"),
-            GazeboContactSensor,
         )
 
     def test_resolve_wrist_contact_gazebo(self):
