@@ -85,26 +85,25 @@ reset → observe → (safety) → policy → (adapter) → step → reward / su
 
 ```mermaid
 flowchart LR
-  subgraph user [User code]
-    Preset[Preset / from_config]
-    Robot[Robot + RobotTask]
+  subgraph userCode [User code]
+    Preset["Preset or from_config"]
+    Robot["Robot and RobotTask"]
   end
-  subgraph runtime [RoboEnv]
+  subgraph robodeploy [RoboEnv]
     Obs[ObsPipeline]
-    Safety[SafetyMonitor]
     Policy[IPolicy]
+    Safety[SafetyMonitor]
   end
-  subgraph backend [IBackend]
-    Sim[MuJoCo / Gazebo / Isaac]
-    HW[ROS2 real]
+  subgraph backends [IBackend]
+    Sim["MuJoCo, Gazebo, Isaac"]
+    HW["ROS2 hardware"]
   end
   Preset --> Robot
-  Robot --> runtime
-  runtime --> backend
-  backend --> Obs
+  Robot --> Obs
   Obs --> Policy
   Policy --> Safety
-  Safety --> backend
+  Safety --> Sim
+  Safety --> HW
 ```
 
 ## Features (v0.2)
