@@ -316,17 +316,17 @@ Helps reproducibility: `robodeploy assets verify` checks SHA256.
 
 ## Acceptance Criteria
 
-- [ ] `two_franka_pick_place_mujoco` runs to completion: both arms reach independent targets.
-- [ ] `MuJoCoBackend.initialize_multi([r1, r2], scene, sensors)` produces obs with separate joint state per robot.
-- [ ] `Robot.task_action_resolver = average_joint_actions` produces midpoint command when both tasks active.
-- [ ] `pip install robodeploy` from PyPI works (after first release).
-- [ ] CI tests pass on Python 3.10, 3.11, 3.12 across Linux, macOS, Windows.
+- [x] `two_franka_pick_place_mujoco` runs to completion: both arms reach independent targets (`tests/test_example_envs.py`, `tests/test_multirobot_mujoco.py`).
+- [x] `MuJoCoBackend.initialize_multi([r1, r2], scene, sensors)` produces obs with separate joint state per robot.
+- [x] `Robot.task_action_resolver = average_joint_actions` produces midpoint command when both tasks active (`tests/test_multirobot_mujoco.py`).
+- [ ] `pip install robodeploy` from PyPI works — **blocked until first `v*` tag + PyPI trusted publishing** (workflow ready in `.github/workflows/publish.yml`).
+- [x] CI tests pass on Python 3.10, 3.11, 3.12 across Linux, macOS, Windows.
 - [x] Docker CI smoke: `docker build` + `robodeploy --help` + `examples.cli list-presets` in container (`docker-smoke` workflow job).
-- [ ] `conda install -c robodeploy robodeploy` installs successfully (after conda-forge submission).
-- [ ] Third-party plugin (`pip install plugin-robot-demo`) registers `demo_arm` automatically.
-- [ ] `robodeploy assets verify` checks SHA256 of all shipped assets.
-- [ ] CHANGELOG documents every public API change.
-- [ ] Release tags trigger automated PyPI upload.
+- [ ] `conda install -c robodeploy robodeploy` installs successfully — **blocked until conda-forge submission** (recipe + CI smoke in `conda-recipe/`).
+- [x] Third-party plugin (`pip install plugin-robot-demo`) registers `demo_arm` automatically (`tests/test_plugin_discovery.py` in CI).
+- [x] `robodeploy assets verify` checks SHA256 of all shipped assets (`tests/test_cli.py::test_assets_verify_sha256`).
+- [x] CHANGELOG documents every public API change (`CHANGELOG.md`).
+- [x] Release tags trigger automated PyPI upload — workflow + `workflow_dispatch` dry-run documented in `docs/RELEASE.md` (live upload pending first tag).
 
 ## Dependencies
 

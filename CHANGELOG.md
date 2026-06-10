@@ -16,8 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `RoboEnv.from_config()` multi-robot dict specs in `cfg["robots"]`.
 - Entry-point plugin discovery (`robodeploy.discover()` / `auto_discover_entry_points()`).
 - `robodeploy assets verify` CLI for shipped asset SHA256 checks.
-- PyPI publish workflow, Docker CPU image sketch, conda recipe template, and `docs/PLUGINS.md`.
+- PyPI publish workflow (tag `v*` upload + `workflow_dispatch` dry-run), Docker CPU image sketch, conda recipe template, and `docs/PLUGINS.md`.
+- `docs/RELEASE.md` with local `python -m build` dry-run and first-release checklist.
 - Example third-party plugin package at `examples/plugin_robot_demo/`.
+- CI: `test_plugin_discovery`, `two_franka_pick_mujoco` E2E, and `assets verify` CLI tests.
 
 ### Changed
 

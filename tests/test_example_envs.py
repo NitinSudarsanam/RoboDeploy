@@ -158,6 +158,34 @@ class ExampleEnvTests(unittest.TestCase):
         finally:
             env.close()
 
+    def test_two_franka_pick_mujoco_runs_when_mujoco_installed(self):
+        try:
+            import mujoco  # noqa: F401
+        except ImportError:
+            self.skipTest("mujoco not installed")
+        from examples.env_from_preset import env_from_preset
+
+        env = env_from_preset("two_franka_pick_mujoco", max_episode_steps=80)
+        try:
+            env.reset()
+            self.assertEqual(len(env.robots), 2)
+            obs_map = env.get_processed_obs_by_robot()
+            self.assertEqual(set(obs_map), {"franka_left", "franka_right"})
+            home_left_q0 = float(obs_map["franka_left"].joint_positions[0])
+            home_right_q0 = float(obs_map["franka_right"].joint_positions[0])
+            for _ in range(80):
+                _, _, done, _info = env.step()
+                if done:
+                    break
+            obs_map = env.get_processed_obs_by_robot()
+            left_q0 = float(obs_map["franka_left"].joint_positions[0])
+            right_q0 = float(obs_map["franka_right"].joint_positions[0])
+            self.assertGreater(left_q0, home_left_q0, "left arm should move toward +q0 target")
+            self.assertLess(right_q0, home_right_q0, "right arm should move toward -q0 target")
+            self.assertGreater(left_q0, right_q0, "arms should diverge to independent targets")
+        finally:
+            env.close()
+
 
 if __name__ == "__main__":
     unittest.main()

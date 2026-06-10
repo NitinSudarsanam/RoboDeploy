@@ -12,7 +12,22 @@ PRESETS_FILE = Path(__file__).with_name("presets.yaml")
 PRESETS_DIR = Path(__file__).resolve().parents[1] / "presets"
 
 _REQUIRED_PRESET_KEYS = ("robot", "backend", "task", "policy")
+_MULTI_ROBOT_PRESET_KEYS = ("backend", "robots")
 _ANCHOR_PREFIXES = ("_", "base_")
+
+
+def _preset_validation_error(values: dict[str, Any]) -> list[str]:
+    if "robots" in values:
+        missing = [key for key in _MULTI_ROBOT_PRESET_KEYS if key not in values]
+        robots = values.get("robots")
+        if not isinstance(robots, list) or not robots:
+            missing.append("robots (non-empty list)")
+        return missing
+    return [key for key in _REQUIRED_PRESET_KEYS if key not in values]
+
+
+def _is_valid_preset(values: dict[str, Any]) -> bool:
+    return not _preset_validation_error(values)
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -46,7 +61,7 @@ def _resolve_includes(data: dict[str, Any], *, base_dir: Path) -> dict[str, Any]
 def _is_listable_preset(name: str, values: dict[str, Any]) -> bool:
     if any(name.startswith(prefix) for prefix in _ANCHOR_PREFIXES):
         return False
-    return all(key in values for key in _REQUIRED_PRESET_KEYS)
+    return _is_valid_preset(values)
 
 
 def _peek_include_list(path: Path) -> list[str]:
@@ -120,7 +135,7 @@ def load_preset(name: str, *, presets_file: Path | str) -> dict[str, Any]:
         known = ", ".join(list_presets(presets_file=presets_file)) or "(none)"
         raise KeyError(f"Unknown preset '{name}' in {presets_file}. Known presets: {known}")
     preset = dict(presets[name])
-    missing = [key for key in _REQUIRED_PRESET_KEYS if key not in preset]
+    missing = _preset_validation_error(preset)
     if missing:
         raise ValueError(f"Preset '{name}' missing required keys: {missing}")
     return preset
