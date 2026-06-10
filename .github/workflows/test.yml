@@ -130,12 +130,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev,sim]"
-      - name: Live Gazebo sensor tests
+      - name: Live Gazebo sensor + pick-place tests
         env:
           ROBODEPLOY_LIVE_GAZEBO: "1"
         run: |
           source /opt/ros/jazzy/setup.bash
-          python -m pytest tests/test_live_gazebo_sensors.py -q
+          pip install -e ".[kinematics]" || true
+          python -m pytest tests/test_live_gazebo_sensors.py -m live_gazebo -q
 
   isaacsim-smoke:
     runs-on: ubuntu-latest

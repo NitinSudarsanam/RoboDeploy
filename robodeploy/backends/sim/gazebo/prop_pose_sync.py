@@ -70,8 +70,14 @@ class PropPoseSyncer:
                 response = msgs.Boolean()
                 ok, _ = request(service, pose, 1000, response, True)
                 return bool(ok)
-            except Exception:
+            except Exception as exc:
+                logger.debug("gz.transport set_pose via %s failed: %s", msgs_mod, exc)
                 continue
+        logger.debug(
+            "gz.transport set_pose unavailable for '%s' (world=%s); falling back to subprocess",
+            entity_name,
+            world_name,
+        )
         return False
 
 

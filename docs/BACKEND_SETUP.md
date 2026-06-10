@@ -393,7 +393,7 @@ Two optional jobs validate bridged ROS2 sensor topics end-to-end:
 | Job | Env flag | Test module |
 |-----|----------|-------------|
 | `sensor-live-ros2` | `ROBODEPLOY_LIVE_ROS2=1` | `tests/test_live_ros2_sensors.py` |
-| `sensor-live-gazebo` | `ROBODEPLOY_LIVE_GAZEBO=1` | `tests/test_live_gazebo_sensors.py` |
+| `sensor-live-gazebo` | `ROBODEPLOY_LIVE_GAZEBO=1` | `tests/test_live_gazebo_sensors.py` (`-m live_gazebo`: multimodal obs + relaxed pick-place) |
 
 **Local reproduction (Linux + ROS 2 Jazzy sourced):**
 
@@ -405,7 +405,7 @@ pip install -e ".[dev,sim]"
 ROBODEPLOY_LIVE_ROS2=1 python -m pytest tests/test_live_ros2_sensors.py -q
 
 # Headless Gazebo empty world + bridged wrist camera/FT topics
-ROBODEPLOY_LIVE_GAZEBO=1 python -m pytest tests/test_live_gazebo_sensors.py -q
+ROBODEPLOY_LIVE_GAZEBO=1 python -m pytest tests/test_live_gazebo_sensors.py -m live_gazebo -q
 ```
 
 Runnable demos:

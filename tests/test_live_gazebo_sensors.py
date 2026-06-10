@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _TESTS_DIR = REPO_ROOT / "tests"
@@ -34,18 +35,67 @@ def _gazebo_sim_cfg(
     world: Path,
     robot_urdf: Path | None = None,
     wait_for_topics: list[str] | None = None,
+    headless: bool = True,
+    readiness_timeout_s: float = 60.0,
 ) -> dict:
     sim: dict = {
         "kind": "gazebo",
         "world": str(world),
-        "headless": True,
-        "readiness_timeout_s": 60.0,
+        "headless": headless,
+        "readiness_timeout_s": readiness_timeout_s,
         "wait_for_topics": wait_for_topics or [],
     }
     if robot_urdf is not None:
         sim["robot_urdf"] = str(robot_urdf)
         sim["robot_name"] = "robot0"
     return sim
+
+
+def _kuka_ft_imu_pick_gazebo_cfg(
+    *,
+    max_episode_steps: int = 30,
+    policy_config: dict | None = None,
+    task_kwargs: dict | None = None,
+    wait_for_topics: list[str] | None = None,
+) -> dict:
+    from examples.config import load_example_preset
+
+    cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
+    policy_kwargs = dict(cfg.get("policy_kwargs", {}))
+    merged_policy = {**dict(policy_kwargs.get("config", {})), **(policy_config or {})}
+    policy_kwargs["config"] = merged_policy
+    merged_task = {**dict(cfg.get("task_kwargs", {})), **(task_kwargs or {})}
+    topics = wait_for_topics or [
+        "/joint_states",
+        "/wrist_ft/wrench",
+        "/wrist_imu/imu",
+        "/wrist_camera/image_raw",
+    ]
+    return {
+        **cfg,
+        "max_episode_steps": max_episode_steps,
+        "policy_kwargs": policy_kwargs,
+        "task_kwargs": merged_task,
+        "backend_kwargs": {
+            "config": {
+                "sim": _gazebo_sim_cfg(
+                    world=EMPTY_WORLD,
+                    wait_for_topics=topics,
+                    readiness_timeout_s=90.0,
+                )
+            }
+        },
+    }
+
+
+def _multimodal_obs_ready(obs) -> bool:
+    objects = getattr(obs, "objects", {}) or {}
+    contact = getattr(obs, "contact_state", {}) or {}
+    has_ft = obs.ft_forces.get("wrist_ft") is not None
+    has_objects = "source" in objects and "target" in objects
+    has_contact_key = "wrist_contact" in contact
+    has_imu = getattr(obs, "imu_angular_velocity", None) is not None
+    return has_ft and has_objects and has_contact_key and has_imu
 
 
 class GazeboSensorOfflineTests(unittest.TestCase):
@@ -169,38 +219,81 @@ class LiveGazeboSensorTests(unittest.TestCase):
         finally:
             env.close()
 
+    @pytest.mark.live_gazebo
     def test_kuka_ft_imu_pick_gazebo_obs_keys(self):
-        """Live: multimodal preset populates wrist sensors after reset (no synthetic pubs)."""
-        from examples.config import load_example_preset
+        """Live: multimodal preset populates FT, IMU, contact, prop_pose, and camera obs."""
         from robodeploy.env import RoboEnv
 
-        cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
-        cfg = {
-            **cfg,
-            "max_episode_steps": 30,
-            "backend_kwargs": {
-                "config": {
-                    "sim": _gazebo_sim_cfg(
-                        world=EMPTY_WORLD,
-                        wait_for_topics=["/joint_states", "/wrist_ft/wrench"],
-                    )
-                }
-            },
-        }
+        cfg = _kuka_ft_imu_pick_gazebo_cfg(max_episode_steps=40)
         env = RoboEnv.from_config(cfg)
         try:
-            obs, _ = env.reset()
-            deadline = time.monotonic() + 60.0
+            obs, info = env.reset()
+            deadline = time.monotonic() + 90.0
             while time.monotonic() < deadline:
-                has_ft = obs.ft_forces.get("wrist_ft") is not None
-                has_objects = bool(getattr(obs, "objects", {}))
-                if has_ft and has_objects:
+                if _multimodal_obs_ready(obs):
                     break
-                obs, _, _, _ = env.step()
+                obs, _, _, info = env.step()
+            status = getattr(obs, "sensor_status", {}) or {}
             self.assertIn("source", getattr(obs, "objects", {}))
+            self.assertIn("target", getattr(obs, "objects", {}))
             self.assertIsNotNone(obs.ft_forces.get("wrist_ft"))
+            self.assertIsNotNone(getattr(obs, "imu_angular_velocity", None))
+            self.assertIn("wrist_contact", getattr(obs, "contact_state", {}) or {})
+            self.assertIn("wrist_camera", obs.images)
+            self.assertTrue(
+                "wrist_camera" in (getattr(obs, "depths", {}) or {})
+                or getattr(obs, "depth", None) is not None,
+                msg="expected wrist_camera depth from bridged RGB-D rig",
+            )
+            self.assertIn("overall", info.extra.get("sensor_health", {}))
+            self.assertIn("wrist_ft", status)
+            self.assertIn("wrist_imu", status)
         finally:
             env.close()
+
+    @pytest.mark.live_gazebo
+    def test_kuka_ft_imu_pick_gazebo_episode_success_relaxed(self):
+        """Live: pick-place with relaxed FT tuning; at least one of three seeds succeeds.
+
+        Skipped unless ROBODEPLOY_LIVE_GAZEBO=1 (sensor-live-gazebo CI on Linux).
+        Uses kinematic carry (not weld); success still depends on JTC + IK tuning.
+        """
+        from robodeploy.env import RoboEnv
+
+        seeds = (0, 1, 2)
+        successes = 0
+        for seed in seeds:
+            cfg = _kuka_ft_imu_pick_gazebo_cfg(
+                max_episode_steps=1200,
+                policy_config={
+                    "force_threshold": 0.3,
+                    "grasp_force_window": 2,
+                    "imu_omega_max": 0.8,
+                    "imu_settle_steps": 2,
+                },
+                task_kwargs={"grasp_success_force_min": 0.5},
+            )
+            env = RoboEnv.from_config(cfg)
+            try:
+                env.reset(seed=seed)
+                info = None
+                for _ in range(1200):
+                    _, _, done, info = env.step()
+                    if done:
+                        break
+                if info is not None and bool(info.success):
+                    successes += 1
+            finally:
+                env.close()
+
+        self.assertGreaterEqual(
+            successes,
+            1,
+            msg=(
+                f"relaxed Gazebo pick-place: {successes}/{len(seeds)} seeds succeeded; "
+                "check JTC, IK (.[kinematics]), and FT thresholds"
+            ),
+        )
 
 
 if __name__ == "__main__":

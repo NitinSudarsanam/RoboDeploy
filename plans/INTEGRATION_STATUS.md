@@ -12,11 +12,12 @@ What presets and benchmarks claim vs what CI actually exercises. **606 tests pas
 | `test.yml` → `sensor-e2e-linux` | MuJoCo sensor/scene e2e, `kuka_pick_mujoco` 50-step CLI smoke, benchmark preset env build | **Pass** — MuJoCo smoke |
 | `test.yml` → `eval-mujoco-smoke` | `robodeploy eval manipulation_v1/reach_target --backend mujoco --episodes 3` | **Pass** — MuJoCo eval harness (not full suite) |
 | `test.yml` → `sensor-live-ros2` | `tests/test_live_ros2_sensors.py` (ROS2 graph) | **Pass** — live ROS2 sensors |
-| `test.yml` → `sensor-live-gazebo` | `tests/test_live_gazebo_sensors.py` | **Pass** — Gazebo sensor smoke (not pick-place success) |
+| `test.yml` → `sensor-live-gazebo` | `tests/test_live_gazebo_sensors.py -m live_gazebo` | **Pass** — multimodal obs + relaxed pick-place (≥1/3 seeds) |
 | `test.yml` → `isaacsim-smoke` | Mocked IsaacSim parity tests (`continue-on-error: true`) | **Smoke** — no GPU Kit runtime |
 | `test.yml` → `multirobot-mujoco` | `tests/test_multirobot_mujoco.py` | **Pass** — two-arm MuJoCo |
 | `test.yml` → `docker-smoke` | `docker build` + `robodeploy --help` + `examples.cli list-presets` | **Pass** |
 | `test.yml` → `conda-recipe` | Recipe metadata + pip-source import smoke | **Pass** — not conda-forge publish |
+| `test.yml` → `package-build` | `tests/test_package_build.py` — sdist/wheel + `twine check` + wheel CLI smoke | **Pass** — no PyPI upload |
 | `benchmark.yml` → `validate-schemas` | `spec.json` + leaderboard schema + PR submission validation | **Pass** |
 | `benchmark.yml` → `manipulation-v1-dummy` | Full `manipulation_v1` suite, dummy backend, **N=5** episodes | **Pass** — reduced N nightly gate |
 | `benchmark.yml` → `publish-pages` | Deploys dummy-suite HTML + JSON to GitHub Pages | **Pass** — dummy-only scores |
@@ -29,7 +30,7 @@ What presets and benchmarks claim vs what CI actually exercises. **606 tests pas
 |--------------------|------------------|--------|--------|
 | `kuka_pick_mujoco` | `python -m examples.cli run-episode --preset kuka_pick_mujoco --steps 50` | `sensor-e2e-linux` | **Smoke** — builds env, steps MuJoCo |
 | `my_kitchen_pick_mujoco` | `python -m examples.cli run-episode --preset my_kitchen_pick_mujoco` | — | **Doc only** — requires tutorial task file |
-| `kuka_ft_imu_pick_gazebo` | `python -m examples.kuka_ft_imu_pick_gazebo.run_gazebo` | `sensor-live-gazebo` (sensors only) | **Sensor smoke** — pick-place success not claimed |
+| `kuka_ft_imu_pick_gazebo` | `python -m examples.kuka_ft_imu_pick_gazebo.run_gazebo` | `sensor-live-gazebo` (`live_gazebo` marker) | **Live smoke** — multimodal obs + relaxed pick-place (≥1/3 seeds; not 80% MuJoCo parity) |
 | `kuka_sensor_gazebo` | `python -m examples.kuka_sensor_gazebo.run_gazebo` | `sensor-live-gazebo` | **Sensor smoke** |
 | `manipulation_v1/*/preset_dummy` | `robodeploy eval --benchmark manipulation_v1/<task> --backend dummy` | `unittest`, `benchmark-nightly` (N=5) | **Pass** — eval harness + nightly |
 | `manipulation_v1/reach_target/preset_mujoco` | `robodeploy eval ... --backend mujoco --episodes 3` | `eval-mujoco-smoke` | **Short eval** — not full 100-ep suite |

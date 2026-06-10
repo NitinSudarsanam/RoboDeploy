@@ -134,4 +134,5 @@ testpaths = ["tests"]
 markers = [
   "hardware: tests that require physical robot hardware",
   "slow: long-running training integration tests (SB3 100k, PPO reach_target)",
+  "live_gazebo: live Gazebo + ROS2 tests (ROBODEPLOY_LIVE_GAZEBO=1, Linux CI)",
 ]
