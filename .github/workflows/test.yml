@@ -21,10 +21,10 @@ jobs:
       - name: Install package and test deps
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,training,rl]"
       # Proves: registry, benchmarks YAML, eval harness (incl. test_benchmarks.py, test_backend_registry.py).
       - name: Run unit tests
-        run: python -m pytest tests/ -q -m "not hardware" --ignore=tests/test_sensors_and_scenes_e2e.py --ignore=tests/test_live_ros2_sensors.py --ignore=tests/test_live_gazebo_sensors.py
+        run: python -m pytest tests/ -q -m "not hardware and not slow" --ignore=tests/test_sensors_and_scenes_e2e.py --ignore=tests/test_live_ros2_sensors.py --ignore=tests/test_live_gazebo_sensors.py
 
   sensor-e2e-linux:
     runs-on: ubuntu-latest
@@ -41,11 +41,26 @@ jobs:
       - name: MuJoCo sensor e2e (Linux)
         env:
           MUJOCO_GL: egl
-        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py tests/test_gazebo_urdf_mount.py tests/test_gazebo_sensor_rig_smoke.py tests/test_mujoco_grasp.py tests/test_mujoco_grasp_welds.py tests/test_example_envs.py tests/test_benchmarks.py::BenchmarkPresetBuildTests -q
+        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py tests/test_gazebo_urdf_mount.py tests/test_gazebo_sensor_rig_smoke.py tests/test_mujoco_grasp.py tests/test_mujoco_grasp_welds.py tests/test_example_envs.py tests/test_benchmarks.py::BenchmarkPresetBuildTests tests/training/test_gym_register.py::GymRegisterTests::test_kuka_pick_mujoco_env_registered -q
       - name: Examples CLI non-dummy smoke (kuka_pick_mujoco)
         env:
           MUJOCO_GL: egl
         run: python -m examples.cli run-episode --preset kuka_pick_mujoco --steps 50 --json
+
+  training-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install with training extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,training,rl]"
+      # Proves: SB3 100k, PPO reach_target ≥80%, SubprocVecEnv ≥3× throughput (fork).
+      - name: Training integration tests (incl. slow)
+        run: python -m pytest tests/training/ -q -m "not hardware"
 
   eval-mujoco-smoke:
     runs-on: ubuntu-latest

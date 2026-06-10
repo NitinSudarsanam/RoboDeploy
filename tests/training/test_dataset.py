@@ -51,6 +51,18 @@ class DatasetTests(unittest.TestCase):
         item = seq[0]
         self.assertEqual(item["action"].shape, (2, 2))
 
+    def test_hdf5_round_trip(self):
+        frames = [_sample_frame(float(i)) for i in range(4)]
+        base = DemoDataset(frames)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "demos.hdf5"
+            base.to_hdf5(path)
+            loaded = DemoDataset.from_hdf5(path)
+            self.assertEqual(len(loaded), len(frames))
+            item = loaded[0]
+            self.assertEqual(item["obs"]["proprio"].shape[0], 6)
+            self.assertEqual(item["action"].shape[0], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

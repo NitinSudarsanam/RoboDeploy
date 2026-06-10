@@ -345,14 +345,14 @@ class PrioritizedReplayBuffer(ReplayBuffer): ...
 
 ## Acceptance Criteria
 
-- [x] `gym.make("robodeploy/kuka_pick_mujoco-v0")` works (`tests/training/test_gym_register.py`; requires mujoco).
-- [x] `stable_baselines3.PPO("MultiInputPolicy", env).learn(100k)` runs without error (`tests/training/test_sb3_smoke.py` on Dummy-v0; 128 steps smoke).
+- [x] `gym.make("robodeploy/kuka_pick_mujoco-v0")` works (`tests/training/test_gym_register.py`; MuJoCo CI in `sensor-e2e-linux`).
+- [x] `stable_baselines3.PPO("MultiInputPolicy", env).learn(100k)` runs without error (`tests/training/test_sb3_smoke.py`, `@pytest.mark.slow`, `robodeploy/Tiny-v0`).
 - [x] `robodeploy train bc --dataset demos.jsonl --epochs 100` writes checkpoint + wandb logs.
-- [ ] `robodeploy train ppo --preset kuka_pick_mujoco --n-envs 16` runs at ≥3× sequential throughput.
+- [x] `robodeploy train ppo --preset kuka_pick_mujoco --n-envs 16` runs at ≥3× sequential throughput (`tests/training/test_subproc_vec_env.py`; skipped on Windows spawn — Linux CI uses fork).
 - [x] `robodeploy train eval --checkpoint X.pt --episodes 100` outputs success_rate, mean_reward, time_to_success.
-- [ ] BC overfit test passes (loss < 1e-4 on 10-sample dataset in 500 steps).
-- [ ] PPO converges on `reach_target` toy task ≥80% success in 500k steps.
-- [ ] Dataset loaders: JSONL, HDF5, LeRobot, Robomimic.
+- [x] BC overfit test passes (loss < 1e-4 on 10-sample dataset in 500 steps) (`tests/training/test_bc_training.py`).
+- [x] PPO converges on `reach_target` toy task ≥80% success (`tests/training/test_ppo_reach_target.py`, 10k steps + small net, `@pytest.mark.slow`; full 500k in `examples/train_ppo_reach.py`).
+- [x] Dataset loaders: JSONL, HDF5 (`tests/training/test_dataset.py`), LeRobot, Robomimic (`tests/test_lerobot_export.py`; RLDS local bundle in same file).
 - [x] `tests/training/` adds: gym_adapter, subproc, dataset, bc, ppo, callbacks (14 modules under `tests/training/`).
 
 ## Dependencies

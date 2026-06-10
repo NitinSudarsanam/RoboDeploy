@@ -7,6 +7,19 @@ from typing import Any
 _REGISTERED = False
 
 
+def make_robodeploy_tiny(
+    *,
+    max_episode_steps: int = 50,
+    render_mode: str | None = None,
+    **kwargs: Any,
+):
+    """Minimal Dict-obs gym env for fast SB3 smoke tests (no RoboEnv)."""
+    del kwargs, render_mode
+    from robodeploy.training.parallel_vec_env import TinyDictGymEnv
+
+    return TinyDictGymEnv(max_steps=max_episode_steps)
+
+
 def make_robodeploy_dummy(
     *,
     max_episode_steps: int = 100,
@@ -97,6 +110,12 @@ def register_robodeploy_envs() -> None:
             force=True,
         )
         gym.register(
+            id="robodeploy/Tiny-v0",
+            entry_point="robodeploy.training.gym_register:make_robodeploy_tiny",
+            max_episode_steps=50,
+            force=True,
+        )
+        gym.register(
             id="robodeploy/kuka_pick_mujoco-v0",
             entry_point="robodeploy.training.gym_register:make_kuka_pick_mujoco",
             max_episode_steps=1000,
@@ -107,6 +126,11 @@ def register_robodeploy_envs() -> None:
             id="robodeploy/Dummy-v0",
             entry_point="robodeploy.training.gym_register:make_robodeploy_dummy",
             max_episode_steps=100,
+        )
+        gym.register(
+            id="robodeploy/Tiny-v0",
+            entry_point="robodeploy.training.gym_register:make_robodeploy_tiny",
+            max_episode_steps=50,
         )
         gym.register(
             id="robodeploy/kuka_pick_mujoco-v0",

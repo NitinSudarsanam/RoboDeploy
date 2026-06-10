@@ -68,6 +68,8 @@ dev = [
   "jax[cpu]",
   "pyyaml",
   "h5py",
+  "torch>=2.0",
+  "gymnasium>=0.29",
   "jinja2",
   "matplotlib",
   "jsonschema",
@@ -131,4 +133,5 @@ robodeploy = [
 testpaths = ["tests"]
 markers = [
   "hardware: tests that require physical robot hardware",
+  "slow: long-running training integration tests (SB3 100k, PPO reach_target)",
 ]
