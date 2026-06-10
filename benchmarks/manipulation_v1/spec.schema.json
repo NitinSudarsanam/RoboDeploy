@@ -16,7 +16,12 @@
           "tier": {"type": "integer", "minimum": 1},
           "max_steps": {"type": "integer", "minimum": 1},
           "expected_success": {"type": "number", "minimum": 0, "maximum": 1},
-          "weight": {"type": "number", "minimum": 0}
+          "weight": {"type": "number", "minimum": 0},
+          "task_status": {
+            "type": "string",
+            "enum": ["live", "placeholder"],
+            "description": "live = dedicated benchmark task; placeholder = reach/showcase stand-in until task ships."
+          }
         }
       }
     },

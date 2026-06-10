@@ -291,6 +291,13 @@ class ActionAdapter:
         for transform in self.transforms:
             transform.reset()
 
+    def warm_start(self, q_init: np.ndarray) -> None:
+        """Seed stateful transforms (e.g. DeltaEEToJointPosTransform) with current q."""
+        for transform in self.transforms:
+            warm = getattr(transform, "warm_start", None)
+            if callable(warm):
+                warm(q_init)
+
     def __repr__(self) -> str:
         names = [type(t).__name__ for t in self.transforms]
         return f"ActionAdapter([{', '.join(names)}])"

@@ -37,6 +37,13 @@ class GazeboContactOfflineTests(unittest.TestCase):
         self.assertTrue(monitor.has_contact("target"))
         self.assertTrue(monitor.has_contact("robot0/gripper"))
 
+    def test_fuzzy_harmonic_contact_names(self):
+        monitor = GazeboContactMonitor()
+        monitor.inject_contacts([("robot0::source::collision", "robot0::ee_link::collision")])
+        self.assertTrue(monitor.has_contact("source", "ee_link"))
+        self.assertTrue(monitor.has_contact("source", "robot0/ee_link"))
+        self.assertFalse(monitor.has_contact("target", "ee_link"))
+
 
 LIVE = os.environ.get("ROBODEPLOY_LIVE_GAZEBO", "").strip() in {"1", "true", "yes"}
 

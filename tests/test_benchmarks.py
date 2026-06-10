@@ -3,11 +3,17 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _ci_eval_episodes(*, full: int = 100, reduced: int = 5) -> int:
+    """Local runs use full episode budget; CI uses reduced N (matches benchmark-nightly)."""
+    return reduced if os.environ.get("CI") else full
 
 
 class BenchmarkRegistryTests(unittest.TestCase):
@@ -97,6 +103,7 @@ class MetricsTests(unittest.TestCase):
         agg = aggregate_episodes(metrics)
         self.assertEqual(agg.n_episodes, 2)
         self.assertAlmostEqual(agg.success_rate, 0.5)
+        self.assertEqual(agg.median_time_to_success_steps, 1)
 
 
 class EvalHarnessTests(unittest.TestCase):
@@ -113,6 +120,27 @@ class EvalHarnessTests(unittest.TestCase):
         )
         self.assertEqual(report.aggregate.n_episodes, 20)
         self.assertGreaterEqual(report.aggregate.success_rate, 0.95)
+
+    def test_pick_place_cube_eval_outputs_aggregate_json(self):
+        from robodeploy.evaluation.runner import run_eval
+
+        episodes = _ci_eval_episodes()
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "pick_place_report.json"
+            report = run_eval(
+                benchmark="manipulation_v1/pick_place_cube",
+                policy="scripted",
+                backend="dummy",
+                episodes=episodes,
+                base_seed=0,
+                benchmarks_root=str(REPO_ROOT / "benchmarks"),
+            )
+            report.save(out)
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(payload["benchmark_name"], "manipulation_v1/pick_place_cube")
+            self.assertEqual(payload["aggregate"]["n_episodes"], episodes)
+            self.assertIn("success_rate", payload["aggregate"])
+            self.assertEqual(len(payload["episodes"]), episodes)
 
     def test_parallel_matches_sequential(self):
         from robodeploy.evaluation.runner import run_eval
@@ -225,8 +253,102 @@ class FailureClassifierTests(unittest.TestCase):
         )
         self.assertEqual(FailureClassifier().classify(metrics), "timeout")
 
+    def test_fixture_audit_accuracy_at_least_80_percent(self):
+        from robodeploy.core.types import Observation
+        from robodeploy.evaluation.failure_analysis import FailureClassifier
+        from robodeploy.evaluation.metrics import EpisodeMetrics
+
+        def _metrics(**kwargs) -> EpisodeMetrics:
+            base = dict(
+                success=False,
+                reward_total=0.0,
+                reward_per_step=0.0,
+                steps=50,
+                time_to_success_steps=None,
+                time_to_success_seconds=None,
+                smoothness_jerk=0.0,
+                smoothness_action_norm=0.0,
+                smoothness_velocity=0.0,
+                collision_count=0,
+                max_force_N=0.0,
+                workspace_violations=0,
+                distance_to_goal_final=0.2,
+                distance_to_goal_min=0.1,
+                constraint_violations={},
+                metadata={},
+            )
+            base.update(kwargs)
+            return EpisodeMetrics(**base)
+
+        try:
+            import jax.numpy as jnp
+        except Exception:
+            import numpy as jnp  # type: ignore[assignment]
+
+        def _traj(zs: list[float]) -> list[Observation]:
+            return [
+                Observation(
+                    joint_positions=jnp.zeros(7),
+                    joint_velocities=jnp.zeros(7),
+                    joint_torques=jnp.zeros(7),
+                    ee_position=jnp.asarray([0.5, 0.0, z], dtype=jnp.float32),
+                    ee_orientation=jnp.asarray([1.0, 0.0, 0.0, 0.0], dtype=jnp.float32),
+                    ee_velocity=jnp.zeros(3),
+                    ee_angular_velocity=jnp.zeros(3),
+                )
+                for z in zs
+            ]
+
+        fixtures: list[tuple[EpisodeMetrics, str, list[Observation] | None]] = [
+            (_metrics(steps=100, metadata={"max_steps": 100}), "timeout", None),
+            (_metrics(collision_count=2), "collision", None),
+            (_metrics(max_force_N=60.0), "exceeded_force", None),
+            (_metrics(workspace_violations=2), "out_of_workspace", None),
+            (_metrics(distance_to_goal_final=0.25), "missed_grasp", None),
+            (_metrics(distance_to_goal_final=0.10), "off_target", None),
+            (
+                _metrics(distance_to_goal_final=0.20),
+                "dropped",
+                _traj([0.2, 0.5, 0.55, 0.56, 0.30, 0.28, 0.25]),
+            ),
+            (_metrics(success=True), "other", None),
+            (_metrics(collision_count=1, max_force_N=60.0), "collision", None),
+            (_metrics(distance_to_goal_final=0.06), "off_target", None),
+            (_metrics(metadata={"failure_category": "missed_grasp"}), "missed_grasp", None),
+        ]
+        clf = FailureClassifier()
+        correct = sum(1 for metrics, label, traj in fixtures if clf.classify(metrics, traj) == label)
+        accuracy = correct / len(fixtures)
+        self.assertGreaterEqual(accuracy, 0.80, f"accuracy={accuracy:.0%}")
+
+    def test_gazebo_presets_load(self):
+        from robodeploy.evaluation.registry import BenchmarkRegistry
+
+        registry = BenchmarkRegistry(REPO_ROOT / "benchmarks")
+        suite = registry.load_suite("manipulation_v1")
+        for task in suite.tasks:
+            if "gazebo" not in task.available_backends():
+                continue
+            preset = task.load_preset("gazebo")
+            self.assertEqual(preset.get("backend"), "gazebo")
+            self.assertIn("task", preset)
+            self.assertIn("policy", preset)
+
 
 class RenderTests(unittest.TestCase):
+    def test_embed_path_skips_large_files(self):
+        from robodeploy.evaluation.video import EpisodeVideoRecorder
+
+        with tempfile.TemporaryDirectory() as tmp:
+            large = Path(tmp) / "big.mp4"
+            large.write_bytes(b"x" * (EpisodeVideoRecorder._EMBED_MAX_BYTES + 1))
+            self.assertIsNone(EpisodeVideoRecorder.embed_path(large))
+            small = Path(tmp) / "small.mp4"
+            small.write_bytes(b"tiny")
+            embedded = EpisodeVideoRecorder.embed_path(small)
+            self.assertIsNotNone(embedded)
+            self.assertTrue(str(embedded).startswith("data:video/mp4;base64,"))
+
     def test_html_report_writes_file(self):
         from robodeploy.evaluation.runner import run_eval
 
@@ -244,6 +366,27 @@ class RenderTests(unittest.TestCase):
             text = html.read_text(encoding="utf-8")
             self.assertIn(report.benchmark_name, text)
             self.assertIn("Success rate", text)
+
+    def test_html_report_embeds_recorded_video(self):
+        from robodeploy.evaluation.render import render_report
+        from robodeploy.evaluation.runner import run_eval
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            video = tmp_path / "ep_0.mp4"
+            video.write_bytes(b"tiny-mp4-fixture")
+            report = run_eval(
+                benchmark="manipulation_v1/reach_target",
+                policy="scripted",
+                backend="dummy",
+                episodes=2,
+                benchmarks_root=str(REPO_ROOT / "benchmarks"),
+            )
+            html = render_report(report, out=tmp_path / "with_video.html", video_paths=[str(video)])
+            self.assertIn("<video controls", html)
+            self.assertIn("data:video/mp4;base64,", html)
+            saved = (tmp_path / "with_video.html").read_text(encoding="utf-8")
+            self.assertIn("Episode videos", saved)
 
 
 class EvalCliTests(unittest.TestCase):
@@ -359,6 +502,62 @@ class EvalCliTests(unittest.TestCase):
                 ]
             )
             self.assertEqual(code, 0)
+
+
+class BenchmarkPresetBuildTests(unittest.TestCase):
+    @unittest.skipUnless(
+        __import__("platform").system() != "Windows",
+        "MuJoCo env build skipped on Windows",
+    )
+    def test_benchmark_preset_builds_env(self):
+        from robodeploy.evaluation.env_builder import build_env_from_preset
+        from robodeploy.evaluation.registry import BenchmarkRegistry
+
+        registry = BenchmarkRegistry(REPO_ROOT / "benchmarks")
+        suite = registry.load_suite("manipulation_v1")
+        for task in suite.tasks:
+            for backend in ("dummy", "mujoco"):
+                if backend not in task.available_backends():
+                    continue
+                preset = task.load_preset(backend)
+                task.import_task_module()
+                env = build_env_from_preset(preset, seed=0)
+                try:
+                    env.reset()
+                finally:
+                    from robodeploy.cli_helpers import close_quietly
+
+                    close_quietly(env)
+
+    def test_benchmark_gazebo_presets_build_env(self):
+        import shutil
+
+        if shutil.which("gz") is None:
+            self.skipTest("gz binary not on PATH")
+
+        try:
+            import rclpy  # noqa: F401
+        except ImportError:
+            self.skipTest("rclpy not available")
+
+        from robodeploy.evaluation.env_builder import build_env_from_preset
+        from robodeploy.evaluation.registry import BenchmarkRegistry
+
+        registry = BenchmarkRegistry(REPO_ROOT / "benchmarks")
+        suite = registry.load_suite("manipulation_v1")
+        for task in suite.tasks:
+            if "gazebo" not in task.available_backends():
+                continue
+            preset = task.load_preset("gazebo")
+            task.import_task_module()
+            env = build_env_from_preset(preset, seed=0)
+            try:
+                self.assertIsNotNone(env.backend)
+                self.assertGreaterEqual(len(env.robots), 1)
+            finally:
+                from robodeploy.cli_helpers import close_quietly
+
+                close_quietly(env)
 
 
 if __name__ == "__main__":

@@ -43,12 +43,18 @@ class VisionPredicateTests(unittest.TestCase):
         pos, _ = pose  # type: ignore[misc]
         self.assertGreater(pos[2], 0.0)
 
-    def test_transform_populates_objects(self):
+    def test_transform_populates_objects_with_extrinsics(self):
         rgb = np.zeros((48, 64, 3), dtype=np.uint8)
         rgb[20:28, 30:38] = (255, 0, 0)
         obs = _base_obs(
             images={"wrist_camera": rgb},
             camera_intrinsics={"wrist_camera": {"fx": 64.0, "fy": 48.0, "cx": 32.0, "cy": 24.0}},
+            camera_extrinsics={
+                "wrist_camera": {
+                    "position": (0.6, 0.0, 0.5),
+                    "orientation": (1.0, 0.0, 0.0, 0.0),
+                }
+            },
         )
         out = ColorBlobTrackerTransform(camera="wrist_camera", object_name="source", min_pixels=10).forward(obs)
         self.assertIn("source", out.objects)

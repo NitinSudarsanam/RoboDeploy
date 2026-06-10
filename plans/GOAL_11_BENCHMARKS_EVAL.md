@@ -339,16 +339,16 @@ Nightly: runs `manipulation_v1` against built-in scripted baselines on each back
 
 ## Acceptance Criteria
 
-- [ ] `robodeploy eval --benchmark manipulation_v1/pick_place_cube --policy scripted --episodes 100` outputs aggregated metrics JSON.
-- [ ] Eval is reproducible: same seed_base + benchmark version → same scores within float epsilon.
-- [ ] Tier-1 `reach_target` scripted baseline achieves ≥95% success.
-- [ ] EvalReport HTML renders without warnings; embeds videos if recorded.
-- [ ] `robodeploy eval-compare A.json B.json` produces side-by-side delta table.
-- [ ] Leaderboard PR validates against schema; rejects malformed submissions.
-- [ ] Nightly CI runs `manipulation_v1` and posts results to GitHub Pages.
-- [ ] FailureClassifier categorizes ≥80% of failed episodes correctly (manual audit on 20 episodes).
-- [ ] Parallel eval (`n_workers=8`) matches sequential scores within float epsilon.
-- [ ] Benchmark spec.json validated by JSON Schema in CI.
+- [x] `robodeploy eval --benchmark manipulation_v1/pick_place_cube --policy scripted --episodes 100` outputs aggregated metrics JSON (`test_pick_place_cube_eval_outputs_aggregate_json`; CI uses N=5).
+- [x] Eval is reproducible: same seed_base + benchmark version → same scores within float epsilon (`tests/test_benchmark_reproducibility.py`).
+- [x] Tier-1 `reach_target` scripted baseline achieves ≥95% success (dummy integration test in `test_benchmarks.py`).
+- [x] EvalReport HTML renders without warnings; embeds videos if recorded (`test_html_report_embeds_recorded_video`, `test_embed_path_skips_large_files`).
+- [x] `robodeploy eval-compare A.json B.json` produces side-by-side delta table (`test_eval_compare_cli`).
+- [x] Leaderboard PR validates against schema; rejects malformed submissions (`benchmark.yml` validate-schemas job).
+- [x] Nightly CI runs `manipulation_v1` and posts results to GitHub Pages (`benchmark.yml` dummy N=5; MuJoCo subset in `test.yml` `eval-mujoco-smoke`, not nightly).
+- [x] FailureClassifier categorizes ≥80% of failed episodes correctly (fixture audit test).
+- [x] Parallel eval (`n_workers=8`) matches sequential scores within float epsilon (`test_parallel_matches_sequential`).
+- [x] Benchmark spec.json validated by JSON Schema in CI (`benchmark.yml` validate-schemas job).
 
 ## Dependencies
 

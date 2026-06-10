@@ -22,7 +22,7 @@ from robodeploy.core.spaces import ActionSpace
 from robodeploy.core.types import Action, Observation
 
 from ._clamp import slew_limit_command
-from .base import CommandAck, ControllerConfig, register_controller
+from .base import CommandAck, ControllerConfig, register_controller, resolve_ros_topic
 from robodeploy.ros2 import Ros2NodeAdapter
 
 
@@ -36,6 +36,8 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
         self._ns = (cfg.namespace or "").rstrip("/")
         self._joint_states_topic = cfg.joint_states_topic
         self._cmd_topic = cfg.cmd_topic
+        self._resolved_joint_states_topic = resolve_ros_topic(self._ns, self._joint_states_topic)
+        self._resolved_cmd_topic = resolve_ros_topic(self._ns, self._cmd_topic)
         self._joint_state_timeout_s = float(cfg.joint_state_timeout_s)
         self._ack_timeout_s = float(cfg.ack_timeout_s)
         self._sequence_id = 0
@@ -105,13 +107,13 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
         self._cmd_msg_type = Float64MultiArray
         self._cmd_pub = node.create_publisher(
             Float64MultiArray,
-            f"{self._ns}/{self._cmd_topic}" if self._ns else f"/{self._cmd_topic}",
+            self._resolved_cmd_topic,
             10,
         )
 
         node.create_subscription(
             JointState,
-            f"{self._ns}/{self._joint_states_topic}" if self._ns else f"/{self._joint_states_topic}",
+            self._resolved_joint_states_topic,
             self._on_joint_state,
             10,
         )
@@ -180,8 +182,7 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
             self._joint_state_event.wait(timeout=0.05)
         self.stop()
         raise RuntimeError(
-            f"Timed out after {timeout_s}s waiting for joint states on "
-            f"{self._ns}/{self._joint_states_topic}" if self._ns else f"/{self._joint_states_topic}"
+            f"Timed out after {timeout_s}s waiting for joint states on {self._resolved_joint_states_topic}"
         )
 
     def _wait_for_new_joint_state(self, *, last_stamp_s: float, timeout_s: float) -> None:

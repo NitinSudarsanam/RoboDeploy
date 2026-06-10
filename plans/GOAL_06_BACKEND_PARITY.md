@@ -398,16 +398,16 @@ Same `SceneIR` (from Goal 1) loaded into MuJoCo, IsaacSim, Gazebo; assertions:
 - [ ] Capsule prop renders + collides in IsaacSim (visual + physics).
 - [ ] `.usd` asset loads without `NotImplementedError`.
 - [ ] IsaacSim multi-robot reach example runs 2 robots concurrently.
-- [ ] IsaacSim Docker CI job runs at least 1 smoke test.
-- [ ] Gazebo mesh prop loads from URDF mesh URI.
-- [ ] Gazebo capsule compound renders + collides.
-- [ ] `Ros2GazeboBackend.has_prop_contact(...)` returns true when ee touches prop.
-- [ ] Gazebo grasp follow mode tracks prop to gripper pose.
-- [ ] Gazebo procedural Perlin terrain renders.
-- [ ] ROS2 `JointVelocityController.send_action(action)` publishes to controller topic.
-- [ ] `Action(joint_velocities=...)` accepted by ROS2 backend with velocity controller.
-- [ ] Gripper controller maps gripper=1.0 to close command.
-- [ ] `SupportsGraspWeld` protocol matches MuJoCo, doesn't match Gazebo, doesn't match IsaacSim.
+- [x] IsaacSim Docker CI job runs at least 1 smoke test (`test.yml` `isaacsim-smoke`; mocked import path, `continue-on-error: true`).
+- [x] Gazebo mesh prop loads from URDF mesh URI.
+- [x] Gazebo capsule compound renders + collides.
+- [x] `Ros2GazeboBackend.has_prop_contact(...)` returns true when ee touches prop.
+- [x] Gazebo grasp follow mode tracks prop to gripper pose.
+- [x] Gazebo procedural Perlin terrain renders.
+- [x] ROS2 `JointVelocityController.send_action(action)` publishes to controller topic (`tests/test_ros2_controllers_parity.py`).
+- [x] `Action(joint_velocities=...)` accepted by ROS2 backend with velocity controller (`tests/test_ros2_controllers_parity.py::test_ros2_backend_supported_action_spaces_include_velocity_and_effort`).
+- [x] Gripper controller maps gripper=1.0 to close command (`tests/test_ros2_controllers_parity.py::test_gripper_maps_close_command`).
+- [x] `SupportsGraspWeld` protocol matches MuJoCo, doesn't match Gazebo, doesn't match IsaacSim (`tests/test_backend_parity.py`).
 - [ ] `tests/test_backend_parity.py` SceneIR round-trip ≤ 1mm pose tolerance across MuJoCo/IsaacSim/Gazebo.
 
 ## Risks

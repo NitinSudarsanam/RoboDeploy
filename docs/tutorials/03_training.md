@@ -71,6 +71,31 @@ robodeploy list-benchmarks --json
 robodeploy eval --benchmark manipulation_v1/reach_target --backend dummy --episodes 10 --json
 ```
 
+## PPO (parallel sim rollouts)
+
+```bash
+robodeploy train ppo --preset kuka_pick_mujoco --n-envs 16 --total-steps 500000 --log-dir ./runs/ppo
+```
+
+Use `--dummy` for a fast pipeline smoke test without MuJoCo:
+
+```bash
+robodeploy train ppo --dummy --n-envs 4 --total-steps 256 --rollout-steps 64 --log wandb
+```
+
+### Parallel throughput (honest expectations)
+
+`train ppo` builds a `SubprocVecEnv` with default `start_method='spawn'` (required on
+Windows; also the CLI default on Linux). Worker processes must pickle the env factory,
+so preset factories delegate to picklable gym entry points.
+
+CI asserts **≥3× sequential throughput only** for the lightweight
+`dummy_gym_env_factory` benchmark on Linux when using `start_method='fork'` (see
+`tests/training/test_subproc_vec_env.py`). That claim does **not** extend to the
+preset/MuJoCo CLI path or to Windows, where spawn IPC overhead makes the ratio
+unreliable. `tests/training/test_ppo_preset_throughput.py` instead verifies that CLI
+env factories step correctly inside spawn workers.
+
 ## Next steps
 
 - [Tutorial 4 — Sim2Real](04_sim2real.md) — domain randomization and transfer evaluation.

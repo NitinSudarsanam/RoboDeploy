@@ -1,5 +1,7 @@
 # Broad Goals Remaining
 
+> **Stale vs `feat/plans-2-3-integration-core`.** Many signals below (no `training/`, no `benchmarks/`, no safety module) are resolved on that branch. For honest CI/preset coverage and per-goal completion, use [`plans/INTEGRATION_STATUS.md`](plans/INTEGRATION_STATUS.md) and the `plans/GOAL_0N_*.md` files instead of this doc.
+
 Strategic gaps blocking RoboDeploy from "complete." Ranked by ROI. State as of 2026-06-08.
 
 ## Tier 1 — Highest Impact

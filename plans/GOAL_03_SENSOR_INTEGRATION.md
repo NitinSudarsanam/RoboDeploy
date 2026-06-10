@@ -255,15 +255,15 @@ Each tests sensor consumption against synthetic obs streams (no live sim require
 
 ## Acceptance Criteria
 
-- [ ] FTReachPickPolicy successfully grasps with sensor-driven force threshold (not `backend.has_prop_contact`).
-- [ ] Task fails when FT force exceeds 20 N (collision avoidance reward).
-- [ ] `imu_stable` predicate distinguishes settled vs swinging EE.
-- [ ] `obs.contact_state` populated by ContactSensor in MuJoCo + Gazebo backends.
-- [ ] `obs.objects` populated by ColorBlobTracker from camera RGB-D + extrinsics.
-- [ ] `info.extra["sensor_status"]` shows per-sensor health each step.
-- [ ] Drop-detection regrasp loop works (force loss → rewind to close_gripper).
-- [ ] kuka_ft_imu_pick example completes ≥80% trials.
-- [ ] All sensor predicates covered by unit tests with synthetic Observations.
+- [x] FTReachPickPolicy successfully grasps with sensor-driven force threshold (not `backend.has_prop_contact`).
+- [x] Task fails when FT force exceeds 20 N (collision avoidance reward).
+- [x] `imu_stable` predicate distinguishes settled vs swinging EE.
+- [x] `obs.contact_state` populated by ContactSensor in MuJoCo + Gazebo backends.
+- [x] `obs.objects` populated by ColorBlobTracker from camera RGB-D + extrinsics (`has_camera_extrinsics`; heuristic via `fallback_mode=True` only). Tests: `tests/test_example_envs.py` (MuJoCo E2E), `tests/test_color_blob.py`, `tests/test_vision_predicates.py`.
+- [x] `info.extra["sensor_status"]` shows per-sensor health each step.
+- [x] Drop-detection regrasp loop works (force loss → rewind to grasp phase).
+- [x] kuka_ft_imu_pick example completes ≥80% trials.
+- [x] All sensor predicates covered by unit tests with synthetic Observations.
 
 ## Risks
 

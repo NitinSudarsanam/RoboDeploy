@@ -26,11 +26,10 @@ def make_safety_obs(ft_force=None) -> Observation:
 
 class SafetyMonitorTests(unittest.TestCase):
     def test_force_limit_warning_then_critical(self):
-        monitor = SafetyMonitor(guards=[ForceLimitGuard(max_force_N=10.0, over_limit_strikes=4)])
+        monitor = SafetyMonitor(guards=[ForceLimitGuard(max_force_N=10.0, over_limit_strikes=3)])
         spike = jnp.asarray([15.0, 0.0, 0.0], dtype=jnp.float32)
         monitor.check_observation(make_safety_obs(ft_force=spike))
         self.assertEqual(monitor.violations()[-1].severity, Severity.WARNING)
-        monitor.check_observation(make_safety_obs(ft_force=spike))
         monitor.check_observation(make_safety_obs(ft_force=spike))
         with self.assertRaises(SafetyError):
             monitor.check_observation(make_safety_obs(ft_force=spike))

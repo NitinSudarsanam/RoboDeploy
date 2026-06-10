@@ -21,6 +21,7 @@ python -m examples.cli run-episode --preset kuka_pick_mujoco --steps 50
 | Worlds and props | [Scene definition](SCENE_DEFINITION.md) |
 | Cameras, FT, IMU | [Sensor integration](SENSOR_INTEGRATION.md) |
 | Recipes | [Cookbook](COOKBOOK.md) |
+| Production PPO / nightly | [Training](TRAINING.md) |
 | Upgrading from 0.1.x | [Migration 0.2](MIGRATION_0.2.md) |
 | All CLI commands | [CLI reference](CLI_REFERENCE.md) |
 

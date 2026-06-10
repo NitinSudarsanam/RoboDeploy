@@ -149,3 +149,16 @@ python -m examples.user_kuka_sinusoid.run_switch_simulator
 
 Real SO-101 setup and calibration are documented in [docs/SO101_REAL.md](docs/SO101_REAL.md).
 
+## Gazebo live validation (Linux)
+
+Offline tests cover preset YAML, URDF collisions, ROS topic resolution, and contact matching. On a Linux host with ROS 2 Jazzy and Gazebo Harmonic:
+
+```bash
+pip install -e ".[kinematics,dev]"
+robodeploy doctor                    # confirm gz + ROS 2 + optional pin
+ROBODEPLOY_LIVE_GAZEBO=1 pytest tests/test_live_gazebo_sensors.py -q
+python -m examples.kuka_ft_imu_pick_gazebo.run_gazebo
+```
+
+After reset, expect `obs.images`, `obs.ft_forces`, `obs.imu_angular_velocity`, `obs.contact_state`, and `obs.objects`. If the arm is frozen, verify `/joint_states` (not `/robot0/joint_states`) and `ros2 control list`. See [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md#gazebo-harmonic-gz-sim-simulator-path) for full troubleshooting.
+

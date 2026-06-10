@@ -93,47 +93,6 @@ def contact_held(obs: Observation, *, sensor_name: str = "wrist_contact") -> boo
     return bool(contact.get(sensor_name, False))
 
 
-@register_success("imu_stable")
-def imu_stable(
-    obs: Observation,
-    *,
-    max_angular_velocity: float = 0.3,
-    max_acceleration: float = 2.0,
-) -> bool:
-    """Stability check using IMU — useful for hold-pose success."""
-    omega = getattr(obs, "imu_angular_velocity", None)
-    if omega is None:
-        return False
-    omega_norm = float(sum(float(v) ** 2 for v in omega) ** 0.5)
-    accel = getattr(obs, "imu_acceleration", None)
-    acc_excess = 0.0
-    if accel is not None:
-        acc_norm = float(sum(float(v) ** 2 for v in accel) ** 0.5)
-        acc_excess = abs(acc_norm - 9.81)
-    return omega_norm <= float(max_angular_velocity) and acc_excess <= float(max_acceleration)
-
-
-@register_success("vision_target_in_view")
-def vision_target_in_view(
-    obs: Observation,
-    *,
-    target_color_hsv_range: tuple[tuple[float, float, float], tuple[float, float, float]],
-    min_pixels: int = 100,
-) -> bool:
-    """Color-blob based vision target check."""
-    rgb = getattr(obs, "rgb", None)
-    if rgb is None and getattr(obs, "images", None):
-        images = obs.images
-        if images:
-            rgb = next(iter(images.values()))
-    if rgb is None:
-        return False
-    from robodeploy.perception.vision_predicates import count_hsv_pixels
-
-    lower, upper = target_color_hsv_range
-    return count_hsv_pixels(np.asarray(rgb), lower=lower, upper=upper) >= int(min_pixels)
-
-
 @register_success("force_above_threshold")
 def force_above_threshold(obs: Observation, *, threshold_N: float = 5.0) -> bool:
     ft = getattr(obs, "ft_force", None)
@@ -144,30 +103,6 @@ def force_above_threshold(obs: Observation, *, threshold_N: float = 5.0) -> bool
     except Exception:
         return False
     return mag >= float(threshold_N)
-
-
-@register_success("grasp_force_min")
-def grasp_force_min(obs: Observation, *, threshold_N: float = 2.0, window: int = 1) -> bool:
-    """FT-based grasp confirmation."""
-    del window  # windowing handled by policies; predicate is instantaneous.
-    ft = getattr(obs, "ft_force", None)
-    if ft is None and getattr(obs, "ft_forces", None):
-        forces = obs.ft_forces
-        if forces:
-            ft = next(iter(forces.values()))
-    if ft is None:
-        return False
-    try:
-        mag = float(sum(float(v) ** 2 for v in ft) ** 0.5)
-    except Exception:
-        return False
-    return mag >= float(threshold_N)
-
-
-@register_success("contact_held")
-def contact_held(obs: Observation, *, sensor_name: str = "wrist_contact") -> bool:
-    contact = getattr(obs, "contact_state", None) or {}
-    return bool(contact.get(sensor_name, False))
 
 
 @register_success("imu_stable")

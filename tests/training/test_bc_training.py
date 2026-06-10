@@ -38,7 +38,7 @@ class BCTrainingTests(unittest.TestCase):
             config=cfg,
         )
         metrics = trainer.fit()
-        self.assertLess(metrics["loss"], 1e-3)
+        self.assertLess(metrics["loss"], 1e-4)
 
     def test_train_bc_convenience(self):
         dataset = DemoDataset([_frame(0.3) for _ in range(8)])

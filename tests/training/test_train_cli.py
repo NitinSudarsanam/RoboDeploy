@@ -11,7 +11,14 @@ import pytest
 pytest.importorskip("torch")
 
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 class TrainCliTests(unittest.TestCase):
+    def test_train_ppo_reach_example_exists(self):
+        script = REPO_ROOT / "examples" / "train_ppo_reach.py"
+        self.assertTrue(script.is_file(), "GOAL 02 references examples/train_ppo_reach.py")
+
     def test_train_bc_dummy_smoke(self):
         from robodeploy.cli import main
 

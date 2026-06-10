@@ -35,7 +35,7 @@ class LiveRos2SensorPublishers:
         self._WrenchStamped = WrenchStamped
         self._Header = Header
 
-        js_topic = f"/{robot_id}/joint_states"
+        js_topic = "/joint_states"
         self._js_pub = self._node.create_publisher(JointState, js_topic, 10)
         self._img_pub = self._node.create_publisher(Image, "/wrist_camera/image_raw", 10)
         self._info_pub = self._node.create_publisher(CameraInfo, "/wrist_camera/camera_info", 10)

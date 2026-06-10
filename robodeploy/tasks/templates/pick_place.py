@@ -69,6 +69,21 @@ class PickPlaceTemplate(TaskBase):
         )
         return builder.build()(obs, action)
 
+    def failure_fn(self, obs: Observation) -> bool:
+        """Fail when FT force exceeds ``failure_force_max_N`` (collision guard)."""
+        limit = self.config.get("failure_force_max_N")
+        if limit is None:
+            return False
+        force = obs.ft_force
+        if force is None and getattr(obs, "ft_forces", None):
+            forces = obs.ft_forces
+            if forces:
+                force = next(iter(forces.values()))
+        if force is None:
+            return False
+        mag = float(sum(float(v) ** 2 for v in force) ** 0.5)
+        return mag > float(limit)
+
     def success_fn(self, obs: Observation) -> bool:
         if not self.grasp_confirmed(obs):
             return False

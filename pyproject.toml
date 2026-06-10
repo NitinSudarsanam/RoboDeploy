@@ -49,6 +49,9 @@ robodeploy = "robodeploy.cli:main"
 sim = [
   "mujoco"
 ]
+kinematics = [
+  "pin"
+]
 real = [
   "pyrealsense2"
 ]
@@ -62,9 +65,12 @@ obs = [
 dev = [
   "build",
   "pytest",
+  "pytest-rerunfailures>=14.0",
   "jax[cpu]",
   "pyyaml",
   "h5py",
+  "torch>=2.0",
+  "gymnasium>=0.29",
   "jinja2",
   "matplotlib",
   "jsonschema",
@@ -112,6 +118,7 @@ include = ["robodeploy*"]
 robodeploy = [
   "_assets/**/*.json",
   "description/**/*.urdf",
+  "description/**/*.yaml",
   "description/**/*.mjcf",
   "description/**/*.xml",
   "description/**/*.stl",
@@ -127,4 +134,7 @@ robodeploy = [
 testpaths = ["tests"]
 markers = [
   "hardware: tests that require physical robot hardware",
+  "slow: long-running training integration tests (SB3 100k, PPO reach_target)",
+  "optional_nightly: long proxy runs mirrored in ppo-nightly.yml (skip locally unless needed)",
+  "live_gazebo: live Gazebo + ROS2 tests (ROBODEPLOY_LIVE_GAZEBO=1, Linux CI)",
 ]

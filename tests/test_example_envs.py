@@ -111,6 +111,57 @@ class ExampleEnvTests(unittest.TestCase):
         finally:
             env.close()
 
+    def test_kuka_vision_pick_mujoco_objects_from_color_blob_when_mujoco_installed(self):
+        import sys
+        from unittest.mock import patch
+
+        if sys.platform == "win32":
+            self.skipTest("MuJoCo GLFW Renderer unstable on Windows")
+        try:
+            import mujoco  # noqa: F401
+        except ImportError:
+            self.skipTest("mujoco not installed")
+        from robodeploy.perception.vision_predicates import _camera_to_world, has_camera_extrinsics
+        from robodeploy.sensors.camera.sim.mujoco_gl import ensure_mujoco_gl_backend
+        from examples.env_from_preset import env_from_preset
+
+        ensure_mujoco_gl_backend()
+        try:
+            env = env_from_preset("kuka_vision_pick_mujoco", max_episode_steps=10)
+        except OSError as exc:
+            self.skipTest(f"MuJoCo Renderer unavailable headless: {exc}")
+        try:
+            with patch(
+                "robodeploy.perception.vision_predicates._camera_to_world",
+                wraps=_camera_to_world,
+            ) as mock_camera_to_world:
+                try:
+                    obs, _info = env.reset()
+                except OSError as exc:
+                    self.skipTest(f"MuJoCo Renderer unavailable headless: {exc}")
+                extr = (getattr(obs, "camera_extrinsics", {}) or {}).get("wrist_camera")
+                self.assertTrue(
+                    has_camera_extrinsics(extr),
+                    "wrist_rgbd should publish live camera extrinsics on MuJoCo backend",
+                )
+                self.assertIn("source", obs.objects, "color blob transform should populate source pose")
+                pos, _quat = obs.objects["source"]
+                self.assertEqual(len(pos), 3)
+                self.assertGreater(pos[2], 0.0)
+                self.assertIn("target", obs.objects, "prop_pose sensor should populate target pose")
+                extr_calls = [
+                    call
+                    for call in mock_camera_to_world.call_args_list
+                    if has_camera_extrinsics(call[0][1] if len(call[0]) > 1 else None)
+                ]
+                self.assertGreater(
+                    len(extr_calls),
+                    0,
+                    "ColorBlob unproject must use camera extrinsics, not heuristic fallback",
+                )
+        finally:
+            env.close()
+
     def test_vision_preset_pick_succeeds_when_mujoco_installed(self):
         import sys
 
@@ -155,6 +206,34 @@ class ExampleEnvTests(unittest.TestCase):
             self.assertIsNotNone(obs)
             self.assertEqual(info.episode_id, 1)
             env.step()
+        finally:
+            env.close()
+
+    def test_two_franka_pick_mujoco_runs_when_mujoco_installed(self):
+        try:
+            import mujoco  # noqa: F401
+        except ImportError:
+            self.skipTest("mujoco not installed")
+        from examples.env_from_preset import env_from_preset
+
+        env = env_from_preset("two_franka_pick_mujoco", max_episode_steps=80)
+        try:
+            env.reset()
+            self.assertEqual(len(env.robots), 2)
+            obs_map = env.get_processed_obs_by_robot()
+            self.assertEqual(set(obs_map), {"franka_left", "franka_right"})
+            home_left_q0 = float(obs_map["franka_left"].joint_positions[0])
+            home_right_q0 = float(obs_map["franka_right"].joint_positions[0])
+            for _ in range(80):
+                _, _, done, _info = env.step()
+                if done:
+                    break
+            obs_map = env.get_processed_obs_by_robot()
+            left_q0 = float(obs_map["franka_left"].joint_positions[0])
+            right_q0 = float(obs_map["franka_right"].joint_positions[0])
+            self.assertGreater(left_q0, home_left_q0, "left arm should move toward +q0 target")
+            self.assertLess(right_q0, home_right_q0, "right arm should move toward -q0 target")
+            self.assertGreater(left_q0, right_q0, "arms should diverge to independent targets")
         finally:
             env.close()
 

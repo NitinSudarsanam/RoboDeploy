@@ -314,3 +314,44 @@ def train_ppo(
         return model
     finally:
         vec.close()
+
+
+def evaluate_actor_critic(
+    model: ActorCritic,
+    env_factory: Callable[[], Any],
+    *,
+    n_episodes: int = 20,
+    obs_key: str = "proprio",
+    deterministic: bool = True,
+) -> dict[str, float]:
+    """Roll out a trained PPO policy and report success rate + mean reward."""
+    torch, _, _, _ = _require_torch()
+    model.eval()
+    successes = 0
+    rewards: list[float] = []
+    for episode in range(int(n_episodes)):
+        env = env_factory()
+        try:
+            obs, _ = env.reset(seed=episode)
+            done = False
+            ep_reward = 0.0
+            while not done:
+                obs_vec = np.asarray(obs[obs_key], dtype=np.float32)
+                obs_t = torch.from_numpy(obs_vec).float().unsqueeze(0)
+                with torch.no_grad():
+                    dist, _ = model.forward(obs_t)
+                    action = dist.mean if deterministic else dist.sample()
+                    action_np = action.squeeze(0).cpu().numpy()
+                obs, reward, terminated, truncated, info = env.step(action_np)
+                ep_reward += float(reward)
+                done = bool(terminated or truncated)
+            rewards.append(ep_reward)
+            if info.get("success"):
+                successes += 1
+        finally:
+            if hasattr(env, "close"):
+                env.close()
+    return {
+        "eval/success_rate": float(successes / max(n_episodes, 1)),
+        "eval/mean_reward": float(sum(rewards) / max(len(rewards), 1)),
+    }

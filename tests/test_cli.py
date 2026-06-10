@@ -361,6 +361,22 @@ class CliSceneConfigAssetsTests(unittest.TestCase):
         names = {item["name"] for item in payload}
         self.assertIn("kuka", names)
 
+    def test_assets_verify_sha256(self):
+        import json as _json
+
+        from robodeploy.cli import main
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["assets", "verify", "--json"])
+        self.assertEqual(code, 0)
+        payload = _json.loads(buf.getvalue())
+        self.assertTrue(payload["ok"])
+        self.assertGreater(len(payload["assets"]), 0)
+        for row in payload["assets"]:
+            self.assertEqual(row["status"], "ok", msg=row.get("path"))
+            self.assertTrue(row.get("expected"), msg=row.get("path"))
+
     def test_scene_builder_validate_integration(self):
         from robodeploy.scene_builder import SceneBuilder
 

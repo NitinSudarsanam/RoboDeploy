@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import statistics
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
@@ -122,6 +123,10 @@ class Trainer:
             }
             for callback in self.callbacks:
                 callback.on_epoch_end(self, last_metrics)
+        if self.eval_env is not None and self.global_step % self.config.eval_interval != 0:
+            eval_metrics = self.evaluate()
+            for callback in self.callbacks:
+                callback.on_eval_end(self, eval_metrics)
         return last_metrics
 
     def step(self, batch: dict[str, Any]) -> dict[str, float]:
@@ -144,11 +149,15 @@ class Trainer:
         self.policy.eval()
         successes = 0
         rewards: list[float] = []
+        time_to_success: list[int] = []
         for _ in range(n_episodes):
             obs, _ = self.eval_env.reset()
             done = False
             ep_reward = 0.0
+            success_step: int | None = None
+            step = 0
             while not done:
+                step += 1
                 torch, _ = _require_torch()
                 with torch.no_grad():
                     obs_t = {
@@ -159,13 +168,23 @@ class Trainer:
                 obs, reward, terminated, truncated, info = self.eval_env.step(action)
                 ep_reward += float(reward)
                 done = bool(terminated or truncated)
+                if success_step is None and info.get("success"):
+                    success_step = step
             rewards.append(ep_reward)
             if info.get("success"):
                 successes += 1
-        return {
+                if success_step is not None:
+                    time_to_success.append(success_step)
+        metrics = {
             "eval/mean_reward": float(sum(rewards) / max(len(rewards), 1)),
             "eval/success_rate": float(successes / max(n_episodes, 1)),
         }
+        if time_to_success:
+            metrics["eval/time_to_success_steps"] = float(
+                sum(time_to_success) / len(time_to_success)
+            )
+            metrics["eval/median_time_to_success_steps"] = float(statistics.median(time_to_success))
+        return metrics
 
     def save_checkpoint(self, path: str) -> None:
         torch, _ = _require_torch()

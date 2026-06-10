@@ -62,6 +62,15 @@ class TeleopContractTests(unittest.TestCase):
         with self.assertRaises(ImportError):
             device.start()
 
+    def test_keyboard_stub_example_implements_contract(self) -> None:
+        from examples.teleop_keyboard_stub import KeyboardStubTeleop, run_stub_demo
+
+        device = KeyboardStubTeleop()
+        self.assertIsInstance(device, ITeleopDevice)
+        commands = run_stub_demo(keys=["w"])
+        self.assertGreaterEqual(len(commands), 1)
+        self.assertTrue(any(c.has_motion() for c in commands))
+
 
 if __name__ == "__main__":
     unittest.main()

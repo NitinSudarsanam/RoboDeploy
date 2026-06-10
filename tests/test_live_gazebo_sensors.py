@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _TESTS_DIR = REPO_ROOT / "tests"
@@ -17,6 +18,12 @@ for _p in (str(REPO_ROOT), str(_TESTS_DIR)):
         sys.path.insert(0, _p)
 
 from live_sensor_fixtures import LiveRos2SensorPublishers, gazebo_binary_available, rclpy_available
+
+from examples.kuka_ft_imu_pick_gazebo.pick_episode import kuka_ft_imu_pick_gazebo_cfg
+from robodeploy.backends.real.ros2.sim_launchers.ros_gz_bridge import imu_bridge_rules
+from robodeploy.backends.sim.gazebo.urdf_sensors import inject_sensors_into_urdf
+from robodeploy.core.types import SensorMount
+from robodeploy.sensors.imu.sim.mujoco_imu import MuJoCoIMUSensor
 
 LIVE = os.environ.get("ROBODEPLOY_LIVE_GAZEBO", "").strip() in {"1", "true", "yes"}
 EMPTY_WORLD = REPO_ROOT / "tests" / "fixtures" / "gazebo_empty.sdf"
@@ -29,18 +36,79 @@ def _gazebo_sim_cfg(
     world: Path,
     robot_urdf: Path | None = None,
     wait_for_topics: list[str] | None = None,
+    headless: bool = True,
+    readiness_timeout_s: float = 60.0,
 ) -> dict:
     sim: dict = {
         "kind": "gazebo",
         "world": str(world),
-        "headless": True,
-        "readiness_timeout_s": 60.0,
+        "headless": headless,
+        "readiness_timeout_s": readiness_timeout_s,
         "wait_for_topics": wait_for_topics or [],
     }
     if robot_urdf is not None:
         sim["robot_urdf"] = str(robot_urdf)
         sim["robot_name"] = "robot0"
     return sim
+
+
+def _multimodal_obs_ready(obs) -> bool:
+    objects = getattr(obs, "objects", {}) or {}
+    contact = getattr(obs, "contact_state", {}) or {}
+    has_ft = obs.ft_forces.get("wrist_ft") is not None
+    has_objects = "source" in objects and "target" in objects
+    has_contact_key = "wrist_contact" in contact
+    has_imu = getattr(obs, "imu_angular_velocity", None) is not None
+    return has_ft and has_objects and has_contact_key and has_imu
+
+
+class GazeboSensorOfflineTests(unittest.TestCase):
+    def test_multimodal_preset_yaml_includes_imu_and_depth(self):
+        from examples.config import load_example_preset
+
+        cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
+        rig = cfg["sensor_rigs"][0]
+        self.assertTrue(rig["wrist_rgbd"]["depth"])
+        self.assertIn("wrist_imu", rig)
+        self.assertIn("prop_pose", rig)
+
+    def test_imu_urdf_and_bridge_rules_offline(self):
+        imu = MuJoCoIMUSensor("wrist_imu", mount=SensorMount(parent_link="ee_link"))
+        patched = inject_sensors_into_urdf(
+            '<?xml version="1.0"?><robot name="arm"><link name="ee_link"/></robot>',
+            [imu],
+        )
+        self.assertIn('type="imu"', patched)
+        rules = imu_bridge_rules("/wrist_imu/imu")
+        self.assertTrue(any("sensor_msgs/msg/Imu" in r for r in rules))
+
+    def test_kuka_ft_imu_pick_gazebo_preset_loads(self):
+        from examples.config import load_example_preset
+
+        cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
+        self.assertEqual(cfg["backend"], "ros2_gazebo")
+        self.assertTrue(cfg["backend_kwargs"]["config"]["sim"].get("require_sensors"))
+        self.assertEqual(cfg["policy_kwargs"]["config"]["force_threshold"], 0.5)
+
+    def test_kuka_ft_imu_pick_gazebo_env_builds_offline(self):
+        from examples.config import load_example_preset
+        from robodeploy.backends.real.ros2.sensors.camera_rgbd import Ros2RgbdCameraISensor
+        from robodeploy.backends.real.ros2.sensors.wrench import Ros2WrenchISensor
+        from robodeploy.env import RoboEnv
+
+        cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
+        cfg = {**cfg, "max_episode_steps": 5}
+        env = RoboEnv.from_config(cfg)
+        try:
+            sensors = env.robots[0].sensors
+            kinds = {type(s) for s in sensors}
+            self.assertIn(Ros2RgbdCameraISensor, kinds)
+            self.assertIn(Ros2WrenchISensor, kinds)
+            self.assertGreaterEqual(len(env.robots[0].tasks), 1)
+            task = next(iter(env.robots[0].tasks.values()))
+            self.assertEqual(task.task.__class__.__name__, "PickPlaceTask")
+        finally:
+            env.close()
 
 
 @unittest.skipUnless(LIVE, "set ROBODEPLOY_LIVE_GAZEBO=1 to run live Gazebo sensor tests")
@@ -115,6 +183,37 @@ class LiveGazeboSensorTests(unittest.TestCase):
         finally:
             env.close()
 
+    @pytest.mark.live_gazebo
+    def test_kuka_ft_imu_pick_gazebo_obs_keys(self):
+        """Live: multimodal preset populates FT, IMU, contact, prop_pose, and camera obs."""
+        from robodeploy.env import RoboEnv
+
+        cfg = kuka_ft_imu_pick_gazebo_cfg(max_episode_steps=40, world=EMPTY_WORLD)
+        env = RoboEnv.from_config(cfg)
+        try:
+            obs, info = env.reset()
+            deadline = time.monotonic() + 90.0
+            while time.monotonic() < deadline:
+                if _multimodal_obs_ready(obs):
+                    break
+                obs, _, _, info = env.step()
+            status = getattr(obs, "sensor_status", {}) or {}
+            self.assertIn("source", getattr(obs, "objects", {}))
+            self.assertIn("target", getattr(obs, "objects", {}))
+            self.assertIsNotNone(obs.ft_forces.get("wrist_ft"))
+            self.assertIsNotNone(getattr(obs, "imu_angular_velocity", None))
+            self.assertIn("wrist_contact", getattr(obs, "contact_state", {}) or {})
+            self.assertIn("wrist_camera", obs.images)
+            self.assertTrue(
+                "wrist_camera" in (getattr(obs, "depths", {}) or {})
+                or getattr(obs, "depth", None) is not None,
+                msg="expected wrist_camera depth from bridged RGB-D rig",
+            )
+            self.assertIn("overall", info.extra.get("sensor_health", {}))
+            self.assertIn("wrist_ft", status)
+            self.assertIn("wrist_imu", status)
+        finally:
+            env.close()
 
 if __name__ == "__main__":
     unittest.main()
