@@ -20,8 +20,11 @@ class JointTrackPolicy(PolicyBase):
         target_qpos: list[float] | None = None,
         home_qpos: list[float] | None = None,
         max_delta: float = 0.08,
+        config: dict | None = None,
     ) -> None:
-        super().__init__(action_space=ActionSpace.JOINT_POS, config={"action_hz": 50.0})
+        policy_cfg = {"action_hz": 50.0}
+        policy_cfg.update(dict(config or {}))
+        super().__init__(action_space=ActionSpace.JOINT_POS, config=policy_cfg)
         home = np.array(
             home_qpos if home_qpos is not None else [0.0, -0.6, 0.0, -1.8, 0.0, 1.2, 0.0],
             dtype=np.float32,
