@@ -113,6 +113,7 @@ class ExampleEnvTests(unittest.TestCase):
 
     def test_kuka_vision_pick_mujoco_objects_from_color_blob_when_mujoco_installed(self):
         import sys
+        from unittest.mock import patch
 
         if sys.platform == "win32":
             self.skipTest("MuJoCo GLFW Renderer unstable on Windows")
@@ -120,6 +121,7 @@ class ExampleEnvTests(unittest.TestCase):
             import mujoco  # noqa: F401
         except ImportError:
             self.skipTest("mujoco not installed")
+        from robodeploy.perception.vision_predicates import _camera_to_world, has_camera_extrinsics
         from robodeploy.sensors.camera.sim.mujoco_gl import ensure_mujoco_gl_backend
         from examples.env_from_preset import env_from_preset
 
@@ -129,15 +131,34 @@ class ExampleEnvTests(unittest.TestCase):
         except OSError as exc:
             self.skipTest(f"MuJoCo Renderer unavailable headless: {exc}")
         try:
-            try:
-                obs, _info = env.reset()
-            except OSError as exc:
-                self.skipTest(f"MuJoCo Renderer unavailable headless: {exc}")
-            self.assertIn("source", obs.objects, "color blob transform should populate source pose")
-            pos, _quat = obs.objects["source"]
-            self.assertEqual(len(pos), 3)
-            self.assertGreater(pos[2], 0.0)
-            self.assertIn("target", obs.objects, "prop_pose sensor should populate target pose")
+            with patch(
+                "robodeploy.perception.vision_predicates._camera_to_world",
+                wraps=_camera_to_world,
+            ) as mock_camera_to_world:
+                try:
+                    obs, _info = env.reset()
+                except OSError as exc:
+                    self.skipTest(f"MuJoCo Renderer unavailable headless: {exc}")
+                extr = (getattr(obs, "camera_extrinsics", {}) or {}).get("wrist_camera")
+                self.assertTrue(
+                    has_camera_extrinsics(extr),
+                    "wrist_rgbd should publish live camera extrinsics on MuJoCo backend",
+                )
+                self.assertIn("source", obs.objects, "color blob transform should populate source pose")
+                pos, _quat = obs.objects["source"]
+                self.assertEqual(len(pos), 3)
+                self.assertGreater(pos[2], 0.0)
+                self.assertIn("target", obs.objects, "prop_pose sensor should populate target pose")
+                extr_calls = [
+                    call
+                    for call in mock_camera_to_world.call_args_list
+                    if has_camera_extrinsics(call[0][1] if len(call[0]) > 1 else None)
+                ]
+                self.assertGreater(
+                    len(extr_calls),
+                    0,
+                    "ColorBlob unproject must use camera extrinsics, not heuristic fallback",
+                )
         finally:
             env.close()
 

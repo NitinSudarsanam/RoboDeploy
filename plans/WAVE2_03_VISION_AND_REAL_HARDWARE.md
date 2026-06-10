@@ -12,7 +12,7 @@
 | Unit tests with synthetic RGB | `tests/test_vision_predicates.py` |
 | `kuka_vision_pick_mujoco` preset wires transform in `obs_pipeline` | `examples/config/presets.yaml` |
 | Example runs manually | `examples/kuka_vision_pick_mujoco/run_mujoco.py` |
-| GOAL 03 acceptance `[ ]` | **`obs.objects` from camera RGB-D + extrinsics** — transform uses heuristic `world_origin` / `camera_to_world_scale` when extrinsics missing |
+| GOAL 03 acceptance `[x]` | **`obs.objects` from camera RGB-D + extrinsics** — `fallback_mode` opt-in for heuristic; MuJoCo E2E in `test_example_envs.py` |
 | CI E2E for vision pick | **None** — `test_example_envs.py` builds env only |
 | Gazebo / real vision path | **Not wired** |
 
@@ -51,10 +51,10 @@ Vision integration is **code-complete but not E2E-proven** with real camera geom
 
 ### Vision
 
-- [ ] `ColorBlobTrackerTransform` uses `obs.camera_intrinsics` + `obs.camera_extrinsics` when present; heuristics only as explicit `fallback_mode=true` opt-in.
+- [x] `ColorBlobTrackerTransform` uses `obs.camera_intrinsics` + `obs.camera_extrinsics` when present; heuristics only as explicit `fallback_mode=true` opt-in.
 - [ ] `tests/test_vision_pick_e2e_mujoco.py`: ≥60% success, 5 seeds, asserts `source` in `obs.objects` from vision (not `prop_pose` for source).
-- [ ] `kuka_vision_pick_mujoco` preset removes `prop_pose` for `source`; keeps oracle for `target` until ArUco phase.
-- [ ] GOAL 03 checkbox `obs.objects` populated by ColorBlobTracker **marked done** with test reference.
+- [x] `kuka_vision_pick_mujoco` preset removes `prop_pose` for `source`; keeps oracle for `target` until ArUco phase.
+- [x] GOAL 03 checkbox `obs.objects` populated by ColorBlobTracker **marked done** — `tests/test_example_envs.py::test_kuka_vision_pick_mujoco_objects_from_color_blob_when_mujoco_installed`, `tests/test_color_blob.py`.
 
 ### Real hardware smoke
 
