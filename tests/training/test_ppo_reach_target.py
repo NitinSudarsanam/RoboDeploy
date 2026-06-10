@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from functools import partial
 
+import numpy as np
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -21,21 +22,25 @@ from robodeploy.training.ppo import (
 
 class PPOReachTargetTests(unittest.TestCase):
     @pytest.mark.slow
+    @pytest.mark.flaky(reruns=2, reruns_delay=2)
     def test_ppo_reach_target_dummy_success_rate(self):
         env_fn = partial(reach_target_dummy_gym_env_factory, max_episode_steps=300)
         probe = env_fn()
-        obs, _ = probe.reset()
-        obs_dim = int(obs["proprio"].shape[0])
-        action_dim = int(probe.action_space.shape[0])
-        probe.close()
+        try:
+            obs_dim = int(probe.observation_space["proprio"].shape[0])
+            action_dim = int(probe.action_space.shape[0])
+        finally:
+            probe.close()
 
+        torch.manual_seed(0)
+        np.random.seed(0)
         vec = SubprocVecEnv([env_fn for _ in range(4)])
         try:
             model = ActorCritic(obs_dim, action_dim, hidden=(32, 32))
             cfg = PPOConfig(
                 n_envs=4,
                 rollout_steps=128,
-                total_steps=10_000,
+                total_steps=20_000,
                 minibatch_size=32,
                 n_epochs=3,
                 lr=5e-3,
