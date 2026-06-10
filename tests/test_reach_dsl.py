@@ -177,3 +177,23 @@ class ReachDSLTests(unittest.TestCase):
         policy.get_action(obs)  # settle
         action = policy.get_action(obs)  # close_gripper
         self.assertEqual(action.gripper, 1.0)
+
+    def test_fallback_delta_tracks_last_valid_q_not_home(self):
+        import numpy as np
+
+        from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
+
+        policy = ReachTrajectoryPolicy(
+            {
+                "home": [0.0, -0.6, 0.0, -1.8, 0.0, 1.2, 0.0],
+                "phases": [{"name": "reach", "kind": "reach", "target": "source"}],
+            }
+        )
+        q = np.array([0.4, -0.4, 0.1, -1.5, 0.0, 1.0, 0.0], dtype=np.float32)
+        policy._q_goal = q.copy()
+        target = np.array([0.6, 0.2, 0.5], dtype=np.float32)
+        toward_home = policy._track_toward(q, policy._home)
+        result = policy._fallback_delta(q, target)
+        self.assertFalse(np.allclose(result, toward_home, atol=1e-4))
+        expected = policy._track_toward(q, q)
+        np.testing.assert_allclose(result, expected, rtol=0.0, atol=1e-5)

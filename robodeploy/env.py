@@ -111,6 +111,8 @@ class RoboEnv:
         self._emergency_action = emergency_action
         self._last_obs_by_robot: Dict[str, Observation] = {}
         self._safety_enabled = bool(safety_enabled)
+        self._policy_diagnostics: dict[str, Any] = {}
+        self._negotiate_action_spaces()
         if safety is not None:
             self._safety = safety
         elif self._safety_enabled:
@@ -127,8 +129,6 @@ class RoboEnv:
         primary_task_id = primary_robot.active_task_id
         primary_task = primary_robot.tasks[primary_task_id] if primary_task_id else None
         self._max_steps = max_episode_steps or (primary_task.task.max_steps() if primary_task else 1000)
-        self._policy_diagnostics: dict[str, Any] = {}
-        self._negotiate_action_spaces()
 
     # ------------------------------------------------------------------
     # Construction sugar
@@ -615,12 +615,19 @@ class RoboEnv:
         for sensor in self._all_sensors():
             sensor.seed(self._seeds.sensor_noise_seed)
 
+    def _robot_action_space(self, robot: Robot) -> "ActionSpace":
+        from robodeploy.core.spaces import ActionSpace
+
+        if robot.effective_action_space is not None:
+            return robot.effective_action_space
+        task_id = robot.active_task_id or next(iter(robot.tasks))
+        return robot.tasks[task_id].action_space()
+
     def _build_default_safety(self) -> SafetyMonitor:
         guards: list = []
         for robot in self._robots:
             desc = robot.description
-            task_id = robot.active_task_id or next(iter(robot.tasks))
-            action_space = robot.tasks[task_id].action_space()
+            action_space = self._robot_action_space(robot)
             guards.extend(
                 [
                     SafetyFilterGuard(
@@ -659,11 +666,17 @@ class RoboEnv:
         if self._safety is not None:
             self._safety.reset()
 
-    def _enter_safe_state(self) -> None:
-        if not self._initialized:
-            return
+    def _hold_actions_for_step_multi(
+        self,
+        *,
+        active: dict[str, Action] | None = None,
+    ) -> list[Action]:
         hold_actions: list[Action] = []
+        active = active or {}
         for robot in self._robots:
+            if robot.robot_id in active:
+                hold_actions.append(active[robot.robot_id])
+                continue
             if self._emergency_action is not None:
                 hold_actions.append(self._emergency_action)
                 continue
@@ -672,8 +685,22 @@ class RoboEnv:
                 hold_actions.append(Action(joint_positions=last.joint_positions))
             else:
                 hold_actions.append(Action(joint_positions=robot.description.home_qpos))
+        return hold_actions
+
+    def _warm_start_action_adapters(self, raw_obs_list: list[Observation]) -> None:
+        import numpy as np
+
+        for idx, robot in enumerate(self._robots[: len(raw_obs_list)]):
+            q = raw_obs_list[idx].joint_positions
+            if q is None:
+                continue
+            robot.action_adapter.warm_start(np.asarray(q, dtype=np.float64))
+
+    def _enter_safe_state(self) -> None:
+        if not self._initialized:
+            return
         try:
-            self._backend.step_multi(hold_actions)
+            self._backend.step_multi(self._hold_actions_for_step_multi())
         except Exception:
             pass
 
@@ -914,6 +941,8 @@ class RoboEnv:
         for robot in self._robots:
             robot.reset(policy_seed=policy_seed)
             robot.obs_pipeline.reset_sync()
+        self._warm_start_action_adapters(raw_obs_list)
+        for robot in self._robots:
             for robot_task in robot.tasks.values():
                 self._run_task_reset_routine(robot, robot_task)
 
@@ -958,7 +987,7 @@ class RoboEnv:
         try:
             for reset_action in robot_task.task.reset_routine(self._backend):
                 adapted = robot.action_adapter.process(reset_action)
-                action_space = robot_task.action_space()
+                action_space = self._robot_action_space(robot)
                 safe = robot.description.get_safety_filter().filter(adapted, action_space)
                 if self._safety is not None:
                     obs = self._last_obs_by_robot.get(robot.robot_id)
@@ -970,7 +999,9 @@ class RoboEnv:
                         dt=self._control_dt(),
                         robot_id=robot.robot_id,
                     )
-                self._backend.step_multi([safe])
+                self._backend.step_multi(
+                    self._hold_actions_for_step_multi(active={robot.robot_id: safe})
+                )
         except HumanInterventionRequired as e:
             if self._on_pause:
                 self._on_pause()

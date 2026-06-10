@@ -417,7 +417,10 @@ class ReachTrajectoryPolicy(PolicyBase):
 
     def _fallback_delta(self, q: np.ndarray, target_pos: np.ndarray) -> np.ndarray:
         del target_pos
-        return self._track_toward(q, self._home)
+        q_goal = self._q_goal
+        if np.allclose(q_goal, self._home):
+            q_goal = q
+        return self._track_toward(q, q_goal)
 
     def _track_toward(self, q: np.ndarray, q_goal: np.ndarray) -> np.ndarray:
         err = q_goal - q
