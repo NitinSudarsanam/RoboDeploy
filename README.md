@@ -1,8 +1,8 @@
 # RoboDeploy
 
-**Backend-agnostic runtime for robot learning, evaluation, and deployment.**
+**Backend-agnostic runtime for robot learning, evaluation, and sim-to-real deployment.**
 
-Write tasks, policies, and sensor rigs once; run the same code on MuJoCo, Gazebo Harmonic, Isaac Sim, ROS2 + RViz, or real hardware. RoboDeploy v0.2 adds training (BC/PPO), benchmark evaluation, multimodal sensors (camera, FT, IMU, contact), safety guards, sim2real tooling, and packaging for distribution.
+RoboDeploy provides a unified control and observation layer across MuJoCo, Gazebo Harmonic, Isaac Sim, ROS2, and real hardware. Tasks, sensor rigs, and policies are defined once and bound to a backend through a registry; switching simulators or moving to hardware does not require rewriting task logic or sensor integration code. The v0.2 release adds behavioral cloning and PPO training, benchmark evaluation, multimodal sensing (camera, force/torque, IMU, contact), safety enforcement, calibration and domain-randomization tooling, and distribution packaging.
 
 | | |
 |---|---|
@@ -13,16 +13,81 @@ Write tasks, policies, and sensor rigs once; run the same code on MuJoCo, Gazebo
 
 ---
 
-## Why RoboDeploy?
+## Overview
 
-Most robotics codebases couple your task logic to a single simulator or to ROS message shapes. RoboDeploy separates concerns:
+RoboDeploy is a Python framework for manipulation research and deployment. It standardizes the episode loop—reset, observation, policy inference, action execution, and reward evaluation—across simulation backends and physical robots. A single configuration specification (YAML preset or `RoboEnv.from_config()` dict) selects the backend, robot description, task, policy, and sensor rig; the runtime resolves simulator-specific or hardware-specific implementations through a central registry.
 
-- **Backends** own physics, rendering, and hardware I/O.
-- **Tasks** define rewards, success, and observation requirements.
-- **Policies** map observations to actions (scripted, learned, or teleoperated).
-- **Sensor rigs** declare cameras, force/torque, IMU, and contact sensors; the registry picks sim or real implementations per backend.
+The architecture is oriented toward closing the simulation-to-reality gap: training and evaluation use the same observation schema and action contract whether the backend is MuJoCo, Gazebo, Isaac Sim, or ROS2 on a real manipulator. Domain randomization, calibration stores, and transfer metrics provide explicit hooks between simulated and deployed runs rather than implicit code forks.
 
-The same `RoboEnv` loop runs everywhere:
+---
+
+## Motivation
+
+Manipulation pipelines frequently diverge across development stages. Simulation code paths embed physics-engine details; deployment code paths embed ROS topic layouts and driver quirks. Sensor fusion, policy interfaces, and safety limits are reimplemented per stack, which breaks comparability of benchmark results and increases integration cost when moving from simulation to hardware.
+
+RoboDeploy addresses three structural problems:
+
+**Simulator portability.** Backends implement a common `IBackend` interface. Tasks, policies, and sensor rigs are backend-agnostic. Changing from MuJoCo to Gazebo Harmonic or from simulation to `real_world` ROS2 control amounts to a configuration change plus backend-specific asset paths, not a rewrite of task or policy code.
+
+**Unified sensor and policy integration.** `SensorRig` declarations specify mount frames and modalities (RGB-D, wrist force/torque, IMU, contact). The registry instantiates matching `ISensor` implementations for each backend. `ObsPipeline` synchronizes streams, applies noise, and produces a normalized `Observation` consumed by any `IPolicy` implementation—scripted, learned, or served remotely. Policies therefore depend on field names and semantics, not on MuJoCo render buffers or ROS message types.
+
+**Sim-to-real continuity.** Calibration CLIs (kinematic, extrinsic, hand-eye, system identification), domain-randomization sweeps, and transfer-evaluation tooling operate on the same environment definitions used in training. `SafetyMonitor` enforces workspace, slew-rate, force, and velocity limits on both stepping and reset paths, providing a consistent safety envelope from simulation through hardware trials. Benchmark evaluation (`robodeploy eval`) records reproducibility metadata—git revision, package version, seeds, policy checkpoints—in leaderboard JSON suitable for regression tracking across backends.
+
+---
+
+## Architecture
+
+| Principle | Description |
+|-----------|-------------|
+| **Registry-based composition** | Backends, robots, tasks, policies, and sensors register by name. Wiring occurs through presets, `from_config()`, or programmatic construction. Extensions ship via `pyproject.toml` entry points. |
+| **Declarative sensor rigs** | Multimodal sensing is configured in YAML, not hard-coded per simulator. Sim and real drivers share observation field contracts. |
+| **Observation pipeline** | `ObsPipeline` handles temporal sync, domain-randomization noise, and transforms (e.g. vision predicates writing `obs.objects`). |
+| **Preset-driven reproducibility** | `examples/config/presets.yaml` and benchmark preset files encode full experiment definitions for demos, CI, and evaluation suites. |
+| **Training on shared env definitions** | Gymnasium adapters wrap `RoboEnv`. BC and PPO trainers, vec-env utilities, and production training scripts use the same configs as interactive presets. |
+| **Documented capability boundaries** | Placeholder benchmark tiers are labeled in `spec.json`. Platform and integration status documents distinguish CI-verified behavior from planned work. |
+
+---
+
+## Technology stack
+
+| Layer | Technologies |
+|-------|----------------|
+| **Language & packaging** | Python 3.10–3.12, setuptools, optional extras in `pyproject.toml`, plugin entry points |
+| **Core numerics** | NumPy; JAX arrays in observations/actions where backends provide them |
+| **Simulation** | [MuJoCo](https://mujoco.org/) (primary), Gazebo Harmonic via ROS2 Jazzy, NVIDIA Isaac Sim (Kit env), internal dummy backend for smoke tests |
+| **Robotics middleware** | ROS2 (controllers, sensors, `ros_gz_bridge`, RViz visualization) |
+| **Kinematics** | MuJoCo IK, [Pinocchio](https://github.com/stack-of-tasks/pinocchio) (`pin` extra), policy-attached IK helpers |
+| **Learning** | PyTorch checkpoints, Gymnasium envs, custom BC/PPO trainers, optional Stable-Baselines3 (`rl` extra) |
+| **Vision & perception** | RGB-D sim cameras, RealSense (`real` extra), color-blob predicates, camera extrinsics for unprojection |
+| **Force & proprioception** | Wrist F/T, IMU, contact sensors; FT-gated task phases in pick policies |
+| **Data & observability** | JSONL/HDF5 episode export, eval manifests, optional wandb / TensorBoard / MLflow (`obs` extra) |
+| **Evaluation** | `manipulation_v1` benchmark suite, HTML reports, leaderboard submission schema, train→eval E2E tests |
+| **Safety** | Composable guards (workspace, slew, force, velocity, collision), e-stop API, reset-path enforcement |
+| **Sim2real** | Calibration store (kinematic, extrinsic, hand-eye), DR sweeps, transfer metrics (dummy-tested paths) |
+| **Serving** | ZMQ/gRPC policy server for remote inference |
+| **CI & distribution** | GitHub Actions (pytest, package build, optional Gazebo/PPO nightly), Docker CPU image, conda recipe metadata, PyPI publish workflow |
+| **Docs** | MkDocs Material, architecture and contract docs in-repo |
+
+**Recommended development install:**
+
+```bash
+pip install -e ".[sim,kinematics,dev,training,eval]"
+```
+
+Isaac Sim and real hardware require environment-specific setup; see [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md).
+
+---
+
+## Runtime model
+
+RoboDeploy separates physics and I/O from task and policy logic:
+
+- **Backends** implement simulation stepping or hardware command interfaces.
+- **Tasks** define reward functions, success and failure predicates, and required observation fields.
+- **Policies** map `Observation` to `Action` (scripted, imitation-learned, reinforcement-learned, or remotely served).
+- **Sensor rigs** declare mounted modalities; the registry resolves per-backend `ISensor` implementations.
+
+The `RoboEnv` control loop is invariant across backends:
 
 ```text
 reset → observe → (safety) → policy → (adapter) → step → reward / success
@@ -56,7 +121,7 @@ flowchart LR
 
 ## Features (v0.2)
 
-| Area | What you get |
+| Area | Capabilities |
 |------|----------------|
 | **Backends** | MuJoCo, Gazebo (ROS2 + Harmonic), Isaac Sim, ROS2 RViz, dummy smoke, real ROS2 |
 | **Sensors** | RGB-D, wrist FT, IMU, contact, prop pose; `ObsPipeline` sync and noise |
@@ -392,9 +457,9 @@ Hardware-gated tests: [tests/HARDWARE_TESTS.md](tests/HARDWARE_TESTS.md).
 
 ---
 
-## Roadmap and honesty
+## Roadmap
 
-v0.2 on `main` delivers a credible integration core (~65% of strategic goals). Remaining work includes teleop/IL data collection, live Gazebo pick at ≥70% over 10 seeds, PyPI `v0.2.0` tag, Isaac GPU parity, and real-hardware benchmark automation.
+Version 0.2 on `main` delivers the integration core for simulator switching, sensor/policy wiring, and benchmark evaluation. Remaining work includes teleoperation and imitation-learning data collection, Gazebo pick reliability targets, PyPI release of `v0.2.0`, Isaac Sim GPU parity, and automated real-hardware benchmark runs. See [docs/PLATFORM_STATUS.md](docs/PLATFORM_STATUS.md) for CI-verified capabilities.
 
 - Strategic plans: [plans/README.md](plans/README.md)
 - Wave 2 follow-ups: `plans/WAVE2_0N_*.md`
