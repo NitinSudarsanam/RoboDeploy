@@ -206,17 +206,18 @@ class AsyncVecEnv:
         self._closed = True
 
 
-def dummy_gym_env_factory(tag: int = 0, max_steps: int = 5):
+def dummy_gym_env_factory(tag: int = 0, max_steps: int = 5, work_iters: int = 0):
     """Picklable env factory for SubprocVecEnv tests."""
-    return DummyGymEnv(tag=tag, max_steps=max_steps)
+    return DummyGymEnv(tag=tag, max_steps=max_steps, work_iters=work_iters)
 
 
 class DummyGymEnv:
     """Lightweight gym env for vec-env smoke tests without RoboEnv."""
 
-    def __init__(self, *, tag: int = 0, max_steps: int = 5) -> None:
+    def __init__(self, *, tag: int = 0, max_steps: int = 5, work_iters: int = 0) -> None:
         self.tag = int(tag)
         self._max_steps = int(max_steps)
+        self._work_iters = int(work_iters)
         self._step_count = 0
         if gym is not None:
             self.observation_space = gym.spaces.Box(
@@ -240,6 +241,11 @@ class DummyGymEnv:
 
     def step(self, action: np.ndarray):
         self._step_count += 1
+        if self._work_iters > 0:
+            x = np.ones(32, dtype=np.float64)
+            for _ in range(self._work_iters):
+                x = np.sin(x) + np.cos(x)
+            _ = float(x[0])
         obs = np.array([float(self.tag), float(action[0])], dtype=np.float32)
         reward = float(self._step_count)
         terminated = self._step_count >= self._max_steps
