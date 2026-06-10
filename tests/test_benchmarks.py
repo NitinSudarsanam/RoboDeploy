@@ -3,11 +3,17 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _ci_eval_episodes(*, full: int = 100, reduced: int = 5) -> int:
+    """Local runs use full episode budget; CI uses reduced N (matches benchmark-nightly)."""
+    return reduced if os.environ.get("CI") else full
 
 
 class BenchmarkRegistryTests(unittest.TestCase):
@@ -114,6 +120,27 @@ class EvalHarnessTests(unittest.TestCase):
         )
         self.assertEqual(report.aggregate.n_episodes, 20)
         self.assertGreaterEqual(report.aggregate.success_rate, 0.95)
+
+    def test_pick_place_cube_eval_outputs_aggregate_json(self):
+        from robodeploy.evaluation.runner import run_eval
+
+        episodes = _ci_eval_episodes()
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "pick_place_report.json"
+            report = run_eval(
+                benchmark="manipulation_v1/pick_place_cube",
+                policy="scripted",
+                backend="dummy",
+                episodes=episodes,
+                base_seed=0,
+                benchmarks_root=str(REPO_ROOT / "benchmarks"),
+            )
+            report.save(out)
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(payload["benchmark_name"], "manipulation_v1/pick_place_cube")
+            self.assertEqual(payload["aggregate"]["n_episodes"], episodes)
+            self.assertIn("success_rate", payload["aggregate"])
+            self.assertEqual(len(payload["episodes"]), episodes)
 
     def test_parallel_matches_sequential(self):
         from robodeploy.evaluation.runner import run_eval
@@ -477,6 +504,36 @@ class BenchmarkPresetBuildTests(unittest.TestCase):
                     from robodeploy.cli_helpers import close_quietly
 
                     close_quietly(env)
+
+    def test_benchmark_gazebo_presets_build_env(self):
+        import shutil
+
+        if shutil.which("gz") is None:
+            self.skipTest("gz binary not on PATH")
+
+        try:
+            import rclpy  # noqa: F401
+        except ImportError:
+            self.skipTest("rclpy not available")
+
+        from robodeploy.evaluation.env_builder import build_env_from_preset
+        from robodeploy.evaluation.registry import BenchmarkRegistry
+
+        registry = BenchmarkRegistry(REPO_ROOT / "benchmarks")
+        suite = registry.load_suite("manipulation_v1")
+        for task in suite.tasks:
+            if "gazebo" not in task.available_backends():
+                continue
+            preset = task.load_preset("gazebo")
+            task.import_task_module()
+            env = build_env_from_preset(preset, seed=0)
+            try:
+                self.assertIsNotNone(env.backend)
+                self.assertGreaterEqual(len(env.robots), 1)
+            finally:
+                from robodeploy.cli_helpers import close_quietly
+
+                close_quietly(env)
 
 
 if __name__ == "__main__":
