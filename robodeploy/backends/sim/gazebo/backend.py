@@ -231,7 +231,7 @@ class ROS2GazeboBackend(ROS2RealBackend):
                 orientation=quat,
             )
             if not ok:
-                logger.debug("Gazebo prop pose sync failed for '%s'", name)
+                logger.warning("Gazebo prop pose sync failed for '%s'", name)
             pending.discard(name)
 
     def _sync_gz_entity_pose(self, name: str, position, orientation) -> None:  # noqa: ANN001

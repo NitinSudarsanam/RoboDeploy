@@ -24,7 +24,7 @@ jobs:
           pip install -e ".[dev,training,rl]"
       # Proves: registry, benchmarks YAML, eval harness (incl. test_benchmarks.py, test_backend_registry.py).
       - name: Run unit tests
-        run: python -m pytest tests/ -q -m "not hardware and not slow" --ignore=tests/test_sensors_and_scenes_e2e.py --ignore=tests/test_live_ros2_sensors.py --ignore=tests/test_live_gazebo_sensors.py
+        run: python -m pytest tests/ -q -m "not hardware and not slow" --ignore=tests/test_sensors_and_scenes_e2e.py --ignore=tests/test_live_ros2_sensors.py --ignore=tests/test_live_gazebo_sensors.py --ignore=tests/test_live_gazebo_pick_e2e.py
 
   sensor-e2e-linux:
     runs-on: ubuntu-latest
@@ -136,7 +136,7 @@ jobs:
         run: |
           source /opt/ros/jazzy/setup.bash
           pip install -e ".[kinematics]" || true
-          python -m pytest tests/test_live_gazebo_sensors.py -m live_gazebo -q
+          python -m pytest tests/test_live_gazebo_sensors.py tests/test_live_gazebo_pick_e2e.py -m live_gazebo -q
 
   isaacsim-smoke:
     runs-on: ubuntu-latest

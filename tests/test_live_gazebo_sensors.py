@@ -19,6 +19,7 @@ for _p in (str(REPO_ROOT), str(_TESTS_DIR)):
 
 from live_sensor_fixtures import LiveRos2SensorPublishers, gazebo_binary_available, rclpy_available
 
+from examples.kuka_ft_imu_pick_gazebo.pick_episode import kuka_ft_imu_pick_gazebo_cfg
 from robodeploy.backends.real.ros2.sim_launchers.ros_gz_bridge import imu_bridge_rules
 from robodeploy.backends.sim.gazebo.urdf_sensors import inject_sensors_into_urdf
 from robodeploy.core.types import SensorMount
@@ -49,43 +50,6 @@ def _gazebo_sim_cfg(
         sim["robot_urdf"] = str(robot_urdf)
         sim["robot_name"] = "robot0"
     return sim
-
-
-def _kuka_ft_imu_pick_gazebo_cfg(
-    *,
-    max_episode_steps: int = 30,
-    policy_config: dict | None = None,
-    task_kwargs: dict | None = None,
-    wait_for_topics: list[str] | None = None,
-) -> dict:
-    from examples.config import load_example_preset
-
-    cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
-    policy_kwargs = dict(cfg.get("policy_kwargs", {}))
-    merged_policy = {**dict(policy_kwargs.get("config", {})), **(policy_config or {})}
-    policy_kwargs["config"] = merged_policy
-    merged_task = {**dict(cfg.get("task_kwargs", {})), **(task_kwargs or {})}
-    topics = wait_for_topics or [
-        "/joint_states",
-        "/wrist_ft/wrench",
-        "/wrist_imu/imu",
-        "/wrist_camera/image_raw",
-    ]
-    return {
-        **cfg,
-        "max_episode_steps": max_episode_steps,
-        "policy_kwargs": policy_kwargs,
-        "task_kwargs": merged_task,
-        "backend_kwargs": {
-            "config": {
-                "sim": _gazebo_sim_cfg(
-                    world=EMPTY_WORLD,
-                    wait_for_topics=topics,
-                    readiness_timeout_s=90.0,
-                )
-            }
-        },
-    }
 
 
 def _multimodal_obs_ready(obs) -> bool:
@@ -224,7 +188,7 @@ class LiveGazeboSensorTests(unittest.TestCase):
         """Live: multimodal preset populates FT, IMU, contact, prop_pose, and camera obs."""
         from robodeploy.env import RoboEnv
 
-        cfg = _kuka_ft_imu_pick_gazebo_cfg(max_episode_steps=40)
+        cfg = kuka_ft_imu_pick_gazebo_cfg(max_episode_steps=40, world=EMPTY_WORLD)
         env = RoboEnv.from_config(cfg)
         try:
             obs, info = env.reset()
@@ -250,51 +214,6 @@ class LiveGazeboSensorTests(unittest.TestCase):
             self.assertIn("wrist_imu", status)
         finally:
             env.close()
-
-    @pytest.mark.live_gazebo
-    def test_kuka_ft_imu_pick_gazebo_episode_success_relaxed(self):
-        """Live: pick-place with relaxed FT tuning; at least one of three seeds succeeds.
-
-        Skipped unless ROBODEPLOY_LIVE_GAZEBO=1 (sensor-live-gazebo CI on Linux).
-        Uses kinematic carry (not weld); success still depends on JTC + IK tuning.
-        """
-        from robodeploy.env import RoboEnv
-
-        seeds = (0, 1, 2)
-        successes = 0
-        for seed in seeds:
-            cfg = _kuka_ft_imu_pick_gazebo_cfg(
-                max_episode_steps=1200,
-                policy_config={
-                    "force_threshold": 0.3,
-                    "grasp_force_window": 2,
-                    "imu_omega_max": 0.8,
-                    "imu_settle_steps": 2,
-                },
-                task_kwargs={"grasp_success_force_min": 0.5},
-            )
-            env = RoboEnv.from_config(cfg)
-            try:
-                env.reset(seed=seed)
-                info = None
-                for _ in range(1200):
-                    _, _, done, info = env.step()
-                    if done:
-                        break
-                if info is not None and bool(info.success):
-                    successes += 1
-            finally:
-                env.close()
-
-        self.assertGreaterEqual(
-            successes,
-            1,
-            msg=(
-                f"relaxed Gazebo pick-place: {successes}/{len(seeds)} seeds succeeded; "
-                "check JTC, IK (.[kinematics]), and FT thresholds"
-            ),
-        )
-
 
 if __name__ == "__main__":
     unittest.main()
