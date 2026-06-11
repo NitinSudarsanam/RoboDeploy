@@ -22,6 +22,12 @@ Or run the automated smoke test (build + `twine check` + wheel install in an iso
 python -m pytest tests/test_package_build.py -q
 ```
 
+Windows shortcut (build + `twine check` only, no upload):
+
+```powershell
+powershell -File scripts/pypi_dry_run.ps1
+```
+
 Optional manual smoke install from the wheel:
 
 ```bash
@@ -50,7 +56,7 @@ CI also runs `test.yml` → `package-build` on every PR (pytest wrapper around t
 
 ### First release checklist
 
-1. Bump `version` in `pyproject.toml` and `robodeploy/__init__.py`.
+1. Bump `version` in `pyproject.toml` and `robodeploy/__init__.py` (must match; `robodeploy --version` / `import robodeploy` assert same).
 2. Update `CHANGELOG.md` with the release date and summary.
 3. Regenerate `robodeploy/_assets/manifest.json` SHA256 entries if bundled assets changed.
 4. Run `robodeploy assets verify` locally.
@@ -78,5 +84,15 @@ Wave 2 (training, sensors, Gazebo/Isaac parity, benchmarks honesty, package-buil
 3. Tag: `git tag v0.2.0 && git push origin v0.2.0` → triggers `publish.yml`.
 
 Until the tag is pushed, install from source: `pip install -e ".[sim]"`.
+
+### Pre-tag demo smoke (optional, local)
+
+| Demo | Command | Pass signal |
+|------|---------|-------------|
+| MuJoCo pick | `python -m examples.cli run-episode --preset kuka_ft_imu_pick_mujoco --seed 0 --steps 2000 --json` | `"success": true` ~step 306 |
+| RViz pick (Docker) | `docker compose -f docker/docker-compose.yml --profile ros2 run --rm demo-rviz-pick` | `success=true` ~step 950 |
+| Gazebo pick (Docker) | `docker compose -f docker/docker-compose.yml --profile ros2 run --rm demo-gazebo-pick` | `success=true` ~step 950 (default place snap on) |
+
+See [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md) for WSL2 / honest JTC (`ROBODEPLOY_GAZEBO_PLACE_SNAP=0`) caveats.
 
 Integration audit: [plans/INTEGRATION_STATUS.md](../plans/INTEGRATION_STATUS.md).

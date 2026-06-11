@@ -12,6 +12,11 @@ from typing import Optional
 @dataclass(frozen=True)
 class RosGzBridgeConfig:
     rules: tuple[str, ...] = ()
+    # When gz_ros2_control + robot_state_publisher own the graph, bridging Gazebo
+    # /tf and /joint_states fights RSP and breaks base_link->ee_link lookups.
+    bridge_clock: bool = True
+    bridge_tf: bool = True
+    bridge_joint_states: bool = True
 
 
 class RosGzBridgeLauncher:
@@ -23,12 +28,14 @@ class RosGzBridgeLauncher:
         ros2 = shutil.which("ros2")
         if not ros2:
             return
-        rules = [
-            "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
-            "/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V",
-            "/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model",
-            *list(self._cfg.rules),
-        ]
+        rules: list[str] = []
+        if self._cfg.bridge_clock:
+            rules.append("/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock")
+        if self._cfg.bridge_tf:
+            rules.append("/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V")
+        if self._cfg.bridge_joint_states:
+            rules.append("/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model")
+        rules.extend(list(self._cfg.rules))
         rules = list(dict.fromkeys(rules))
         self._proc = subprocess.Popen(
             [ros2, "run", "ros_gz_bridge", "parameter_bridge", *rules],

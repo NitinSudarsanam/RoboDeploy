@@ -2,4 +2,4 @@
 
 from __future__ import annotations
 
-from examples.tasks.peg_insertion import PegTask as PegTask  # noqa: F401
+from robodeploy.demos.tasks.peg_insertion import PegTask as PegTask  # noqa: F401

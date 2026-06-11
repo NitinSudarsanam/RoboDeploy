@@ -22,3 +22,82 @@ services:
     image: robodeploy/robodeploy:ros2
     working_dir: /app
     profiles: ["ros2"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-lc",
+          "source /opt/ros/jazzy/setup.bash && ros2 pkg list | grep -q ros_gz && robodeploy --help >/dev/null",
+        ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 45s
+
+  demo-gazebo-pick:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ros2
+    image: robodeploy/robodeploy:ros2
+    working_dir: /app
+    profiles: ["ros2"]
+    shm_size: "2gb"
+    privileged: true
+    environment:
+      ROBODEPLOY_GAZEBO_HEADLESS: "1"
+      ROBODEPLOY_GAZEBO_READINESS_TIMEOUT: "120"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      GZ_SIM_SYSTEM_PLUGIN_PATH: "/opt/ros/jazzy/lib"
+      LD_LIBRARY_PATH: "/opt/ros/jazzy/lib"
+    volumes:
+      - ..:/app
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-lc",
+          "source /opt/ros/jazzy/setup.bash && command -v gz && ros2 pkg prefix ros_gz_sim >/dev/null && python3 -c \"import robodeploy\"",
+        ]
+      interval: 30s
+      timeout: 15s
+      retries: 2
+      start_period: 20s
+    command:
+      [
+        "bash",
+        "-lc",
+        "export ROBODEPLOY_GAZEBO_HEADLESS=1 LIBGL_ALWAYS_SOFTWARE=1 GZ_SIM_SYSTEM_PLUGIN_PATH=/opt/ros/jazzy/lib LD_LIBRARY_PATH=/opt/ros/jazzy/lib; unset DISPLAY; source /opt/ros/jazzy/setup.bash; exec python3 -m examples.kuka_ft_imu_pick_gazebo.run_gazebo",
+      ]
+
+  demo-rviz-pick:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ros2
+    image: robodeploy/robodeploy:ros2
+    working_dir: /app
+    profiles: ["ros2"]
+    shm_size: "1gb"
+    environment:
+      LIBGL_ALWAYS_SOFTWARE: "1"
+    volumes:
+      - ..:/app
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-lc",
+          "source /opt/ros/jazzy/setup.bash && python3 -c \"import robodeploy\"",
+        ]
+      interval: 30s
+      timeout: 15s
+      retries: 2
+      start_period: 15s
+    command:
+      [
+        "bash",
+        "-lc",
+        "unset DISPLAY; source /opt/ros/jazzy/setup.bash; exec python3 -m examples.cli run-episode --preset kuka_pick_ros2_rviz --seed 0 --steps 2000 --json",
+      ]

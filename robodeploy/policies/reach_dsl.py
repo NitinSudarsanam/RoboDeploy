@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -21,6 +22,23 @@ except ImportError:
     yaml = None  # type: ignore[assignment]
 
 
+def waypoint_top_offsets(scene: SceneSpec) -> dict[str, np.ndarray]:
+    """Per-prop offset from reported center to grasp surface (box top).
+
+    ``Observation.objects`` reports prop centers; reach targets aim at the top
+    face. Applied both at init and whenever waypoints refresh from observations.
+    """
+    props = {p.name: p for p in scene.to_world().props}
+    offsets: dict[str, np.ndarray] = {}
+    for name, default_half_z in (("source", 0.025), ("target", 0.003)):
+        prop = props.get(name)
+        half_z = 0.0
+        if prop is not None and prop.geom is not None and prop.geom.kind == "box":
+            half_z = float(prop.geom.size[2]) if len(prop.geom.size) >= 3 else default_half_z
+        offsets[name] = np.array([0.0, 0.0, half_z], dtype=np.float32)
+    return offsets
+
+
 def waypoints_from_scene(scene: SceneSpec) -> dict[str, np.ndarray]:
     """Build EE waypoint bases from task prop layout."""
     props = {p.name: p for p in scene.to_world().props}
@@ -28,12 +46,9 @@ def waypoints_from_scene(scene: SceneSpec) -> dict[str, np.ndarray]:
     target = props.get("target")
     src = np.array(source.position if source else (0.55, 0.0, 0.41), dtype=np.float32)
     tgt = np.array(target.position if target else (0.60, 0.20, 0.41), dtype=np.float32)
-    if source is not None and source.geom is not None and source.geom.kind == "box":
-        half_z = float(source.geom.size[2]) if len(source.geom.size) >= 3 else 0.025
-        src[2] += half_z
-    if target is not None and target.geom is not None and target.geom.kind == "box":
-        half_z = float(target.geom.size[2]) if len(target.geom.size) >= 3 else 0.003
-        tgt[2] += half_z
+    offsets = waypoint_top_offsets(scene)
+    src += offsets["source"]
+    tgt += offsets["target"]
     return {"source": src, "target": tgt}
 
 
@@ -104,7 +119,10 @@ class _CompiledPhase:
             return self._policy._q_goal.copy()
         target = self.fallback_ee_target if self._fallback_active and self.fallback_ee_target is not None else self.ee_target
         if target is not None:
-            if self._policy._phase_step == 1 or self._policy._phase_step % 25 == 0:
+            ik_period = 25
+            if self._policy._gazebo_honest_place_active() and "place" in self.spec.name.lower():
+                ik_period = 4
+            if self._policy._phase_step == 1 or self._policy._phase_step % ik_period == 0:
                 self._policy._q_goal = self._policy._solve_ik(q, target)
             return self._policy._q_goal.copy()
         return self._policy._home.copy()
@@ -225,22 +243,34 @@ class ReachTrajectoryPolicy(PolicyBase):
         self._home = np.array(spec.get("home", [0.0, -0.6, 0.0, -1.8, 0.0, 1.2, 0.0]), dtype=np.float32)
         carry = spec.get("carry") or {}
         self._blend = float(carry.get("follow_blend", spec.get("tracking_blend", 0.22)))
+        if self.config.get("tracking_blend") is not None:
+            self._blend = float(self.config["tracking_blend"])
         self._settle_dist = float(spec.get("settle_threshold", 0.025))
-        self._steps_per_phase = int(spec.get("steps_per_phase", 180))
+        if self.config.get("settle_threshold") is not None:
+            self._settle_dist = float(self.config["settle_threshold"])
+        self._steps_per_phase = int(
+            self.config.get("steps_per_phase", spec.get("steps_per_phase", 180))
+        )
         self._ik = None
 
-        self._waypoints = waypoints_from_scene(scene if scene is not None else SceneSpec())
+        scene_spec = scene if scene is not None else SceneSpec()
+        self._waypoints = waypoints_from_scene(scene_spec)
+        self._waypoint_top_offsets = waypoint_top_offsets(scene_spec)
         self._phase_specs_raw = list(spec.get("phases") or [])
-        self._phases = _compile_phases(spec, self)
+        compile_spec = {**spec, "steps_per_phase": self._steps_per_phase}
+        self._phases = _compile_phases(compile_spec, self)
         if not self._phases:
             raise ValueError("Reach trajectory spec must include at least one phase.")
 
         self._phase_idx = 0
         self._phase_step = 0
         self._q_goal = self._home.copy()
+        self._q_cmd: np.ndarray | None = None
+        self._track_bias = np.zeros_like(self._home)
         self._backend = None
         self._carrying = False
-        self._carry_offset = np.array([0.0, 0.0, 0.03], dtype=np.float32)
+        carry_offset = self.config.get("carry_offset", carry.get("offset", (0.0, 0.0, 0.03)))
+        self._carry_offset = np.asarray(carry_offset, dtype=np.float32).reshape(3)
         mode = str(self.config.get("carry_mode", "kinematic")).lower()
         self._carry_mode = mode
         self._kinematic_carry = mode == "kinematic"
@@ -319,6 +349,8 @@ class ReachTrajectoryPolicy(PolicyBase):
         self._phase_idx = 0
         self._phase_step = 0
         self._q_goal = self._home.copy()
+        self._q_cmd = None
+        self._track_bias = np.zeros_like(self._home)
         self._carrying = False
         self._force_history = []
         self._imu_settle_count = 0
@@ -396,18 +428,19 @@ class ReachTrajectoryPolicy(PolicyBase):
         return self._imu_settle_count >= self._imu_settle_steps
 
     def _update_targets_from_obs(self, obs: Observation) -> None:
+        # While carrying, the source pose tracks the EE — refreshing waypoints
+        # from it would make lift/transit targets chase the arm forever.
+        if self._carrying:
+            return
         objects = getattr(obs, "objects", None) or {}
         if "source" not in objects or "target" not in objects:
             return
         src_pos, _ = objects["source"]
         tgt_pos, _ = objects["target"]
-        self._waypoints = {
-            "source": np.array(src_pos, dtype=np.float32),
-            "target": np.array(tgt_pos, dtype=np.float32),
-        }
-        self._phases = _compile_phases(
-            {"phases": self._phase_specs_raw, "steps_per_phase": self._steps_per_phase},
-            self,
+        offsets = getattr(self, "_waypoint_top_offsets", {})
+        self._set_waypoints(
+            np.array(src_pos, dtype=np.float32) + offsets.get("source", 0.0),
+            np.array(tgt_pos, dtype=np.float32) + offsets.get("target", 0.0),
         )
 
     def _solve_ik(self, q_init: np.ndarray, target_pos: np.ndarray) -> np.ndarray:
@@ -423,13 +456,38 @@ class ReachTrajectoryPolicy(PolicyBase):
         return self._track_toward(q, q_goal)
 
     def _track_toward(self, q: np.ndarray, q_goal: np.ndarray) -> np.ndarray:
-        err = q_goal - q
-        step = np.clip(err, -0.12, 0.12)
+        # Advance an internal command state toward the goal instead of offsetting
+        # from the measured position: position servos need a growing command/state
+        # error to hold against gravity; chasing the measured q caps the actuator
+        # torque at kp * blend * clip and the arm stalls.
+        if self._q_cmd is None:
+            self._q_cmd = np.asarray(q, dtype=np.float32).copy()
         blend = self._blend
         phase = self._phases[self._phase_idx]
         if phase.spec.tracking_blend is not None:
             blend = float(phase.spec.tracking_blend)
-        return (q + blend * step).astype(np.float32)
+        honest_blend = self.config.get("honest_place_tracking_blend")
+        if (
+            honest_blend is not None
+            and self._gazebo_honest_place_active()
+            and "place" in phase.spec.name.lower()
+        ):
+            blend = float(honest_blend)
+        err = q_goal - self._q_cmd
+        self._q_cmd = (self._q_cmd + blend * np.clip(err, -0.12, 0.12)).astype(np.float32)
+        # Integral correction for steady-state servo sag (gravity): once the
+        # command has converged, the measured position still lags by
+        # gravity_torque / kp; bias the command past the goal to close that gap.
+        # Integrate per joint only after its command converged (anti-windup);
+        # while still traveling, decay the bias instead.
+        converged = np.abs(err) < 0.05
+        integrate = self._track_bias + 0.06 * np.clip(q_goal - q, -0.12, 0.12)
+        self._track_bias = np.clip(
+            np.where(converged, integrate, self._track_bias * 0.95),
+            -0.6,
+            0.6,
+        ).astype(np.float32)
+        return (self._q_cmd + self._track_bias).astype(np.float32)
 
     def _sync_carried_object(self, ee: np.ndarray) -> None:
         if not self._kinematic_carry or not self._carrying or self._backend is None:
@@ -439,6 +497,71 @@ class ReachTrajectoryPolicy(PolicyBase):
         pos = tuple(float(v) for v in (ee + self._carry_offset))
         try:
             self._backend.set_prop_pose("source", pos, (1.0, 0.0, 0.0, 0.0))
+        except KeyError:
+            pass
+
+    @staticmethod
+    def _gazebo_place_snap_enabled() -> bool:
+        raw = os.environ.get("ROBODEPLOY_GAZEBO_PLACE_SNAP", "1").strip().lower()
+        return raw not in {"0", "false", "no", "off"}
+
+    def _gazebo_honest_place_active(self) -> bool:
+        backend_name = str(getattr(self._backend, "sensor_backend_name", "") or "").lower()
+        return backend_name == "gazebo" and not self._gazebo_place_snap_enabled()
+
+    def _honest_place_settle_m(self) -> float | None:
+        raw = self.config.get("honest_place_settle_m")
+        if raw is None:
+            return None
+        return float(raw)
+
+    def _place_phase_release_allowed(self, phase: _CompiledPhase, obs: Observation) -> bool:
+        """When place snap is off, defer carry release until EE is within honest tolerance."""
+        if not self._gazebo_honest_place_active():
+            return True
+        if not (
+            phase.spec.release_carry
+            or ("place" in phase.spec.name.lower() and self._carrying)
+        ):
+            return True
+        settle_m = self._honest_place_settle_m()
+        if settle_m is None or phase.ee_target is None:
+            return True
+        ee = np.asarray(obs.ee_position, dtype=np.float32).reshape(3)
+        return float(np.linalg.norm(phase.ee_target - ee)) <= settle_m
+
+    def _sync_honest_carry_pose(self, ee: np.ndarray) -> None:
+        """Last kinematic sync from EE before honest (no-snap) carry release."""
+        if not self._gazebo_honest_place_active() or not self._kinematic_carry:
+            return
+        if self._backend is None or not hasattr(self._backend, "set_prop_pose"):
+            return
+        pos = tuple(float(v) for v in (ee + self._carry_offset))
+        try:
+            self._backend.set_prop_pose("source", pos, (1.0, 0.0, 0.0, 0.0))
+        except KeyError:
+            pass
+
+    def _maybe_finalize_kinematic_place(self, ee_to_place_dist: float) -> None:
+        """Snap kinematic carry to placement goal when place phase ends (JTC / fake-sim lag)."""
+        del ee_to_place_dist
+        if not self._kinematic_carry or self._backend is None:
+            return
+        if not hasattr(self._backend, "set_prop_pose"):
+            return
+        backend_name = str(getattr(self._backend, "sensor_backend_name", "") or "").lower()
+        if backend_name == "gazebo" and not self._gazebo_place_snap_enabled():
+            return
+        if backend_name not in {"gazebo", "ros2_rviz"}:
+            return
+        props = getattr(self._backend, "_scene_prop_poses", None)
+        if not isinstance(props, dict) or "target" not in props:
+            return
+        target_pos, _ = props["target"]
+        half_z = float(getattr(self, "_waypoint_top_offsets", {}).get("source", np.zeros(3))[2])
+        goal = (float(target_pos[0]), float(target_pos[1]), float(target_pos[2]) + half_z)
+        try:
+            self._backend.set_prop_pose("source", goal, (1.0, 0.0, 0.0, 0.0))
         except KeyError:
             pass
 
@@ -548,8 +671,18 @@ class ReachTrajectoryPolicy(PolicyBase):
         q_goal = phase.compute(obs, q)
         q_cmd = self._track_toward(q, q_goal)
 
-        if phase.settled(obs) or self._phase_step >= phase.max_steps:
+        ready_to_advance = phase.settled(obs) or self._phase_step >= phase.max_steps
+        if ready_to_advance and not self._place_phase_release_allowed(phase, obs):
+            if self._phase_step < phase.max_steps:
+                ready_to_advance = False
+        if ready_to_advance:
             if phase.spec.release_carry or ("place" in phase.spec.name.lower() and self._carrying):
+                if phase.ee_target is not None:
+                    ee_now = np.asarray(obs.ee_position, dtype=np.float32).reshape(3)
+                    self._sync_honest_carry_pose(ee_now)
+                    self._maybe_finalize_kinematic_place(
+                        float(np.linalg.norm(phase.ee_target - ee_now))
+                    )
                 self._carrying = False
                 if self._backend is not None and hasattr(self._backend, "set_grasp_prop"):
                     self._backend.set_grasp_prop(None)

@@ -137,12 +137,20 @@ class ROS2GazeboBackend(ROS2RealBackend):
                     raise
         self._generated_world_path = None
         world_path = sim_cfg.get("world")
-        scene_builder = GazeboSceneBuilder()
-        if not world_path:
-            world_path = str(scene_builder.write_temp_world(scene.to_world()))
+        world_spec = scene.to_world()
+        if world_path:
+            wp = Path(str(world_path))
+            wname = GazeboLauncher._world_name_from_sdf(wp)
+            scene_builder = GazeboSceneBuilder(world_name=wname)
+        else:
+            scene_builder = GazeboSceneBuilder()
+
+        # Props must be present in the SDF for physics, contacts, and grasp pose sync.
+        if not world_path or world_spec.props:
+            world_path = str(scene_builder.write_temp_world(world_spec))
             self._generated_world_path = world_path
 
-        world = scene.to_world()
+        world = world_spec
         self._gz_world_name = str(scene_builder.world_name)
         gz_node = sim_cfg.get("gz_transport_node")
         if gz_node is None:
@@ -160,6 +168,12 @@ class ROS2GazeboBackend(ROS2RealBackend):
         self._ee_link = str(
             robots[0].description.ee_link_name if robots else self.config.get("ee_link", "ee_link")
         )
+        self._kinematics_solver = None
+        if robots:
+            try:
+                self._kinematics_solver = robots[0].description.get_kinematics_solver()
+            except Exception:
+                self._kinematics_solver = None
         self._contact_monitor = GazeboContactMonitor()
         if gz_node is not None:
             self._contact_monitor.bind_transport(
@@ -167,6 +181,14 @@ class ROS2GazeboBackend(ROS2RealBackend):
                 topic=f"/world/{self._gz_world_name}/contacts",
             )
 
+        expected_js_names: tuple[str, ...] = ()
+        if robots:
+            try:
+                expected_js_names = tuple(robots[0].description.ros_transport_joint_names())
+            except Exception:
+                pass
+        if self._kinematics_solver is not None:
+            self.config["_kinematics_solver"] = self._kinematics_solver
         self._sim_launcher = GazeboLauncher(
             GazeboLaunchConfig(
                 world=str(world_path or ""),
@@ -176,6 +198,7 @@ class ROS2GazeboBackend(ROS2RealBackend):
                 controllers_to_spawn=tuple(sim_cfg.get("controllers_to_spawn", ()) or ()),
                 wait_for_topics=tuple(dict.fromkeys(wait_for_topics)),
                 bridge_rules=tuple(dict.fromkeys(bridge_rules)),
+                expected_joint_names=expected_js_names,
                 readiness_timeout_s=float(sim_cfg.get("readiness_timeout_s", 15.0)),
             )
         )
@@ -289,6 +312,16 @@ class ROS2GazeboBackend(ROS2RealBackend):
         obs = driver.get_obs()
         ee_pos = np.asarray(obs.ee_position, dtype=np.float64).reshape(3)
         ee_quat = np.asarray(obs.ee_orientation, dtype=np.float64).reshape(4)
+        if np.isfinite(ee_pos).all() and np.isfinite(ee_quat).all():
+            return ee_pos, ee_quat
+        solver = getattr(self, "_kinematics_solver", None)
+        q = getattr(obs, "joint_positions", None)
+        if solver is not None and q is not None:
+            try:
+                pos, quat = solver.fk(np.asarray(q, dtype=np.float64).reshape(-1))
+                return np.asarray(pos, dtype=np.float64).reshape(3), np.asarray(quat, dtype=np.float64).reshape(4)
+            except Exception:
+                pass
         return ee_pos, ee_quat
 
     def _close_impl(self) -> None:

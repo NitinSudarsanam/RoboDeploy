@@ -34,6 +34,7 @@ class RobotStatePublisherLauncher:
         Path(p).write_text(
             "robot_state_publisher:\n"
             "  ros__parameters:\n"
+            "    publish_frequency: 100.0\n"
             "    robot_description: |\n"
             + "\n".join(f"      {line}" for line in self._urdf_text.splitlines())
             + "\n",

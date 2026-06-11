@@ -20,6 +20,46 @@ if TYPE_CHECKING:
 
 SimulatorName = Literal["mujoco", "isaacsim", "ros2_rviz", "gazebo", "real_world"]
 
+_BACKEND_TO_SIMULATOR: dict[str, SimulatorName] = {
+    "mujoco": "mujoco",
+    "isaacsim": "isaacsim",
+    "ros2_rviz": "ros2_rviz",
+    "ros2_gazebo": "gazebo",
+    "ros2": "real_world",
+}
+
+
+def simulator_name_for_backend(backend_name: str) -> SimulatorName | None:
+    """Map a registry / preset backend name to ``backend_for_simulator``'s ``simulator`` arg."""
+    from robodeploy.core.registry import resolve_backend_name
+
+    return _BACKEND_TO_SIMULATOR.get(resolve_backend_name(backend_name))
+
+
+def normalize_backend_config_overrides(backend_kwargs: dict[str, Any] | None) -> dict[str, Any]:
+    """Flatten preset ``backend_kwargs`` (including nested ``config``) for ``config_overrides``."""
+    raw = dict(backend_kwargs or {})
+    nested = raw.pop("config", None)
+    merged: dict[str, Any] = dict(raw)
+    if isinstance(nested, dict):
+        merged = merge_simulator_config(merged, nested)
+    return merged
+
+
+def behavior_profile_from_config(cfg: dict[str, Any], backend_kwargs: dict[str, Any]) -> "BehaviorProfile | None":
+    from robodeploy.behavior import BehaviorProfile
+
+    spec = cfg.get("behavior") or backend_kwargs.get("behavior")
+    if spec is None:
+        return None
+    if isinstance(spec, BehaviorProfile):
+        return spec
+    if isinstance(spec, str):
+        return BehaviorProfile(preset=spec)  # type: ignore[arg-type]
+    if isinstance(spec, dict):
+        return BehaviorProfile(**spec)
+    return None
+
 
 def merge_simulator_config(base: dict[str, Any], overrides: dict[str, Any] | None) -> dict[str, Any]:
     """Deep-merge ``overrides`` into ``base`` (dict values merge recursively)."""
@@ -117,8 +157,6 @@ def _ros2_auto_config(
 
 
 def _mujoco_auto_config(robots: list[Robot], resolved) -> dict[str, Any]:
-    if len(robots) != 1:
-        raise ValueError("MuJoCo via backend_for_simulator currently supports exactly one Robot.")
     from robodeploy.behavior_translators import to_mujoco
 
     cfg: dict[str, Any] = {
@@ -126,9 +164,10 @@ def _mujoco_auto_config(robots: list[Robot], resolved) -> dict[str, Any]:
         "allow_actuator_name_fallback": True,
     }
     cfg = merge_simulator_config(cfg, to_mujoco(resolved, robots[0]))
-    extra = robots[0].description.mujoco_backend_extra_config()
-    if isinstance(extra, dict):
-        cfg = merge_simulator_config(cfg, extra)
+    if len(robots) == 1:
+        extra = robots[0].description.mujoco_backend_extra_config()
+        if isinstance(extra, dict):
+            cfg = merge_simulator_config(cfg, extra)
     return cfg
 
 
@@ -173,8 +212,8 @@ def backend_for_simulator(
             ``robots[0].description.default_behavior_profile()`` before per-simulator translation.
 
     Raises:
-        ValueError: If ``robots`` is empty, MuJoCo gets more than one robot, or Gazebo
-            lacks a ``sim`` dict after merging description + overrides.
+        ValueError: If ``robots`` is empty or Gazebo lacks a ``sim`` dict after merging
+            description + overrides.
     """
     if not robots:
         raise ValueError("backend_for_simulator requires at least one Robot.")

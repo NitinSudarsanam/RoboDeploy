@@ -58,6 +58,49 @@ class PackageBuildTests(unittest.TestCase):
             )
             subprocess.check_call([str(py), "-m", "robodeploy.cli", "--help"], cwd=str(REPO))
 
+    def test_wheel_benchmarks_discovery_and_preset_resolve(self):
+        """Installed wheel must ship benchmarks/ and resolve presets without repo checkout."""
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "build", "pyyaml", "-q"],
+            cwd=str(REPO),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "dist"
+            out_dir.mkdir()
+            subprocess.check_call(
+                [sys.executable, "-m", "build", "--outdir", str(out_dir), "--wheel"],
+                cwd=str(REPO),
+            )
+            wheel = next(p for p in out_dir.iterdir() if p.suffix == ".whl")
+            venv_dir = Path(tmp) / "venv"
+            subprocess.check_call([sys.executable, "-m", "venv", str(venv_dir)])
+            py = _venv_python(venv_dir)
+            subprocess.check_call([str(py), "-m", "pip", "install", "--upgrade", "pip", "-q"])
+            subprocess.check_call([str(py), "-m", "pip", "install", str(wheel), "pyyaml", "-q"])
+
+            subprocess.check_call(
+                [
+                    str(py),
+                    "-c",
+                    "from robodeploy.evaluation.registry import BenchmarkRegistry; "
+                    "r = BenchmarkRegistry(); "
+                    "assert 'manipulation_v1' in r.list_suites(); "
+                    "task = r.load_suite('manipulation_v1').get_task('reach_target'); "
+                    "assert 'dummy' in task.available_backends(); "
+                    "task.import_task_module()",
+                ],
+            )
+            subprocess.check_call(
+                [
+                    str(py),
+                    "-m",
+                    "robodeploy.cli",
+                    "list-benchmarks",
+                    "--json",
+                ],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,5 @@
-"""Peg insertion sim2real benchmark (task from examples.tasks)."""
+"""Peg insertion sim2real benchmark (task from robodeploy.demos.tasks)."""
 
-from examples.tasks.peg_insertion import PegInsertionTask  # noqa: F401
+from robodeploy.demos.tasks.peg_insertion import PegInsertionTask  # noqa: F401
 
 __all__ = ["PegInsertionTask"]

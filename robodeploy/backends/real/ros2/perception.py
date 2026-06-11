@@ -30,6 +30,25 @@ class DictPerceptionSource:
         )
 
 
+class ScenePropPerceptionSource:
+    """Mutable scene-oracle poses for ros2_rviz fake-sim pick demos (carry assist)."""
+
+    def __init__(
+        self,
+        poses: dict[str, tuple[tuple[float, float, float], tuple[float, float, float, float]]],
+    ) -> None:
+        self._poses = poses
+
+    def get_pose(self, prop_name: str) -> tuple[np.ndarray, np.ndarray]:
+        if prop_name not in self._poses:
+            raise KeyError(f"Scene oracle has no pose for prop '{prop_name}'.")
+        pos, quat = self._poses[prop_name]
+        return (
+            np.asarray(pos, dtype=np.float64),
+            np.asarray(quat, dtype=np.float64),
+        )
+
+
 class TFPerceptionSource:
     """Lookup prop poses from a TF buffer (world frame by default)."""
 

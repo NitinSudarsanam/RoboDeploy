@@ -68,5 +68,11 @@ class KukaDescription(RobotDescription):
             # gz_ros2_control publishes at root namespace; use absolute topics.
             f"{robot_id}.joint_states_topic": "/joint_states",
             f"{robot_id}.joint_cmd_topic": "/joint_trajectory_controller/joint_trajectory",
+            f"{robot_id}.joint_names": self.ros_transport_joint_names(),
+            # URDF / robot_state_publisher TF uses unprefixed link names (not robot0/ee_link).
+            # Scene props and Pinocchio FK use world frame (URDF root ``world`` link).
+            f"{robot_id}.base_frame": "world",
+            f"{robot_id}.ee_frame": "ee_link",
+            "jtc_time_from_start_s": 0.4,
         }
 

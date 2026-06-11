@@ -2,4 +2,4 @@
 
 from __future__ import annotations
 
-from examples.tasks.showcase_scene import ShowcaseSceneTask as ShowcaseSceneTask  # noqa: F401
+from robodeploy.demos.tasks.showcase_scene import ShowcaseSceneTask as ShowcaseSceneTask  # noqa: F401

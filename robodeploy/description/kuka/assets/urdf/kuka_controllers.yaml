@@ -27,3 +27,17 @@ joint_trajectory_controller:
       - position
       - velocity
     allow_partial_joints_goal: false
+    allow_nonzero_velocity_at_trajectory_end: false
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    constraints:
+      stopped_velocity_tolerance: 0.02
+      goal_time: 0.0
+    gains:
+      joint1: {p: 120.0, i: 0.0, d: 4.0}
+      joint2: {p: 120.0, i: 0.0, d: 4.0}
+      joint3: {p: 120.0, i: 0.0, d: 4.0}
+      joint4: {p: 120.0, i: 0.0, d: 4.0}
+      joint5: {p: 80.0, i: 0.0, d: 2.0}
+      joint6: {p: 80.0, i: 0.0, d: 2.0}
+      joint7: {p: 40.0, i: 0.0, d: 1.0}

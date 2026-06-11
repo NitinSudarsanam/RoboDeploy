@@ -35,3 +35,18 @@ class SceneBuilderTests(unittest.TestCase):
         from robodeploy.core.scene_validator import SceneValidator
 
         self.assertTrue(SceneValidator().validate(report_ok, "mujoco").ok)
+
+    def test_add_prop_accepts_prop_config(self):
+        from robodeploy.core.types import GeomSpec, MaterialSpec, PropConfig
+        from robodeploy.scene_builder import SceneBuilder
+
+        prop = PropConfig(
+            name="peg",
+            geom=GeomSpec(kind="cylinder", size=(0.01, 0.06)),
+            position=(0.5, 0.0, 0.4),
+            mass=0.02,
+        )
+        ir = SceneBuilder().add_prop(prop).build_ir()
+        self.assertEqual(len(ir.props), 1)
+        self.assertEqual(ir.props[0].name, "peg")
+        self.assertEqual(ir.props[0].geometry.kind, "cylinder")

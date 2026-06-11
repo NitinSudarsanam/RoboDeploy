@@ -112,10 +112,13 @@ docs = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["robodeploy*"]
+where = ["."]
+include = ["robodeploy*", "benchmarks*"]
 
 [tool.setuptools.package-data]
+benchmarks = ["**/*.yaml", "**/*.json", "**/*.md", "leaderboard/**/*"]
 robodeploy = [
+  "demos/**/*.yaml",
   "_assets/**/*.json",
   "description/**/*.urdf",
   "description/**/*.yaml",
@@ -137,4 +140,5 @@ markers = [
   "slow: long-running training integration tests (SB3 100k, PPO reach_target)",
   "optional_nightly: long proxy runs mirrored in ppo-nightly.yml (skip locally unless needed)",
   "live_gazebo: live Gazebo + ROS2 tests (ROBODEPLOY_LIVE_GAZEBO=1, Linux CI)",
+  "ci_pick_gate: MuJoCo pick success regression (3 seeds, PR sensor-e2e-linux)",
 ]

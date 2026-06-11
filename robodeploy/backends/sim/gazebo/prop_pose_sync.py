@@ -71,14 +71,14 @@ class PropPoseSyncer:
                 ok, _ = request(service, pose, 1000, response, True)
                 return bool(ok)
             except Exception as exc:
-                logger.warning(
+                logger.debug(
                     "gz.transport set_pose via %s failed for '%s': %s",
                     msgs_mod,
                     entity_name,
                     exc,
                 )
                 continue
-        logger.warning(
+        logger.debug(
             "gz.transport set_pose unavailable for '%s' (world=%s); falling back to subprocess",
             entity_name,
             world_name,

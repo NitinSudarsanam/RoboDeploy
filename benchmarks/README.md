@@ -27,7 +27,7 @@ benchmarks/
   leaderboard/         submission.schema.json, submissions/
 ```
 
-Set `ROBODEPLOY_BENCHMARKS_ROOT` to override discovery (default: repo `benchmarks/`).
+`pip install robodeploy` bundles this tree as the `benchmarks` package (presets + `task.py` modules). Discovery order: explicit `--benchmarks-root` → `ROBODEPLOY_BENCHMARKS_ROOT` → repo checkout `benchmarks/` → installed package.
 
 ---
 

@@ -10,5 +10,5 @@ policy_kwargs:
 max_episode_steps: 500
 obs_spec_policy: warn
 custom_modules:
-  - examples.tasks
+  - robodeploy.demos.tasks
   - benchmarks.manipulation_v1.reach_target.task

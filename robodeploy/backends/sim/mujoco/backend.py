@@ -269,7 +269,11 @@ class MuJoCoBackend(BackendBase):
                 self._viewer = mujoco.viewer.launch_passive(self._model, self._data)
             except Exception as exc:
                 self._viewer = None
-                raise RuntimeError(f"Failed to launch MuJoCo viewer: {exc}") from exc
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "MuJoCo viewer unavailable (%s); continuing headless.", exc
+                )
 
         # Start at home
         self._set_home_qpos()
@@ -382,7 +386,11 @@ class MuJoCoBackend(BackendBase):
                 self._viewer = mujoco.viewer.launch_passive(self._model, self._data)
             except Exception as exc:
                 self._viewer = None
-                raise RuntimeError(f"Failed to launch MuJoCo viewer: {exc}") from exc
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "MuJoCo viewer unavailable (%s); continuing headless.", exc
+                )
         self._set_home_qpos_multi()
         mujoco.mj_forward(self._model, self._data)
         self._rviz_bridge = None
@@ -657,6 +665,11 @@ class MuJoCoBackend(BackendBase):
             return
         for i, addr in enumerate(self._qpos_addr):
             self._data.qpos[addr] = float(home[i])
+        # Seed position actuators with the home pose; otherwise they pull
+        # toward ctrl=0 on the first steps after reset (start-of-episode jerk).
+        for i, aid in enumerate(self._actuator_ids):
+            if i < len(home):
+                self._data.ctrl[aid] = float(home[i])
 
     def get_sim_state(self) -> dict:
         import numpy as np

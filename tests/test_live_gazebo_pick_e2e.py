@@ -44,7 +44,7 @@ class GazeboPickOfflineTests(unittest.TestCase):
         cfg = kuka_ft_imu_pick_gazebo_cfg(max_episode_steps=10)
         self.assertEqual(cfg["backend"], "ros2_gazebo")
         world = cfg["backend_kwargs"]["config"]["sim"]["world"]
-        self.assertTrue(str(world).endswith("gazebo_pick_minimal.sdf"))
+        self.assertIn(Path(world).name, ("pick_minimal.sdf", "gazebo_pick_minimal.sdf"))
 
     def test_injected_contact_matches_grasp_query_offline(self):
         monitor = GazeboContactMonitor()

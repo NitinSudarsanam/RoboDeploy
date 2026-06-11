@@ -11,6 +11,18 @@ from typing import Any, Iterator
 import yaml
 
 
+def _installed_benchmarks_root() -> Path | None:
+    """Return benchmarks/ bundled with the installed ``benchmarks`` package."""
+    try:
+        import benchmarks as benchmarks_pkg
+    except ImportError:
+        return None
+    root = Path(benchmarks_pkg.__file__).resolve().parent
+    if (root / "manipulation_v1" / "spec.json").is_file():
+        return root
+    return None
+
+
 def benchmarks_root(explicit: str | Path | None = None) -> Path:
     if explicit:
         path = Path(explicit).expanduser().resolve()
@@ -25,13 +37,17 @@ def benchmarks_root(explicit: str | Path | None = None) -> Path:
     here = Path(__file__).resolve()
     for parent in here.parents:
         candidate = parent / "benchmarks"
-        if candidate.is_dir():
+        if candidate.is_dir() and (candidate / "manipulation_v1" / "spec.json").is_file():
             return candidate.resolve()
+    installed = _installed_benchmarks_root()
+    if installed is not None:
+        return installed
     cwd = Path.cwd() / "benchmarks"
-    if cwd.is_dir():
+    if cwd.is_dir() and (cwd / "manipulation_v1" / "spec.json").is_file():
         return cwd.resolve()
     raise FileNotFoundError(
-        "Could not locate benchmarks/ directory. Set ROBODEPLOY_BENCHMARKS_ROOT or run from the repo root."
+        "Could not locate benchmarks/ directory. Set ROBODEPLOY_BENCHMARKS_ROOT, "
+        "run from the repo root, or pip install robodeploy (bundles benchmarks/)."
     )
 
 

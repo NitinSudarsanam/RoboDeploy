@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -20,6 +21,7 @@ def run_teleop_session(
     start_recording: bool = False,
     max_steps: int | None = None,
     device_kwargs: dict | None = None,
+    preset: str | None = None,
 ) -> list[Path]:
     """Teleoperate env with a device-backed TeleopPolicy; optionally record episodes."""
     teleop_device = make_teleop_device(device, **(device_kwargs or {}))
@@ -42,6 +44,13 @@ def run_teleop_session(
             fmt=fmt,
             start_recording=recording,
             max_steps=max_steps,
+            metadata={
+                "source": "teleop",
+                "device": device,
+                "format": fmt,
+                "preset": preset or "",
+                "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            },
         )
         saved = session.run()
         if record_path and Path(record_path).suffix and saved:
@@ -52,6 +61,40 @@ def run_teleop_session(
         return saved
     finally:
         teleop_device.stop()
+
+
+def record_stub_episode(
+    env,
+    device,
+    *,
+    output_dir: str | Path = "demos",
+    fmt: Literal["jsonl", "hdf5", "json", "lerobot"] = "jsonl",
+    max_steps: int = 10,
+    start_recording: bool = True,
+    metadata: dict | None = None,
+) -> list[Path]:
+    """Headless teleop recording with a scripted ITeleopDevice (tests / CI)."""
+    policy = TeleopPolicy(device=device)
+    device.start()
+    try:
+        env.reset()
+        policy.bind_runtime(env.backend, env.primary_robot.description)
+        session = InteractiveDemoSession(
+            env,
+            policy,
+            output_dir=output_dir,
+            fmt=fmt,
+            start_recording=start_recording,
+            max_steps=max_steps,
+            metadata={
+                "source": "teleop_stub",
+                "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                **(metadata or {}),
+            },
+        )
+        return session.run()
+    finally:
+        device.stop()
 
 
 def replay_recording(

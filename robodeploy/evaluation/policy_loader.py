@@ -15,13 +15,17 @@ def is_checkpoint_path(ref: str) -> bool:
 
 
 def load_bc_checkpoint_policy(path: str | Path, *, config: dict[str, Any] | None = None) -> IPolicy:
+    import torch
+
     from robodeploy.policies.trainable_base import TrainablePolicyBase
     from robodeploy.training.bc import BCPolicyModule
 
     cfg = dict(config or {})
-    obs_keys = list(cfg.get("obs_keys", ["proprio"]))
-    action_dim = int(cfg.get("action_dim", 2))
-    proprio_dim = int(cfg.get("proprio_dim", 6))
+    payload = torch.load(path, map_location="cpu", weights_only=False)
+    meta = payload if isinstance(payload, dict) else {}
+    obs_keys = list(meta.get("obs_keys") or cfg.get("obs_keys") or ["proprio"])
+    action_dim = int(meta.get("action_dim") or cfg.get("action_dim") or 2)
+    proprio_dim = int(meta.get("proprio_dim") or cfg.get("proprio_dim") or 6)
     module = BCPolicyModule(
         obs_keys=obs_keys,
         action_dim=action_dim,

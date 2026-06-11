@@ -9,6 +9,23 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
+def _obs_at_ee(ee):
+    import numpy as np
+
+    from robodeploy.core.types import Observation
+
+    ee = np.asarray(ee, dtype=np.float32).reshape(3)
+    return Observation(
+        joint_positions=np.zeros(7, dtype=np.float32),
+        joint_velocities=np.zeros(7, dtype=np.float32),
+        joint_torques=np.zeros(7, dtype=np.float32),
+        ee_position=ee,
+        ee_orientation=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32),
+        ee_velocity=np.zeros(3, dtype=np.float32),
+        ee_angular_velocity=np.zeros(3, dtype=np.float32),
+    )
+
+
 class ReachDSLTests(unittest.TestCase):
     def test_from_yaml_loads_phases(self):
         yaml = REPO_ROOT / "examples" / "policies" / "reach_pick_place.yaml"
@@ -135,6 +152,76 @@ class ReachDSLTests(unittest.TestCase):
                 policy.bind_runtime(backend, desc)
                 pin_attach.assert_called_once()
 
+    def test_gazebo_place_snap_respects_env_flag(self):
+        import os
+        from unittest.mock import MagicMock, patch
+
+        from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
+
+        spec = ReachTrajectoryPolicy.default_pick_place_spec()
+        policy = ReachTrajectoryPolicy(spec)
+        backend = MagicMock()
+        backend.sensor_backend_name = "gazebo"
+        backend._scene_prop_poses = {
+            "target": ((0.6, 0.2, 0.38), (1.0, 0.0, 0.0, 0.0)),
+            "source": ((0.55, 0.0, 0.38), (1.0, 0.0, 0.0, 0.0)),
+        }
+        policy.bind_runtime(backend, MagicMock())
+        with patch.dict(os.environ, {"ROBODEPLOY_GAZEBO_PLACE_SNAP": "0"}):
+            policy._maybe_finalize_kinematic_place(0.5)
+        backend.set_prop_pose.assert_not_called()
+        with patch.dict(os.environ, {"ROBODEPLOY_GAZEBO_PLACE_SNAP": "1"}):
+            policy._maybe_finalize_kinematic_place(0.5)
+        backend.set_prop_pose.assert_called_once()
+
+    def test_ros2_rviz_place_finalize_snaps_source(self):
+        from unittest.mock import MagicMock
+
+        from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
+
+        spec = ReachTrajectoryPolicy.default_pick_place_spec()
+        policy = ReachTrajectoryPolicy(spec)
+        backend = MagicMock()
+        backend.sensor_backend_name = "ros2_rviz"
+        backend._scene_prop_poses = {
+            "target": ((0.6, 0.2, 0.38), (1.0, 0.0, 0.0, 0.0)),
+            "source": ((0.55, 0.0, 0.38), (1.0, 0.0, 0.0, 0.0)),
+        }
+        policy.bind_runtime(backend, MagicMock())
+        policy._maybe_finalize_kinematic_place(0.2)
+        backend.set_prop_pose.assert_called_once()
+
+    def test_honest_place_defers_release_until_within_tolerance(self):
+        import os
+
+        import numpy as np
+        from unittest.mock import MagicMock, patch
+
+        from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
+
+        spec = ReachTrajectoryPolicy.default_pick_place_spec()
+        policy = ReachTrajectoryPolicy(
+            spec,
+            config={"honest_place_settle_m": 0.03, "steps_per_phase": 40},
+        )
+        backend = MagicMock()
+        backend.sensor_backend_name = "gazebo"
+        policy.bind_runtime(backend, MagicMock())
+        policy._carrying = True
+        place_idx = next(
+            i for i, ph in enumerate(policy._phases) if ph.spec.name == "place"
+        )
+        policy._phase_idx = place_idx
+        policy._phase_step = 10
+        place = policy._phases[place_idx]
+        assert place.ee_target is not None
+        far_ee = place.ee_target + np.array([0.2, 0.0, 0.0], dtype=np.float32)
+        with patch.dict(os.environ, {"ROBODEPLOY_GAZEBO_PLACE_SNAP": "0"}):
+            self.assertFalse(policy._place_phase_release_allowed(place, _obs_at_ee(far_ee)))
+            self.assertTrue(
+                policy._place_phase_release_allowed(place, _obs_at_ee(place.ee_target))
+            )
+
     def test_gazebo_weld_carry_maps_to_follow(self):
         from unittest.mock import MagicMock
 
@@ -192,8 +279,18 @@ class ReachDSLTests(unittest.TestCase):
         q = np.array([0.4, -0.4, 0.1, -1.5, 0.0, 1.0, 0.0], dtype=np.float32)
         policy._q_goal = q.copy()
         target = np.array([0.6, 0.2, 0.5], dtype=np.float32)
+
+        def _fresh_tracker() -> None:
+            # _track_toward integrates internal command state; reset between
+            # calls so each call is compared from the same starting state.
+            policy._q_cmd = None
+            policy._track_bias = np.zeros_like(policy._home)
+
+        _fresh_tracker()
         toward_home = policy._track_toward(q, policy._home)
+        _fresh_tracker()
         result = policy._fallback_delta(q, target)
         self.assertFalse(np.allclose(result, toward_home, atol=1e-4))
+        _fresh_tracker()
         expected = policy._track_toward(q, q)
         np.testing.assert_allclose(result, expected, rtol=0.0, atol=1e-5)

@@ -52,6 +52,7 @@ nav:
   - Reference:
       - CLI reference: CLI_REFERENCE.md
       - API reference: API_REFERENCE.md
+      - Demo runbook: DEMO_RUNBOOK.md
       - Backend setup: BACKEND_SETUP.md
       - Release: RELEASE.md
       - SO-101 real robot: SO101_REAL.md

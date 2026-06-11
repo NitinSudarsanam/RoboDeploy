@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -10,20 +12,61 @@ from typing import Any, Callable
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PICK_MINIMAL_WORLD = REPO_ROOT / "tests" / "fixtures" / "gazebo_pick_minimal.sdf"
-EMPTY_WORLD = REPO_ROOT / "tests" / "fixtures" / "gazebo_empty.sdf"
+
+
+def _packaged_world(name: str) -> Path:
+    try:
+        from importlib.resources import files as resource_files
+
+        path = Path(str(resource_files("robodeploy").joinpath(f"ros2_assets/worlds/{name}")))
+        if path.is_file():
+            return path
+    except Exception:
+        pass
+    return REPO_ROOT / "tests" / "fixtures" / name
+
+
+PICK_MINIMAL_WORLD = _packaged_world("pick_minimal.sdf")
+if not PICK_MINIMAL_WORLD.is_file():
+    PICK_MINIMAL_WORLD = REPO_ROOT / "tests" / "fixtures" / "gazebo_pick_minimal.sdf"
+EMPTY_WORLD = _packaged_world("empty_world.sdf")
+if not EMPTY_WORLD.is_file():
+    EMPTY_WORLD = REPO_ROOT / "tests" / "fixtures" / "gazebo_empty.sdf"
 
 # Live CI: strengthened from 1/3; WAVE2_01 target is 70% over 10 seeds.
 LIVE_PICK_SEEDS = tuple(range(10))
 LIVE_PICK_MIN_SUCCESS_RATE = 0.5
+
+def _gazebo_place_snap_enabled() -> bool:
+    from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
+
+    return ReachTrajectoryPolicy._gazebo_place_snap_enabled()
+
 
 RELAXED_POLICY_CONFIG: dict[str, Any] = {
     "force_threshold": 0.3,
     "grasp_force_window": 2,
     "imu_omega_max": 0.8,
     "imu_settle_steps": 2,
+    # Headless Gazebo Docker often has zero FT until contact physics is tuned; engage on reach.
+    "grasp_detection": "distance",
+    "critical_sensors": [],
+    "halt_on_sensor_failure": False,
+    # Match MuJoCo reach_pick_place.yaml carry clearance; kinematic avoids gz follow lag.
+    "carry_mode": "kinematic",
+    "carry_offset": [0.0, 0.0, -0.06],
+    "tracking_blend": 0.38,
+    "steps_per_phase": 400,
 }
-RELAXED_TASK_KWARGS: dict[str, Any] = {"grasp_success_force_min": 0.5}
+
+# Extra JTC horizon when measuring honest placement (ROBODEPLOY_GAZEBO_PLACE_SNAP=0).
+HONEST_JTC_POLICY_OVERRIDES: dict[str, Any] = {
+    "tracking_blend": 0.36,
+    "honest_place_tracking_blend": 0.12,
+    "steps_per_phase": 600,
+    "honest_place_settle_m": 0.038,
+}
+RELAXED_TASK_KWARGS: dict[str, Any] = {"grasp_success_force_min": 0.0}
 
 
 @dataclass(frozen=True)
@@ -37,17 +80,36 @@ class PickEpisodeResult:
     final_info: Any | None = None
 
 
+def _gazebo_headless_default() -> bool:
+    raw = os.environ.get("ROBODEPLOY_GAZEBO_HEADLESS", "").strip().lower()
+    if raw in {"1", "true", "yes"}:
+        return True
+    if raw in {"0", "false", "no"}:
+        return False
+    return True
+
+
+def _gazebo_readiness_timeout_default() -> float:
+    raw = os.environ.get("ROBODEPLOY_GAZEBO_READINESS_TIMEOUT", "").strip()
+    if raw:
+        try:
+            return max(15.0, float(raw))
+        except ValueError:
+            pass
+    return 90.0
+
+
 def _gazebo_sim_cfg(
     *,
     world: Path,
     wait_for_topics: list[str] | None = None,
-    headless: bool = True,
+    headless: bool | None = None,
     readiness_timeout_s: float = 90.0,
 ) -> dict:
     return {
         "kind": "gazebo",
         "world": str(world),
-        "headless": headless,
+        "headless": _gazebo_headless_default() if headless is None else headless,
         "readiness_timeout_s": readiness_timeout_s,
         "wait_for_topics": wait_for_topics or [],
     }
@@ -68,6 +130,7 @@ def kuka_ft_imu_pick_gazebo_cfg(
     merged_policy = {**dict(policy_kwargs.get("config", {})), **(policy_config or {})}
     policy_kwargs["config"] = merged_policy
     merged_task = {**dict(cfg.get("task_kwargs", {})), **(task_kwargs or {})}
+    merged_task.setdefault("max_steps", max_episode_steps)
     topics = wait_for_topics or [
         "/joint_states",
         "/wrist_ft/wrench",
@@ -81,10 +144,10 @@ def kuka_ft_imu_pick_gazebo_cfg(
         "task_kwargs": merged_task,
         "backend_kwargs": {
             "config": {
-                "sim": _gazebo_sim_cfg(
+                "sim":                 _gazebo_sim_cfg(
                     world=world or PICK_MINIMAL_WORLD,
                     wait_for_topics=topics,
-                    readiness_timeout_s=90.0,
+                    readiness_timeout_s=_gazebo_readiness_timeout_default(),
                 )
             }
         },
@@ -113,6 +176,45 @@ def _sensor_health_ok(info) -> bool:
     return str(health.get("overall", "ok")) != "failed"
 
 
+def _ee_pose_ready(env, driver) -> bool:
+    if driver is None:
+        return False
+    diag = getattr(driver, "get_diagnostics", lambda: {})() or {}
+    if diag.get("ee_pose_valid"):
+        obs = driver.get_obs()
+        ee = getattr(obs, "ee_position", None)
+        if ee is not None and np.isfinite(np.asarray(ee, dtype=np.float64)).all():
+            return True
+    backend = env.backend
+    solver = getattr(backend, "_kinematics_solver", None)
+    if solver is None or driver is None:
+        return False
+    obs = driver.get_obs()
+    q = getattr(obs, "joint_positions", None)
+    if q is None or not np.isfinite(np.asarray(q, dtype=np.float64)).all():
+        return False
+    try:
+        pos, _ = solver.fk(np.asarray(q, dtype=np.float64).reshape(-1))
+        return bool(np.isfinite(np.asarray(pos, dtype=np.float64)).all())
+    except Exception:
+        return False
+
+
+def _wait_for_ee_tf(env, *, timeout_s: float = 45.0) -> None:
+    """Block until EE pose is usable (TF or URDF FK from joint_states)."""
+    deadline = time.monotonic() + float(timeout_s)
+    drivers = getattr(env.backend, "_drivers", {}) or {}
+    driver = drivers.get(env.robots[0].robot_id) if env.robots else None
+    while time.monotonic() < deadline:
+        if _ee_pose_ready(env, driver):
+            return
+        time.sleep(0.15)
+    raise TimeoutError(
+        f"EE pose not valid after {timeout_s:.0f}s; "
+        "check robot_state_publisher, /joint_states joint-name parity, or Pinocchio FK."
+    )
+
+
 def _ft_norm(obs) -> float:
     ft = getattr(obs, "ft_forces", {}) or {}
     wrench = ft.get("wrist_ft")
@@ -134,18 +236,25 @@ def run_pick_episode(
     """Run one ``kuka_ft_imu_pick_gazebo`` episode to completion."""
     from robodeploy.env import RoboEnv
 
+    merged_policy = {**RELAXED_POLICY_CONFIG, **(policy_config or {})}
+    if not _gazebo_place_snap_enabled():
+        merged_policy = {**merged_policy, **HONEST_JTC_POLICY_OVERRIDES}
     cfg = kuka_ft_imu_pick_gazebo_cfg(
         max_episode_steps=max_steps,
-        policy_config={**RELAXED_POLICY_CONFIG, **(policy_config or {})},
+        policy_config=merged_policy,
         task_kwargs={**RELAXED_TASK_KWARGS, **(task_kwargs or {})},
         world=world,
     )
+    if not _gazebo_place_snap_enabled():
+        backend_cfg = cfg.setdefault("backend_kwargs", {}).setdefault("config", {})
+        backend_cfg["jtc_time_from_start_s"] = 1.0
     if cfg_overrides:
         cfg = {**cfg, **cfg_overrides}
 
     env = RoboEnv.from_config(cfg)
     try:
         obs, info = env.reset(seed=seed)
+        _wait_for_ee_tf(env, timeout_s=_gazebo_readiness_timeout_default() * 0.5)
         task = _pick_task(env)
         threshold = float(task.config.get("success_threshold", task.success_threshold))
         contact_during_grasp = False

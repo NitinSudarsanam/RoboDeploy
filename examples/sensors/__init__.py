@@ -1,3 +1,3 @@
-"""Example sensors (register on import)."""
+"""Example sensors — re-export packaged demos for repo-local development."""
 
-from . import prop_pose as prop_pose  # noqa: F401
+from robodeploy.demos import sensors as sensors  # noqa: F401

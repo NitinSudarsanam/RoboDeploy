@@ -1,48 +1,5 @@
-"""Sensor-driven reach policy — object poses from Observation.objects only."""
+"""Sensor-driven reach policy — thin re-export of packaged demo policy."""
 
-from __future__ import annotations
+from robodeploy.demos.policies.sensor_reach_pick import SensorReachPickPlacePolicy  # noqa: F401
 
-import numpy as np
-
-from robodeploy.core.registry import register_policy
-from robodeploy.core.types import Observation
-
-from examples.policies.reach_pick_place import ReachPickPlacePolicy
-
-
-@register_policy("example_sensor_reach_pick")
-class SensorReachPickPlacePolicy(ReachPickPlacePolicy):
-    """Reach pick-place using prop poses published by sensors into ``obs.objects``."""
-
-    def __init__(self, *args, carry_mode: str = "follow", **kwargs) -> None:
-        config = dict(kwargs.pop("config", None) or {})
-        config.setdefault("carry_mode", carry_mode)
-        super().__init__(*args, config=config, **kwargs)
-
-    def _update_targets_from_obs(self, obs: Observation) -> None:
-        objects = getattr(obs, "objects", None) or {}
-        if "source" not in objects or "target" not in objects:
-            return
-        src_pos, _ = objects["source"]
-        tgt_pos, _ = objects["target"]
-        self._set_waypoints(
-            np.array(src_pos, dtype=np.float32),
-            np.array(tgt_pos, dtype=np.float32),
-        )
-
-    def bind_runtime(self, backend, description=None) -> None:
-        """Bind IK only; do not read prop poses directly from the backend."""
-        desc = description or self._description
-        if desc is None:
-            return
-        self._backend = backend
-        from robodeploy.kinematics.policy_ik import attach_policy_ik
-
-        attach_policy_ik(self, backend, desc)
-
-    def attach_mujoco(self, backend, description=None) -> None:
-        self.bind_runtime(backend, description)
-
-    def get_action(self, obs: Observation):
-        self._update_targets_from_obs(obs)
-        return super().get_action(obs)
+__all__ = ["SensorReachPickPlacePolicy"]

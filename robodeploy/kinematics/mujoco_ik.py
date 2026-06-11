@@ -50,6 +50,15 @@ class MujocoIkSolver:
         for i, addr in enumerate(self._qpos_addrs):
             self._data.qpos[addr] = float(q[i])
 
+    def _saved_q(self) -> np.ndarray:
+        return np.array([self._data.qpos[addr] for addr in self._qpos_addrs], dtype=np.float64)
+
+    def _restore_q(self, saved: np.ndarray) -> None:
+        # IK iterates on the live sim data; the physical state must be put back
+        # exactly, otherwise every solve teleports the robot mid-episode.
+        self._write_q(saved)
+        self._mujoco.mj_forward(self._model, self._data)
+
     def solve(
         self,
         q_init: np.ndarray,
@@ -68,31 +77,41 @@ class MujocoIkSolver:
         q = np.asarray(q_init, dtype=np.float64).reshape(-1).copy()
         target = np.asarray(target_pos, dtype=np.float64).reshape(3)
         eye = np.eye(3, dtype=np.float64)
+        saved = self._saved_q()
 
-        for _ in range(max_iter):
-            self._write_q(q)
-            mujoco.mj_forward(self._model, self._data)
-            pos = np.asarray(self._data.xpos[self._ee_body_id], dtype=np.float64)
-            err = target - pos
-            if float(np.linalg.norm(err)) < pos_tol:
-                break
+        try:
+            for _ in range(max_iter):
+                self._write_q(q)
+                mujoco.mj_forward(self._model, self._data)
+                pos = np.asarray(self._data.xpos[self._ee_body_id], dtype=np.float64)
+                err = target - pos
+                if float(np.linalg.norm(err)) < pos_tol:
+                    break
 
-            jacp = np.zeros((3, self._model.nv), dtype=np.float64)
-            jacr = np.zeros((3, self._model.nv), dtype=np.float64)
-            mujoco.mj_jacBody(self._model, self._data, jacp, jacr, self._ee_body_id)
-            j_arm = jacp[:, self._dof_vel_ids]
-            dq = j_arm.T @ np.linalg.solve(j_arm @ j_arm.T + damping * eye, err)
-            q = np.clip(q + step_scale * dq, self._q_min, self._q_max)
+                jacp = np.zeros((3, self._model.nv), dtype=np.float64)
+                jacr = np.zeros((3, self._model.nv), dtype=np.float64)
+                mujoco.mj_jacBody(self._model, self._data, jacp, jacr, self._ee_body_id)
+                j_arm = jacp[:, self._dof_vel_ids]
+                dq = j_arm.T @ np.linalg.solve(j_arm @ j_arm.T + damping * eye, err)
+                q = np.clip(q + step_scale * dq, self._q_min, self._q_max)
+        finally:
+            self._restore_q(saved)
 
         return q.astype(np.float32)
 
     def fk_position(self, q: np.ndarray) -> np.ndarray:
         import mujoco
 
+        if self._mujoco is None:
+            self._mujoco = mujoco
         q = np.asarray(q, dtype=np.float64).reshape(-1)
-        self._write_q(q)
-        mujoco.mj_forward(self._model, self._data)
-        return np.asarray(self._data.xpos[self._ee_body_id], dtype=np.float32).copy()
+        saved = self._saved_q()
+        try:
+            self._write_q(q)
+            mujoco.mj_forward(self._model, self._data)
+            return np.asarray(self._data.xpos[self._ee_body_id], dtype=np.float32).copy()
+        finally:
+            self._restore_q(saved)
 
 
 def attach_mujoco_ik(policy, backend, description) -> Optional[MujocoIkSolver]:

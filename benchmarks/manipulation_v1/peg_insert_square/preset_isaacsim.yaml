@@ -16,6 +16,6 @@ sensor_rigs:
       prop_names: [peg, hole]
 max_episode_steps: 600
 custom_modules:
-  - examples.tasks
-  - examples.sensors
-  - examples.policies
+  - robodeploy.demos.tasks
+  - robodeploy.demos.sensors
+  - robodeploy.demos.policies

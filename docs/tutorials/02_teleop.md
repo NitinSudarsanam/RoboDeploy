@@ -53,6 +53,16 @@ Or use the observability CLI:
 robodeploy replay --input demos/kuka_teleop.jsonl --preset kuka_pick_mujoco
 ```
 
+## Headless record → BC (no GUI)
+
+For CI or servers without a display, use the stub teleop recorder (scripted policy steps, stamped like human demos):
+
+```bash
+python -m pytest tests/test_teleop_record_stub.py -q
+```
+
+The test exercises `record_stub_episode` → `DemoDataset` → BC train on MuJoCo. See `CONTRACTS.md` for the `TeleopCommand` / recording metadata contract.
+
 ## Other teleop devices
 
 Install extras for SpaceMouse or gamepad:

@@ -39,17 +39,31 @@ class ControllerSpawner:
         if not ros2:
             return
         self.wait_for_controller_manager()
+        per_ctl_timeout = max(float(self._cfg.timeout_s), 30.0)
         for ctl in self._cfg.controllers:
-            result = subprocess.run(
-                [ros2, "run", "controller_manager", "spawner", str(ctl), "--activate"],
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            if result.returncode != 0:
+            deadline = time.monotonic() + per_ctl_timeout
+            last_out = ""
+            while time.monotonic() < deadline:
+                for args in (
+                    [str(ctl), "--activate"],
+                    [str(ctl)],
+                ):
+                    result = subprocess.run(
+                        [ros2, "run", "controller_manager", "spawner", *args],
+                        check=False,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                    )
+                    last_out = result.stdout or ""
+                    if result.returncode == 0:
+                        break
+                else:
+                    time.sleep(1.5)
+                    continue
+                break
+            else:
                 raise RuntimeError(
-                    f"controller_manager spawner failed for '{ctl}' with code {result.returncode}:\n"
-                    f"{result.stdout}"
+                    f"controller_manager spawner failed for '{ctl}' with code 1:\n{last_out}"
                 )
 

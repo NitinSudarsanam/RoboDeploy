@@ -132,4 +132,15 @@ def train_bc(
     trainer.fit()
     out = Path((config or TrainerConfig()).log_dir) / "bc_final.pt"
     trainer.save_checkpoint(str(out))
+    torch, _, _ = _require_torch()
+    payload = torch.load(out, map_location="cpu", weights_only=False)
+    if isinstance(payload, dict):
+        payload.update(
+            {
+                "obs_keys": keys,
+                "action_dim": dim,
+                "proprio_dim": dataset.proprio_dim,
+            }
+        )
+        torch.save(payload, out)
     return module

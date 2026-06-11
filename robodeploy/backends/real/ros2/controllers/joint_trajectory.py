@@ -65,8 +65,9 @@ class JointTrajectoryControllerAdapter(JointPositionControllerAdapter):
             from builtin_interfaces.msg import Duration
 
             d = Duration()
-            d.sec = 0
-            d.nanosec = int(200_000_000)  # 0.2s
+            horizon_s = float((self._backend_config or {}).get("jtc_time_from_start_s", 0.2))
+            d.sec = int(horizon_s)
+            d.nanosec = int((horizon_s - int(horizon_s)) * 1e9)
             pt.time_from_start = d
         except Exception:
             pass

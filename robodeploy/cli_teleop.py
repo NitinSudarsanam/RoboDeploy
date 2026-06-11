@@ -78,6 +78,7 @@ def cmd_teleop(
             fmt=fmt,  # type: ignore[arg-type]
             start_recording=start_recording,
             max_steps=max_steps if max_steps > 0 else None,
+            preset=preset,
         )
         payload = {"saved": [str(p) for p in saved], "preset": preset, "device": device}
         if as_json:

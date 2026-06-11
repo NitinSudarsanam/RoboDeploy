@@ -12,8 +12,10 @@ Backend-agnostic robot learning runtime. Write tasks, policies, and sensor rigs 
 pip install -e ".[sim,dev]"
 robodeploy doctor
 robodeploy run-episode --dummy --steps 5
-python -m examples.cli run-episode --preset kuka_pick_mujoco --steps 50
+python -m examples.cli run-episode --preset kuka_ft_imu_pick_mujoco --seed 0 --steps 1500 --json
 ```
+
+**Live demo rehearsal:** see [Demo runbook](DEMO_RUNBOOK.md) for per-backend pick-place commands (MuJoCo, RViz, Gazebo), success signals, and WSL2 caveats.
 
 Preset → env → step in Python:
 
@@ -67,6 +69,7 @@ env.close()
 |-----|-------|
 | [CLI reference](CLI_REFERENCE.md) | All `robodeploy` commands |
 | [API reference](API_REFERENCE.md) | Module index |
+| [Demo runbook](DEMO_RUNBOOK.md) | Pick-place commands per backend |
 | [Backend setup](BACKEND_SETUP.md) | MuJoCo, Gazebo, Isaac, ROS2 |
 | [SO-101 real robot](SO101_REAL.md) | Hardware bring-up |
 | [Migration 0.2](MIGRATION_0.2.md) | Upgrade from 0.1.x |

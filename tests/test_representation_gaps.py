@@ -17,7 +17,12 @@ from robodeploy.backends.camera_presets import get_camera_preset
 from robodeploy.backends.sim.gazebo.scene_builder import GazeboSceneBuilder
 from robodeploy.backends.sim.mujoco.scene_builder import MjcfSceneBuilder
 from robodeploy.core.procedural_terrain import ProceduralTerrainGenerator
-from robodeploy.core.scene_ir import SceneIR, UnifiedTerrain, world_to_ir
+from robodeploy.core.scene_ir import (
+    SceneIR,
+    UnifiedTerrain,
+    assert_cross_backend_pose_equivalence,
+    world_to_ir,
+)
 from robodeploy.core.types import GeomSpec, PropConfig, TerrainSpec, WorldSpec
 from robodeploy.scene_builder import SceneBuilder
 from robodeploy.tasks.choreography import TaskChoreography
@@ -26,14 +31,19 @@ from robodeploy.tasks.success_predicates import liquid_in_target, peg_in_hole
 
 class RepresentationGapTests(unittest.TestCase):
     def test_reach_pick_place_policy_under_50_lines(self):
-        path = REPO_ROOT / "examples/policies/reach_pick_place.py"
+        path = REPO_ROOT / "robodeploy/demos/policies/reach_pick_place.py"
         lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
         self.assertLessEqual(len(lines), 50)
 
     def test_pick_place_task_under_25_lines(self):
-        path = REPO_ROOT / "examples/tasks/pick_place.py"
+        path = REPO_ROOT / "robodeploy/demos/tasks/pick_place.py"
         lines = path.read_text(encoding="utf-8").splitlines()
         self.assertLessEqual(len(lines), 25)
+
+    def test_examples_pick_place_shims_are_thin(self):
+        for rel in ("examples/policies/reach_pick_place.py", "examples/tasks/pick_place.py"):
+            lines = (REPO_ROOT / rel).read_text(encoding="utf-8").splitlines()
+            self.assertLessEqual(len(lines), 10, msg=rel)
 
     def test_procedural_generators_ridge_and_stairs(self):
         ridge = ProceduralTerrainGenerator.ridge(resolution=32, seed=1)
@@ -138,6 +148,16 @@ class RepresentationGapTests(unittest.TestCase):
     def test_preset_include_fragments_exist(self):
         for name in ("base_sim.yaml", "base_real.yaml", "manipulate.yaml"):
             self.assertTrue((REPO_ROOT / "examples/presets" / name).is_file())
+
+    def test_pick_place_scene_ir_mujoco_gazebo_pose_tolerance(self):
+        from examples.tasks.pick_place import PickPlaceTask
+
+        ir = PickPlaceTask().scene_spec().to_ir()
+        mjcf = MjcfSceneBuilder(
+            '<mujoco><worldbody><body name="robot0"><joint name="j1"/></body></worldbody></mujoco>'
+        ).from_ir(ir).emit()
+        sdf = GazeboSceneBuilder().from_ir(ir)
+        assert_cross_backend_pose_equivalence(ir, mjcf=mjcf, sdf=sdf, atol=1e-3)
 
 
 if __name__ == "__main__":

@@ -22,8 +22,8 @@ from examples.kuka_ft_imu_pick_gazebo.pick_episode import (  # noqa: E402
 def main() -> int:
     try:
         result = run_pick_episode(
-            seed=None,
-            max_steps=1500,
+            seed=0,
+            max_steps=4000,
             on_step=_print_progress,
         )
     except Exception as exc:

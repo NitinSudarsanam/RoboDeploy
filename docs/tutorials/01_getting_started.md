@@ -30,8 +30,16 @@ python -m examples.cli list-presets
 # 4. Resolve a preset to see full config
 robodeploy config resolve --preset kuka_pick_mujoco --json
 
-# 5. Run a MuJoCo pick-place episode (requires [sim] extra)
-python -m examples.cli run-episode --preset kuka_pick_mujoco --steps 50
+# 5. Run the headline MuJoCo pick-place demo (requires [sim] extra)
+python -m examples.cli run-episode --preset kuka_ft_imu_pick_mujoco --seed 0 --steps 1500 --json
+```
+
+For RViz/Gazebo pick demos, WSL2 setup, and expected success output, see [Demo runbook](../DEMO_RUNBOOK.md).
+
+Multi-robot MuJoCo (two Franka arms):
+
+```bash
+python -m examples.cli run-episode --preset two_franka_pick_mujoco --steps 80
 ```
 
 ## Core concepts

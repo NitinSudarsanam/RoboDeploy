@@ -55,6 +55,7 @@ def _make_env(
     dummy: bool,
     presets_file: str | None,
     custom_modules: list[str],
+    viewer: bool = False,
 ):
     from robodeploy.env import RoboEnv
 
@@ -81,6 +82,12 @@ def _make_env(
     merged_modules = list(custom_modules) + [str(m) for m in (cfg.get("custom_modules") or [])]
     if merged_modules:
         cfg = {**cfg, "custom_modules": merged_modules}
+    if viewer:
+        backend_kwargs = dict(cfg.get("backend_kwargs") or {})
+        backend_cfg = dict(backend_kwargs.get("config") or {})
+        backend_cfg["enable_viewer"] = True
+        backend_kwargs["config"] = backend_cfg
+        cfg = {**cfg, "backend_kwargs": backend_kwargs}
     return RoboEnv.from_config(cfg)
 
 
@@ -147,6 +154,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_run.add_argument("--steps", type=int, default=50, help="Number of env steps to run.")
     p_run.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Master RNG seed for env reset (default: nondeterministic). Use 0 for demo presets.",
+    )
+    p_run.add_argument(
         "--dummy",
         action="store_true",
         help="Use built-in dummy backend/robot/task instead of a preset (no simulator required).",
@@ -156,6 +169,11 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=("none", "zero", "hold", "sinusoid"),
         default="none",
         help="Inject explicit actions instead of using policy actions.",
+    )
+    p_run.add_argument(
+        "--viewer",
+        action="store_true",
+        help="Open the simulator viewer (overrides the preset's enable_viewer).",
     )
     p_run.add_argument("--json", action="store_true", help="Print a structured JSON result.")
     p_run.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
@@ -385,6 +403,8 @@ def _cmd_run_episode(
     action_mode: str,
     pretty: bool,
     as_json: bool,
+    viewer: bool = False,
+    seed: int | None = None,
 ) -> int:
     from robodeploy.policies.remote.http_client import to_jsonable
 
@@ -393,11 +413,17 @@ def _cmd_run_episode(
         dummy=dummy,
         presets_file=presets_file or None,
         custom_modules=custom_modules,
+        viewer=viewer,
     )
 
     try:
         action_fn = action_fn_for_mode(action_mode, env)
-        _, info = env.run_episode(int(steps), record=False, action_fn=action_fn)
+        _, info = env.run_episode(
+            int(steps),
+            record=False,
+            action_fn=action_fn,
+            seed=seed,
+        )
         info_payload = to_jsonable(episode_info_summary(info))
         if as_json:
             payload = {
@@ -405,6 +431,7 @@ def _cmd_run_episode(
                 "dummy": bool(dummy),
                 "steps": int(steps),
                 "action": str(action_mode),
+                "seed": seed,
                 "info": info_payload,
             }
             print_json(payload, pretty=pretty)
@@ -453,6 +480,8 @@ def main(argv: list[str] | None = None) -> int:
             action_mode=str(args.action),
             pretty=bool(args.pretty),
             as_json=bool(args.json),
+            viewer=bool(args.viewer),
+            seed=args.seed,
         )
     if cmd == "teleop":
         if bool(args.pretty) and not bool(args.json):

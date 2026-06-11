@@ -243,12 +243,40 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
         self.send_action(action)
         self._wait_for_new_joint_state(last_stamp_s=last, timeout_s=self._joint_state_timeout_s)
 
+    def _get_ee_pose_from_fk(self) -> tuple[np.ndarray, np.ndarray] | None:
+        solver = (self._backend_config or {}).get("_kinematics_solver")
+        if solver is None:
+            return None
+        with self._lock:
+            q = self._q.copy()
+        if q.size == 0 or not np.isfinite(q).all():
+            return None
+        try:
+            pos, quat = solver.fk(np.asarray(q, dtype=np.float64).reshape(-1))
+            return (
+                np.asarray(pos, dtype=np.float64).reshape(3),
+                np.asarray(quat, dtype=np.float64).reshape(4),
+            )
+        except Exception:
+            return None
+
     def _get_ee_pose_from_tf(self) -> tuple[np.ndarray, np.ndarray]:
+        if bool(self._backend_config.get("prefer_fk_ee_pose", False)):
+            fk = self._get_ee_pose_from_fk()
+            if fk is not None:
+                self._last_tf_error = None
+                return fk
         try:
             # tf2_ros Buffer API expects rclpy.time.Time(); we keep it local to avoid hard deps.
             import rclpy.time
+            from rclpy.duration import Duration
 
-            tf_stamped = self._tf_buffer.lookup_transform(self._base_frame, self._ee_frame, rclpy.time.Time())
+            tf_stamped = self._tf_buffer.lookup_transform(
+                self._base_frame,
+                self._ee_frame,
+                rclpy.time.Time(),
+                timeout=Duration(seconds=0.25),
+            )
             tr = tf_stamped.transform.translation
             rot = tf_stamped.transform.rotation
             pos = np.array([tr.x, tr.y, tr.z], dtype=np.float64)
@@ -257,6 +285,10 @@ class JointPositionControllerAdapter(Ros2NodeAdapter):
             return pos, quat
         except Exception as exc:
             self._last_tf_error = f"{type(exc).__name__}: {exc}"
+            fk = self._get_ee_pose_from_fk()
+            if fk is not None:
+                self._last_tf_error = None
+                return fk
             if not self._warned_tf_failure:
                 warnings.warn(
                     f"TF lookup failed for {self._base_frame}->{self._ee_frame}; ee pose is invalid: {self._last_tf_error}",

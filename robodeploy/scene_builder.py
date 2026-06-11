@@ -14,9 +14,10 @@ from robodeploy.core.scene_ir import (
     UnifiedTerrain,
     UnifiedVisual,
     ir_to_scene_spec,
+    prop_to_ir,
 )
 from robodeploy.core.scene_validator import SceneValidationError, SceneValidator
-from robodeploy.core.types import LightSpec, SceneSpec
+from robodeploy.core.types import LightSpec, PropConfig, SceneSpec
 
 
 class SceneBuilder:
@@ -186,6 +187,11 @@ class SceneBuilder:
             fixed=True,
             rgba=(0.0, 0.8, 0.0, 0.7),
         )
+
+    def add_prop(self, prop: UnifiedPropSpec | PropConfig) -> SceneBuilder:
+        """Add a fully-specified prop (escape hatch for custom Scene IR)."""
+        self._props.append(prop_to_ir(prop) if isinstance(prop, PropConfig) else prop)
+        return self
 
     def set_lighting(self, preset: str | UnifiedLighting) -> SceneBuilder:
         if isinstance(preset, UnifiedLighting):

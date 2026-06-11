@@ -595,3 +595,35 @@ class ROS2RvizBackend(ROS2RealBackend):
     is_real = False
     sensor_backend_name = "ros2_rviz"
 
+    def initialize_multi(
+        self,
+        robots: list["Robot"],
+        scene: SceneSpec,
+        shared_sensors: list["ISensor"],
+    ) -> None:
+        super().initialize_multi(robots, scene, shared_sensors)
+        if getattr(self, "_perception_source", None) is not None:
+            return
+        world = scene.to_world()
+        self._scene_prop_poses = {
+            str(prop.name): (
+                tuple(float(v) for v in prop.position),
+                tuple(float(v) for v in prop.orientation),
+            )
+            for prop in world.props
+        }
+        if not self._scene_prop_poses:
+            return
+        from .perception import ScenePropPerceptionSource
+
+        self._perception_source = ScenePropPerceptionSource(self._scene_prop_poses)
+
+    def set_prop_pose(self, name: str, position, orientation) -> None:  # noqa: ANN001
+        poses = getattr(self, "_scene_prop_poses", None)
+        if not isinstance(poses, dict) or name not in poses:
+            raise KeyError(f"Unknown RViz scene prop '{name}'.")
+        poses[name] = (
+            tuple(float(v) for v in position),
+            tuple(float(v) for v in orientation),
+        )
+

@@ -70,6 +70,79 @@ class TrainEvalBenchmarkE2ETests(unittest.TestCase):
             self.assertIn("success_rate", payload["aggregate"])
             self.assertEqual(len(payload["episodes"]), 3)
 
+    def test_train_bc_then_eval_mujoco_reach_target_checkpoint(self):
+        """Non-dummy checkpoint eval: BC .pt on manipulation_v1/reach_target + MuJoCo."""
+        try:
+            import mujoco  # noqa: F401
+        except ImportError:
+            self.skipTest("mujoco not installed")
+
+        from robodeploy.cli import main
+        from robodeploy.cli_helpers import action_fn_for_mode
+        from robodeploy.dataset_export import export_recorded_episode
+        from robodeploy.env import RoboEnv
+        from robodeploy.presets_loader import resolve_preset
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            dataset = tmp_path / "demos.jsonl"
+            log_dir = tmp_path / "runs"
+            ckpt = log_dir / "bc_final.pt"
+            report = tmp_path / "mujoco_eval.json"
+
+            cfg = resolve_preset("kuka_pick_mujoco").to_dict()
+            env = RoboEnv.from_config(cfg)
+            try:
+                export_recorded_episode(
+                    env,
+                    steps=40,
+                    path=dataset,
+                    action_fn=action_fn_for_mode("hold", env),
+                )
+            finally:
+                env.close()
+
+            from robodeploy.training.bc import train_bc
+            from robodeploy.training.dataset import DemoDataset
+            from robodeploy.training.trainer import TrainerConfig
+
+            demo = DemoDataset.from_jsonl(dataset)
+            self.assertGreater(len(demo), 0)
+            train_bc(
+                dataset=demo,
+                config=TrainerConfig(
+                    epochs=2,
+                    batch_size=4,
+                    log_dir=str(log_dir),
+                    eval_interval=10_000,
+                ),
+                eval_env=None,
+            )
+            self.assertTrue(ckpt.is_file())
+
+            code = main(
+                [
+                    "eval",
+                    "--benchmark",
+                    "manipulation_v1/reach_target",
+                    "--policy",
+                    str(ckpt),
+                    "--backend",
+                    "mujoco",
+                    "--episodes",
+                    "2",
+                    "--output",
+                    str(report),
+                    "--benchmarks-root",
+                    str(REPO_ROOT / "benchmarks"),
+                ]
+            )
+            self.assertEqual(code, 0)
+            payload = json.loads(report.read_text(encoding="utf-8"))
+            self.assertEqual(payload["benchmark_name"], "manipulation_v1/reach_target")
+            self.assertEqual(payload["aggregate"]["n_episodes"], 2)
+            self.assertIn("success_rate", payload["aggregate"])
+
     @unittest.skipUnless(
         __import__("platform").system() != "Windows",
         "MuJoCo PPO train/eval smoke skipped on Windows (Linux CI / sensor-e2e)",

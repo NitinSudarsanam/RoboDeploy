@@ -41,7 +41,7 @@ jobs:
       - name: MuJoCo sensor e2e (Linux)
         env:
           MUJOCO_GL: egl
-        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_mujoco_integration.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py tests/test_gazebo_urdf_mount.py tests/test_gazebo_sensor_rig_smoke.py tests/test_mujoco_grasp.py tests/test_mujoco_grasp_welds.py tests/test_example_envs.py tests/test_benchmarks.py::BenchmarkPresetBuildTests tests/training/test_gym_register.py::GymRegisterTests::test_kuka_pick_mujoco_env_registered -q
+        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_mujoco_integration.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py tests/test_gazebo_urdf_mount.py tests/test_gazebo_sensor_rig_smoke.py tests/test_mujoco_grasp.py tests/test_mujoco_grasp_welds.py tests/test_example_envs.py tests/test_from_config_simulator.py tests/test_benchmarks.py::BenchmarkPresetBuildTests tests/training/test_gym_register.py::GymRegisterTests::test_kuka_pick_mujoco_env_registered -q
       - name: Examples CLI non-dummy smoke (kuka_pick_mujoco)
         env:
           MUJOCO_GL: egl
@@ -54,12 +54,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install with training extras
+      - name: Install with training + sim extras
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,training,rl]"
-      # Proves: SB3 100k, PPO reach_target ≥80%, SubprocVecEnv ≥3× throughput (fork).
+          pip install -e ".[dev,training,rl,sim]"
+      # Proves: SB3 100k, PPO reach_target ≥80%, SubprocVecEnv ≥3× throughput (fork),
+      # BC checkpoint eval on MuJoCo reach_target (non-dummy backend).
       - name: Training integration tests (incl. slow)
+        env:
+          MUJOCO_GL: egl
         run: python -m pytest tests/training/ -q -m "not hardware"
 
   eval-mujoco-smoke:

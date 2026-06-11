@@ -256,7 +256,7 @@ class CliScaffoldLintTests(unittest.TestCase):
         from robodeploy.cli import main
 
         repo = Path(__file__).resolve().parents[1]
-        task_path = repo / "examples" / "tasks" / "pick_place.py"
+        task_path = repo / "robodeploy" / "demos" / "tasks" / "pick_place.py"
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             code = main(["lint", "task", str(task_path)])

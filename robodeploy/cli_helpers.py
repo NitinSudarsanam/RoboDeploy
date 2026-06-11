@@ -29,6 +29,7 @@ def episode_info_summary(info) -> dict[str, Any]:  # noqa: ANN001
         "reward": float(getattr(info, "reward", 0.0)),
         "success": bool(getattr(info, "success", False)),
         "failure": bool(getattr(info, "failure", False)),
+        "truncated": bool(extra.get("truncated", False)),
         "extra": {k: extra.get(k) for k in keep if k in extra},
     }
 

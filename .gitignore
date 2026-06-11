@@ -213,3 +213,4 @@ __marimo__/
 # Local training artifacts (do not commit)
 bc_final.pt
 demo_test.json
+pick_out*.json

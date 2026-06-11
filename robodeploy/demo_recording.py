@@ -170,6 +170,7 @@ class InteractiveDemoSession:
         fmt: Literal["jsonl", "hdf5", "json", "lerobot"] = "jsonl",
         start_recording: bool = False,
         max_steps: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:  # noqa: ANN001
         self._env = env
         self._policy = policy
@@ -178,6 +179,8 @@ class InteractiveDemoSession:
         self._recording = bool(start_recording)
         self._episode_index = 0
         self._recorder = DemoRecorder()
+        if metadata:
+            self._recorder.metadata.update(metadata)
         self._max_steps = max_steps
         self._output_dir.mkdir(parents=True, exist_ok=True)
 

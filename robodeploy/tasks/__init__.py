@@ -1,4 +1,4 @@
-"""Task framework (concrete tasks belong in your project or ``examples/tasks``)."""
+"""Task framework (reference tasks ship in ``robodeploy.demos.tasks``)."""
 
 from robodeploy.tasks.base import TaskBase
 from robodeploy.tasks.reward_builder import RewardBuilder

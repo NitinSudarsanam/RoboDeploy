@@ -1,0 +1,22 @@
+# Normalize line endings so SHA256 asset hashes (robodeploy/_assets/manifest.json)
+# are identical on every platform regardless of core.autocrlf.
+*.xml   text eol=lf
+*.urdf  text eol=lf
+*.sdf   text eol=lf
+*.world text eol=lf
+*.mjcf  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.json  text eol=lf
+*.rviz  text eol=lf
+*.py    text eol=lf
+*.md    text eol=lf
+*.sh    text eol=lf
+
+# Binary assets — never convert.
+*.stl   binary
+*.dae   binary
+*.obj   binary
+*.png   binary
+*.jpg   binary
+*.hdf5  binary
