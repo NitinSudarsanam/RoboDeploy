@@ -1,105 +1,56 @@
 {
-  "updated": "2026-06-05",
-  "purpose": "Current repo state and major architectural decisions. API contracts: CONTRACTS.md. Structure: ARCHITECTURE.md. Runnable demos: examples/README.md.",
+  "updated": "2026-06-10",
+  "version": "0.2.0",
+  "purpose": "Condensed repo snapshot: architecture, contracts, and integration status. Details in CONTRACTS.md, ARCHITECTURE.md, docs/PLATFORM_STATUS.md, plans/INTEGRATION_STATUS.md.",
   "canonical_docs": {
     "contracts": "CONTRACTS.md",
     "architecture": "ARCHITECTURE.md",
-    "contributing": "CONTRIBUTING.md",
-    "backend_setup": "docs/BACKEND_SETUP.md",
+    "project_guide": "docs/PROJECT_GUIDE.md",
+    "platform_status": "docs/PLATFORM_STATUS.md",
+    "integration_status": "plans/INTEGRATION_STATUS.md",
     "examples": "examples/README.md",
-    "hardware_tests": "tests/HARDWARE_TESTS.md"
+    "backend_setup": "docs/BACKEND_SETUP.md"
   },
-  "project_summary": "RoboDeploy is a modular robot-learning runtime: swap backends (MuJoCo, ROS2/RViz, Gazebo, Isaac Sim, real ROS2) while keeping Robot, task, policy, and sensor contracts stable. Demo YAML presets and example tasks/policies live under examples/, not in the installable package.",
+  "project_summary": "Backend agnostic manipulation runtime: one RoboEnv loop across MuJoCo, Gazebo, Isaac Sim, ROS2, and hardware. Tasks, sensor rigs, and policies bind via registry and YAML presets so simulator switches and sim2real paths share observation and action contracts.",
   "current_state": {
     "implemented": [
-      "Robot-centric model: RoboEnv + list[Robot] + RobotTask (per-robot tasks, policies, selectors, sensor rigs).",
-      "Construction: RoboEnv.from_config (canonical) > examples.env_from_preset > RoboEnv.make (minimal smoke).",
-      "Backends: mujoco, isaacsim, ros2_rviz, ros2_gazebo, ros2 real; backend_for_simulator() factory.",
-      "SensorRig/SensorSpec: declare logical sensors once; backend-aware registry pairs resolve sim/real/ROS2 adapters.",
-      "Observation contract: objects, images/depths, ft_forces/torques, IMU, camera intrinsics/extrinsics, sensor_status, language_instruction.",
-      "ObsPipeline: sync modes, per-sensor buffers, transforms (e.g. ColorBlobCentroid, GaussianNoise at FULL randomization).",
-      "Policy runtime: bind_runtime on reset, get_action_batch, notify_rejected, action_hz; VLAPolicy, DiffusionPolicy, PolicyChain, RobomimicPolicy.",
-      "Remote policies: ZMQ/gRPC PolicyServer + HttpRemotePolicyClient for VLA/diffusion injection.",
-      "Demo tooling: demo_session/record/replay, JSONL/HDF5 export, SequentialVecEnv, robodeploy CLI (dummy smoke), examples.cli (presets).",
-      "MuJoCo Universe: examples/catalog + mujoco_universe/run.py; showcase_scene task; sensor showcase artifacts.",
-      "MuJoCo grasp: carry_mode kinematic|none|follow|contact|weld; set_grasp_prop follow assist.",
-      "Gazebo: SceneSpec→SDF world synthesis, URDF sensor injection, ros_gz_bridge from declared sensors.",
-      "ROS2: Ros2Runtime singleton, namespaced topics, tf_extrinsics for camera frames.",
-      "CI: GitHub Actions unit tests + sensor-e2e-linux (MuJoCo/Gazebo smoke); live ROS2/Gazebo jobs when configured."
+      "RoboEnv + Robot/RobotTask; from_config, presets, multi robot MuJoCo",
+      "Backends: mujoco, gazebo, ros2_rviz, isaacsim (mock CI), real_world, dummy",
+      "SensorRig + ObsPipeline (sync, noise, color blob → obs.objects); FT, IMU, contact, RGBD",
+      "Policies: reach DSL, joint track, BC/PPO checkpoints, remote ZMQ/gRPC serve",
+      "Training: Gymnasium adapter, SubprocVecEnv, robodeploy train bc|ppo|eval",
+      "Benchmarks: manipulation_v1 harness, eval CLI, leaderboard JSON, train→eval E2E",
+      "Safety: SafetyMonitor on step and reset; workspace, slew, force, e stop guards",
+      "Sim2real: calibration CLIs, DR sweep, transfer eval (dummy tested paths)",
+      "CI: ~620 tests (not hardware); live Gazebo pick E2E; package build workflow"
     ],
-    "known_gaps": [
-      "RoboEnv.make() does not support sensor_rigs or example custom_modules.",
-      "Tactile, lidar, proximity, and real tag/ArUco ISensor not implemented.",
-      "Gazebo IMU URDF injection not added (ROS2 subscribe path only).",
-      "Isaac Sim sensors verified via mocks in CI, not live Kit sessions.",
-      "True physics weld grasp unreliable; contact mode gates then uses follow assist.",
-      "No parallel VecEnv or batched physics stepping.",
-      "Heavyweight pretrained VLA/diffusion backends require user-injected predictors."
+    "gaps": [
+      "PyPI v0.2.0 tag not published",
+      "Teleop / IL data collection stub only",
+      "Gazebo pick CI ≥50% (target 70%); Isaac GPU parity unchecked live",
+      "Benchmark tiers 2 to 8 placeholders; real hardware eval manual",
+      "Tactile/lidar sensors not implemented"
     ],
-    "verification": "pytest: 192 passed, 4 skipped (excluding live hardware jobs locally)"
+    "verification": "pytest -m \"not hardware\": ~620 passed, ~19 skipped"
   },
   "key_decisions": [
-    {
-      "topic": "Layers",
-      "decision": "One axis per layer (IBackend, ITask, IPolicy, ISensor); shared types only in core/types.py."
-    },
-    {
-      "topic": "Robot model",
-      "decision": "Robot + RobotTask replace env-wide task lists; per-robot arbitration and selectors."
-    },
-    {
-      "topic": "Backend init",
-      "decision": "IBackend.initialize(description, scene: SceneSpec, sensors) — not ITask."
-    },
-    {
-      "topic": "ROS2 split",
-      "decision": "ROS2RealBackend vs ROS2GazeboBackend; Ros2Runtime owns single rclpy init + executor."
-    },
-    {
-      "topic": "Sensors",
-      "decision": "Backend-aware sensor pair resolution; policies consume Observation, not backend.get_prop_pose()."
-    },
-    {
-      "topic": "Presets",
-      "decision": "Demo YAML under examples/config/presets.yaml; catalog combos delegate to presets as canonical config."
-    },
-    {
-      "topic": "Policy binding",
-      "decision": "RoboEnv calls policy.bind_runtime() after backend init on first reset (MuJoCo IK, etc.)."
-    },
-    {
-      "topic": "Real-time",
-      "decision": "RoboBridge + ActionTrajectory seqlock for decoupled control vs inference on real hardware."
-    },
-    {
-      "topic": "Examples boundary",
-      "decision": "Example tasks, policies, presets, and preset CLI live in examples/; robodeploy package stays library-only."
-    },
-    {
-      "topic": "Scene",
-      "decision": "SceneSpec.props is authoritative for world layout; ObjectSpec on SceneSpec is deprecated unused."
-    }
+    "Layers: IBackend, ITask, IPolicy, ISensor; shared types in core/types.py",
+    "Robot + RobotTask per arm; not env wide task lists",
+    "Sensors via registry pairs; policies read Observation, not get_prop_pose()",
+    "Presets in examples/config/presets.yaml; examples/ not shipped on PyPI",
+    "Safety and bind_runtime on reset are env responsibilities",
+    "RoboBridge + seqlock for real hardware control vs inference split"
   ],
   "milestones": [
-    {
-      "phase": "Foundation (goals 1–4)",
-      "summary": "Backend-aware sensors, Gazebo/Isaac scene parity, object-aware tasks, advanced policy runtime (VLA, diffusion, remote)."
-    },
-    {
-      "phase": "Training loop (goals 5–12)",
-      "summary": "Obs pipeline buffers, demo record/replay, VecEnv, domain randomization, dataset export, CI workflows."
-    },
-    {
-      "phase": "CLI & packaging (goals 13–24)",
-      "summary": "robodeploy CLI, dummy testing stubs, CONTRACTS.md, pyproject.toml extras, doc drift cleanup."
-    },
-    {
-      "phase": "Sensor integration (goals 25–28)",
-      "summary": "SensorRig, perception-first examples, Gazebo URDF sensors, vision pick, TF extrinsics, live CI demos."
-    },
-    {
-      "phase": "Showcase & cleanup (goals 29–31)",
-      "summary": "IMU/noise/showcase, MuJoCo Universe catalog, examples-only presets CLI, contract/spaghetti audit."
-    }
+    {"phase": "v0.1 foundation", "summary": "Registry, backends, sensor rigs, obs pipeline, examples presets"},
+    {"phase": "v0.2 Wave 2", "summary": "Training, benchmarks, safety, Gazebo E2E, docs, package CI (~65% of 12 goals)"},
+    {"phase": "Next", "summary": "PyPI release, teleop datasets, Gazebo/Isaac parity, real hardware eval automation"}
+  ],
+  "recent": [
+    "8bcef15 docs: fix README mermaid for GitHub",
+    "5c2eaa8 docs: remove dashes from README prose",
+    "7809376 docs: README sim2real and architecture overview",
+    "a06e8b3 docs: comprehensive documentation pass v0.2",
+    "2e8e137 fix: JointTrackPolicy config= target_qpos wiring"
   ]
 }
