@@ -135,6 +135,112 @@ def robomimic_default_spec(cfg: dict, predict_fn) -> dict:
     }
 
 
+class ActionSmoother:
+    """Exponential smoothing over raw action vectors (robomimic-style)."""
+
+    def __init__(self, smooth: float) -> None:
+        self._smooth = float(np.clip(float(smooth), 0.0, 1.0))
+        self._prev: np.ndarray | None = None
+
+    def reset(self) -> None:
+        self._prev = None
+
+    def __call__(self, raw: np.ndarray) -> np.ndarray:
+        out = raw if self._prev is None or self._smooth <= 0 else (1.0 - self._smooth) * self._prev + self._smooth * raw
+        self._prev = out.copy()
+        return out
+
+
+def arm_gripper_action(out: np.ndarray, arm_dof: int) -> Action:
+    gripper = float(np.clip(out[arm_dof], 0.0, 1.0)) if out.size > arm_dof else None
+    return Action(joint_positions=out[:arm_dof].astype(np.float32), gripper=gripper)
+
+
+class PlanQueue:
+    """Action queue with replan-interval bookkeeping for sequence policies."""
+
+    def __init__(self, replan_interval) -> None:  # noqa: ANN001
+        self._replan = max(1, int(replan_interval))
+        self._queue: list[Action] = []
+        self._since_plan = 0
+
+    def reset(self) -> None:
+        self._queue, self._since_plan = [], 0
+
+    def invalidate(self) -> None:
+        self._queue, self._since_plan = [], self._replan
+
+    def next_action(self, build) -> Action:  # noqa: ANN001
+        if not self._queue or self._since_plan >= self._replan:
+            self._queue, self._since_plan = list(build()), 0
+        self._since_plan += 1
+        return self._queue.pop(0)
+
+
+def plan_packet(obs: Observation, instruction: str | None, horizon: int) -> dict[str, Any]:
+    return {
+        "instruction": str(obs.language_instruction or instruction or "").strip(),
+        "rgb": obs.rgb,
+        "images": dict(obs.images),
+        "obs": obs,
+        "plan_horizon": horizon,
+    }
+
+
+def build_plan(obs: Observation, *, plan_fn, instruction, horizon: int, max_delta: float, action_space: ActionSpace, adapter=None) -> list[Action]:  # noqa: ANN001
+    packet = plan_packet(obs, instruction, horizon)
+    if callable(plan_fn):
+        return coerce_plan(plan_fn(packet), obs, action_space, adapter)
+    direction = keyword_delta(packet["instruction"].lower(), max_delta=max_delta)
+    if not np.any(direction):
+        direction[0] = max_delta
+    return [action_from_delta(obs, direction * (1.0 - i / max(1, horizon)), action_space) for i in range(horizon)]
+
+
+def batch_first_actions(batch_plan_fn, obs_batch, *, instruction, horizon: int, action_space: ActionSpace, adapter=None) -> list[Action]:  # noqa: ANN001
+    outs = list(batch_plan_fn([plan_packet(o, instruction, horizon) for o in obs_batch]))
+    return [coerce_plan(v, o, action_space, adapter)[0] for v, o in zip(outs, obs_batch)]
+
+
+def select_camera_image(obs: Observation, camera: str):  # noqa: ANN201
+    if camera and camera in obs.images:
+        return obs.images[camera]
+    if obs.rgb is not None:
+        return obs.rgb
+    return next(iter(obs.images.values())) if obs.images else None
+
+
+def select_camera_depth(obs: Observation, camera: str):  # noqa: ANN201
+    if camera and camera in obs.depths:
+        return obs.depths[camera]
+    if obs.depth is not None:
+        return obs.depth
+    return next(iter(obs.depths.values())) if obs.depths else None
+
+
+def vla_packet(obs: Observation, instruction: str | None, camera: str) -> dict[str, Any]:
+    return {
+        "instruction": str(obs.language_instruction or instruction or "").strip(),
+        "rgb": select_camera_image(obs, camera),
+        "depth": select_camera_depth(obs, camera),
+        "images": dict(obs.images),
+        "depths": dict(obs.depths),
+        "obs": obs,
+    }
+
+
+def vla_heuristic_action(obs: Observation, packet: dict[str, Any], max_delta: float, action_space: ActionSpace) -> Action:
+    text = packet["instruction"].lower()
+    delta = keyword_delta(text, max_delta=max_delta)
+    img = image_centroid_delta(packet.get("rgb"), max_delta)
+    if delta.shape[0] > 1:
+        delta[1] += img[0]
+    if delta.shape[0] > 2:
+        delta[2] += img[1]
+    gripper = 1.0 if "close" in text or "grasp" in text else (0.0 if "open" in text or "release" in text else None)
+    return action_from_delta(obs, delta, action_space, gripper=gripper)
+
+
 def image_centroid_delta(rgb, max_delta: float) -> np.ndarray:  # noqa: ANN001
     if rgb is None:
         return np.zeros(2, dtype=np.float32)

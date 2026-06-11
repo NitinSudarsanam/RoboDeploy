@@ -40,6 +40,14 @@ class LearnedPolicyBaseTests(unittest.TestCase):
         action = policy.get_action(_obs())
         self.assertAlmostEqual(float(action.joint_positions[0]), 0.2, places=5)
 
+    def test_learned_policy_files_at_most_50_lines(self):
+        from pathlib import Path
+
+        learned = Path(__file__).resolve().parents[1] / "robodeploy" / "policies" / "learned"
+        for name in ("robomimic.py", "diffusion.py", "vla.py"):
+            lines = (learned / name).read_text(encoding="utf-8").splitlines()
+            self.assertLessEqual(len(lines), 50, msg=name)
+
 
 if __name__ == "__main__":
     unittest.main()
