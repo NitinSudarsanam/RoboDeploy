@@ -1,6 +1,6 @@
 # Integration status (honest)
 
-Last updated: 2026-06-10 on branch **`main`** (Wave 2 integration merged).
+Last updated: 2026-06-11 — cross-simulator pick parity (unified YAML core + `test_pick_parity.py`).
 
 What presets and benchmarks claim vs what CI actually exercises. Run `pytest -m "not hardware"` for current counts.
 
@@ -29,6 +29,8 @@ What presets and benchmarks claim vs what CI actually exercises. Run `pytest -m 
 | Preset / benchmark | Runnable command | CI job | Status |
 |--------------------|------------------|--------|--------|
 | `kuka_pick_mujoco` | `python -m examples.cli run-episode --preset kuka_pick_mujoco --steps 50` | `sensor-e2e-linux` | **Smoke** — builds env, steps MuJoCo |
+| `kuka_ft_imu_pick_{mujoco,gazebo,ros2_rviz}` | `robodeploy config diff` ⊆ backend fields; `tests/test_pick_parity.py` | `unittest`, `sensor-e2e-linux` | **Parity** — one logical pick task, three backends |
+| `kuka_ft_imu_pick_mujoco` | `--seed 0 --json` → `success=true` ~step 373 (Windows/Linux) | `test_sensor_mujoco_integration` | **Pick E2E** — FT+IMU+contact sensor-only policy |
 | `my_kitchen_pick_mujoco` | `python -m examples.cli run-episode --preset my_kitchen_pick_mujoco` | — | **Doc only** — requires tutorial task file |
 | `kuka_ft_imu_pick_gazebo` | `python -m examples.kuka_ft_imu_pick_gazebo.run_gazebo` | `sensor-live-gazebo` (`test_live_gazebo_pick_e2e.py`) | **Pick E2E** — placement tolerance + contact-on-grasp on ≥1 success; CI ≥50% over 10 seeds (not 80% MuJoCo parity) |
 | `kuka_sensor_gazebo` | `python -m examples.kuka_sensor_gazebo.run_gazebo` | `sensor-live-gazebo` | **Sensor smoke** |

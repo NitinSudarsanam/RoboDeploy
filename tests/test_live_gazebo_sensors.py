@@ -63,14 +63,16 @@ def _multimodal_obs_ready(obs) -> bool:
 
 
 class GazeboSensorOfflineTests(unittest.TestCase):
-    def test_multimodal_preset_yaml_includes_imu_and_depth(self):
+    def test_multimodal_preset_yaml_rig_matches_unified_core(self):
         from examples.config import load_example_preset
 
         cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
         rig = cfg["sensor_rigs"][0]
-        self.assertTrue(rig["wrist_rgbd"]["depth"])
-        self.assertIn("wrist_imu", rig)
-        self.assertIn("prop_pose", rig)
+        # Unified pick core (examples/presets/kuka_ft_imu_pick.yaml): FT + IMU +
+        # contact + prop_pose + ee_pose; no camera in the parity rig.
+        for key in ("wrist_ft", "wrist_imu", "wrist_contact", "prop_pose", "ee_pose"):
+            self.assertIn(key, rig)
+        self.assertNotIn("wrist_rgbd", rig)
 
     def test_imu_urdf_and_bridge_rules_offline(self):
         imu = MuJoCoIMUSensor("wrist_imu", mount=SensorMount(parent_link="ee_link"))
@@ -88,11 +90,11 @@ class GazeboSensorOfflineTests(unittest.TestCase):
         cfg = load_example_preset("kuka_ft_imu_pick_gazebo")
         self.assertEqual(cfg["backend"], "ros2_gazebo")
         self.assertTrue(cfg["backend_kwargs"]["config"]["sim"].get("require_sensors"))
-        self.assertEqual(cfg["policy_kwargs"]["config"]["force_threshold"], 0.5)
+        self.assertEqual(cfg["policy_kwargs"]["config"]["force_threshold"], 1.5)
 
     def test_kuka_ft_imu_pick_gazebo_env_builds_offline(self):
         from examples.config import load_example_preset
-        from robodeploy.backends.real.ros2.sensors.camera_rgbd import Ros2RgbdCameraISensor
+        from robodeploy.backends.real.ros2.sensors.imu import Ros2ImuISensor
         from robodeploy.backends.real.ros2.sensors.wrench import Ros2WrenchISensor
         from robodeploy.env import RoboEnv
 
@@ -102,7 +104,7 @@ class GazeboSensorOfflineTests(unittest.TestCase):
         try:
             sensors = env.robots[0].sensors
             kinds = {type(s) for s in sensors}
-            self.assertIn(Ros2RgbdCameraISensor, kinds)
+            self.assertIn(Ros2ImuISensor, kinds)
             self.assertIn(Ros2WrenchISensor, kinds)
             self.assertGreaterEqual(len(env.robots[0].tasks), 1)
             task = next(iter(env.robots[0].tasks.values()))

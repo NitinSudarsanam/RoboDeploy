@@ -41,7 +41,7 @@ jobs:
       - name: MuJoCo sensor e2e (Linux)
         env:
           MUJOCO_GL: egl
-        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_mujoco_integration.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py tests/test_gazebo_urdf_mount.py tests/test_gazebo_sensor_rig_smoke.py tests/test_mujoco_grasp.py tests/test_mujoco_grasp_welds.py tests/test_example_envs.py tests/test_from_config_simulator.py tests/test_benchmarks.py::BenchmarkPresetBuildTests tests/training/test_gym_register.py::GymRegisterTests::test_kuka_pick_mujoco_env_registered -q
+        run: python -m pytest tests/test_sensors_and_scenes_e2e.py tests/test_sensor_mujoco_integration.py tests/test_sensor_rig.py tests/test_gazebo_urdf_sensors.py tests/test_gazebo_urdf_mount.py tests/test_gazebo_sensor_rig_smoke.py tests/test_mujoco_grasp.py tests/test_mujoco_grasp_welds.py tests/test_example_envs.py tests/test_from_config_simulator.py tests/test_pick_parity.py tests/test_benchmarks.py::BenchmarkPresetBuildTests tests/training/test_gym_register.py::GymRegisterTests::test_kuka_pick_mujoco_env_registered -q
       - name: Examples CLI non-dummy smoke (kuka_pick_mujoco)
         env:
           MUJOCO_GL: egl

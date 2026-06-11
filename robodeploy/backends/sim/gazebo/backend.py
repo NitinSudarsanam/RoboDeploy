@@ -55,7 +55,10 @@ class ROS2GazeboBackend(ROS2RealBackend):
             if isinstance(extra, dict):
                 self.config = merge_simulator_config(self.config, extra)
 
+        from robodeploy.backends.real.ros2.runtime import Ros2Runtime
         from robodeploy.backends.real.ros2.sim_launchers.gazebo import GazeboLaunchConfig, GazeboLauncher
+
+        Ros2Runtime.use_sim_time = True
         from robodeploy.backends.real.ros2.sim_launchers.ros_gz_bridge import (
             camera_info_bridge_rules,
             image_bridge_rules,
@@ -215,6 +218,7 @@ class ROS2GazeboBackend(ROS2RealBackend):
         return super().initialize_multi(robots, scene, shared_sensors)
 
     def step_multi(self, actions: list[Action]) -> list[Observation]:
+        self._flush_pending_gz_prop_sync()
         out = super().step_multi(actions)
         self._sync_grasped_prop()
         self._flush_pending_gz_prop_sync()
@@ -328,6 +332,9 @@ class ROS2GazeboBackend(ROS2RealBackend):
         try:
             super()._close_impl()
         finally:
+            from robodeploy.backends.real.ros2.runtime import Ros2Runtime
+
+            Ros2Runtime.use_sim_time = False
             generated_world = getattr(self, "_generated_world_path", None)
             if generated_world:
                 try:

@@ -1,0 +1,13 @@
+_backend_mujoco_pick: &backend_mujoco_pick
+  backend: mujoco
+  backend_kwargs:
+    config:
+      allow_actuator_name_fallback: true
+      enable_viewer: true
+
+_backend_mujoco_pick_headless: &backend_mujoco_pick_headless
+  backend: mujoco
+  backend_kwargs:
+    config:
+      allow_actuator_name_fallback: true
+      enable_viewer: false

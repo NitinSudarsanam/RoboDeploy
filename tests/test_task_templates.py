@@ -48,4 +48,6 @@ class TaskTemplateTests(unittest.TestCase):
 
         task = PickPlaceTask()
         spec = task.scene_spec()
-        self.assertEqual(len(spec.to_world().props), 2)
+        # Canonical pick_table scene: table + source + target.
+        prop_names = {p.name for p in spec.to_world().props}
+        self.assertEqual(prop_names, {"table", "source", "target"})

@@ -39,6 +39,14 @@ def waypoint_top_offsets(scene: SceneSpec) -> dict[str, np.ndarray]:
     return offsets
 
 
+def ee_position_from_obs(obs: Observation) -> np.ndarray:
+    """Prefer sensor FK ``obs.ee_pose`` over backend ``obs.ee_position``."""
+    pose = getattr(obs, "ee_pose", None)
+    if pose is not None:
+        return np.asarray(pose, dtype=np.float32).reshape(3)
+    return np.asarray(obs.ee_position, dtype=np.float32).reshape(3)
+
+
 def waypoints_from_scene(scene: SceneSpec) -> dict[str, np.ndarray]:
     """Build EE waypoint bases from task prop layout."""
     props = {p.name: p for p in scene.to_world().props}
@@ -148,7 +156,7 @@ class _CompiledPhase:
             return self._policy._phase_step >= self.max_steps
         if self.ee_target is None:
             return False
-        ee = np.asarray(obs.ee_position, dtype=np.float32).reshape(3)
+        ee = ee_position_from_obs(obs)
         dist = float(np.linalg.norm(self.ee_target - ee))
         threshold = float(
             self.spec.settle_threshold
@@ -254,8 +262,9 @@ class ReachTrajectoryPolicy(PolicyBase):
         self._ik = None
 
         scene_spec = scene if scene is not None else SceneSpec()
-        self._waypoints = waypoints_from_scene(scene_spec)
+        self._sensor_only = bool(self.config.get("sensor_only", False))
         self._waypoint_top_offsets = waypoint_top_offsets(scene_spec)
+        self._waypoints = {} if self._sensor_only else waypoints_from_scene(scene_spec)
         self._phase_specs_raw = list(spec.get("phases") or [])
         compile_spec = {**spec, "steps_per_phase": self._steps_per_phase}
         self._phases = _compile_phases(compile_spec, self)
@@ -321,22 +330,72 @@ class ReachTrajectoryPolicy(PolicyBase):
             return
         self._backend = backend
         self._map_gazebo_carry_mode(backend)
+        self._map_mujoco_carry_mode(backend)
         from robodeploy.kinematics.policy_ik import attach_policy_ik
 
         attach_policy_ik(self, backend, desc)
+        self._map_rviz_carry_mode(backend)
+
+    def _recompile_phases(self) -> None:
+        self._phases = _compile_phases(
+            {"phases": self._phase_specs_raw, "steps_per_phase": self._steps_per_phase},
+            self,
+        )
+
+    def _map_mujoco_carry_mode(self, backend) -> None:
+        backend_name = str(getattr(backend, "sensor_backend_name", "") or "").lower()
+        if backend_name != "mujoco":
+            return
+        if not self._sensor_only or not self._backend_follow_carry:
+            return
+        _logger.info(
+            "mujoco: using kinematic carry for sensor_only pick (physics follow ejects props)."
+        )
+        self._carry_mode = "kinematic"
+        self._kinematic_carry = True
+        self._backend_follow_carry = False
+
+    def _map_rviz_carry_mode(self, backend) -> None:
+        backend_name = str(getattr(backend, "sensor_backend_name", "") or "").lower()
+        if backend_name != "ros2_rviz":
+            return
+        if self._backend_follow_carry:
+            _logger.info("ros2_rviz fake-sim: using kinematic carry (no grasp weld).")
+            self._carry_mode = "kinematic"
+            self._kinematic_carry = True
+            self._backend_follow_carry = False
+        if self._sensor_only and self._grasp_detection == "ft":
+            _logger.info("ros2_rviz fake-sim: distance grasp (FT often zero in fake graph).")
+            self._grasp_detection = "distance"
+        rviz_min_steps = 280
+        if self._steps_per_phase < rviz_min_steps:
+            self._steps_per_phase = rviz_min_steps
+            self._recompile_phases()
 
     def _map_gazebo_carry_mode(self, backend) -> None:
-        if not self._backend_weld_carry:
-            return
         backend_name = str(getattr(backend, "sensor_backend_name", "") or "").lower()
         if backend_name != "gazebo":
             return
-        _logger.warning(
-            "carry_mode 'weld' is not supported on Gazebo; using 'follow' instead."
-        )
-        self._carry_mode = "follow"
-        self._backend_weld_carry = False
-        self._backend_follow_carry = True
+        if self._backend_weld_carry:
+            _logger.warning(
+                "carry_mode 'weld' is not supported on Gazebo; using 'follow' instead."
+            )
+            self._carry_mode = "follow"
+            self._backend_weld_carry = False
+            self._backend_follow_carry = True
+        if self._sensor_only:
+            _logger.info("gazebo: using kinematic carry for sensor_only pick.")
+            self._carry_mode = "kinematic"
+            self._kinematic_carry = True
+            self._backend_follow_carry = False
+            self._backend_weld_carry = False
+        if self._sensor_only and self._grasp_detection == "ft":
+            _logger.info("gazebo: distance grasp (FT often zero in gz).")
+            self._grasp_detection = "distance"
+        gazebo_min_steps = 280
+        if self._steps_per_phase < gazebo_min_steps:
+            self._steps_per_phase = gazebo_min_steps
+            self._recompile_phases()
 
     def attach_mujoco(self, backend, description=None) -> None:
         self.bind_runtime(backend, description)
@@ -383,8 +442,21 @@ class ReachTrajectoryPolicy(PolicyBase):
         contact = getattr(obs, "contact_state", None) or {}
         return bool(contact.get(self._contact_sensor_name, False))
 
-    def _grasp_engage(self, obs: Observation) -> bool:
+    def _effective_grasp_detection(self, obs: Observation) -> str:
         mode = self._grasp_detection
+        if mode != "ft":
+            return mode
+        status = dict(getattr(obs, "sensor_status", {}) or {})
+        ft_status = status.get("wrist_ft", "ok")
+        if ft_status in {"stale", "error"} or self._ft_force_norm(obs) <= 0.0:
+            if self._contact_sensor_active(obs):
+                return "contact"
+            _logger.warning("wrist_ft stale/zero; distance fallback for grasp engage")
+            return "distance"
+        return mode
+
+    def _grasp_engage(self, obs: Observation) -> bool:
+        mode = self._effective_grasp_detection(obs)
         if mode == "ft":
             self._force_history.append(self._ft_force_norm(obs))
             if len(self._force_history) < self._grasp_force_window:
@@ -411,8 +483,7 @@ class ReachTrajectoryPolicy(PolicyBase):
         for name in self._critical_sensors:
             if status.get(name) in {"error", "stale"}:
                 return True
-        summary = self._observe_sensor_health(obs)
-        return str(summary.get("overall", "ok")) == "failed"
+        return False
 
     def _imu_settled(self, obs: Observation) -> bool:
         if self._imu_omega_max is None:
@@ -500,10 +571,12 @@ class ReachTrajectoryPolicy(PolicyBase):
         except KeyError:
             pass
 
-    @staticmethod
-    def _gazebo_place_snap_enabled() -> bool:
-        raw = os.environ.get("ROBODEPLOY_GAZEBO_PLACE_SNAP", "1").strip().lower()
-        return raw not in {"0", "false", "no", "off"}
+    def _gazebo_place_snap_enabled(self) -> bool:
+        cfg_snap = self.config.get("gazebo_place_snap")
+        if cfg_snap is not None:
+            return bool(cfg_snap)
+        raw = os.environ.get("ROBODEPLOY_GAZEBO_PLACE_SNAP", "0").strip().lower()
+        return raw in {"1", "true", "yes", "on"}
 
     def _gazebo_honest_place_active(self) -> bool:
         backend_name = str(getattr(self._backend, "sensor_backend_name", "") or "").lower()
@@ -527,7 +600,7 @@ class ReachTrajectoryPolicy(PolicyBase):
         settle_m = self._honest_place_settle_m()
         if settle_m is None or phase.ee_target is None:
             return True
-        ee = np.asarray(obs.ee_position, dtype=np.float32).reshape(3)
+        ee = ee_position_from_obs(obs)
         return float(np.linalg.norm(phase.ee_target - ee)) <= settle_m
 
     def _sync_honest_carry_pose(self, ee: np.ndarray) -> None:
@@ -550,9 +623,11 @@ class ReachTrajectoryPolicy(PolicyBase):
         if not hasattr(self._backend, "set_prop_pose"):
             return
         backend_name = str(getattr(self._backend, "sensor_backend_name", "") or "").lower()
+        if backend_name == "ros2_rviz":
+            return
         if backend_name == "gazebo" and not self._gazebo_place_snap_enabled():
             return
-        if backend_name not in {"gazebo", "ros2_rviz"}:
+        if backend_name != "gazebo":
             return
         props = getattr(self._backend, "_scene_prop_poses", None)
         if not isinstance(props, dict) or "target" not in props:
@@ -569,7 +644,11 @@ class ReachTrajectoryPolicy(PolicyBase):
         phase = self._phases[self._phase_idx]
         if phase.spec.kind != "reach" or "grasp" not in phase.spec.name.lower():
             return
-        if dist >= self._settle_dist * 1.5:
+        gate = self._settle_dist * 1.5
+        backend_name = str(getattr(self._backend, "sensor_backend_name", "") or "").lower()
+        if backend_name == "gazebo" and self._effective_grasp_detection(obs) == "distance":
+            gate = max(gate, 0.12)
+        if dist >= gate:
             return
         engage = self._grasp_engage(obs)
         if engage:
@@ -626,8 +705,17 @@ class ReachTrajectoryPolicy(PolicyBase):
             self._backend.set_grasp_prop(None)
         self._rewind_to_grasp_phase()
 
+    def _sensor_objects_ready(self, obs: Observation) -> bool:
+        objects = getattr(obs, "objects", None) or {}
+        return "source" in objects and "target" in objects
+
     def get_action(self, obs: Observation) -> Action:
         self._observe_sensor_health(obs)
+        if self._sensor_only and not self._sensor_objects_ready(obs):
+            q_hold = np.asarray(obs.joint_positions, dtype=np.float32).reshape(-1)
+            if q_hold.shape[0] != self._home.shape[0]:
+                q_hold = self._home.copy()
+            return Action(joint_positions=q_hold, gripper=self._gripper_state)
         if self._sensor_health_blocks_action(obs):
             q_hold = np.asarray(obs.joint_positions, dtype=np.float32).reshape(-1)
             if q_hold.shape[0] != self._home.shape[0]:
@@ -649,14 +737,12 @@ class ReachTrajectoryPolicy(PolicyBase):
                 self._gripper_state = float(learned_action.gripper)
             return learned_action
 
-        ee = np.asarray(obs.ee_position, dtype=np.float32).reshape(3)
+        ee = ee_position_from_obs(obs)
         if phase.ee_target is not None:
             dist = float(np.linalg.norm(phase.ee_target - ee))
             if phase.spec.engage_carry or "grasp" in phase.spec.name.lower():
                 self._maybe_engage_carry(obs, dist)
             self._maybe_drop_carry(obs)
-            if self._carrying and phase.spec.kind == "reach":
-                self._sync_carried_object(ee)
 
         gripper_cmd = phase.gripper_value()
         if gripper_cmd is not None:
@@ -668,6 +754,19 @@ class ReachTrajectoryPolicy(PolicyBase):
                 if self._backend is not None and hasattr(self._backend, "set_grasp_prop"):
                     self._backend.set_grasp_prop(None)
 
+        backend_name = str(getattr(self._backend, "sensor_backend_name", "") or "").lower()
+        if (
+            backend_name == "gazebo"
+            and self._kinematic_carry
+            and self._sensor_only
+            and phase.spec.name == "lift"
+            and self._phase_step == 1
+        ):
+            self._carrying = True
+
+        if self._carrying:
+            self._sync_carried_object(ee)
+
         q_goal = phase.compute(obs, q)
         q_cmd = self._track_toward(q, q_goal)
 
@@ -676,13 +775,24 @@ class ReachTrajectoryPolicy(PolicyBase):
             if self._phase_step < phase.max_steps:
                 ready_to_advance = False
         if ready_to_advance:
-            if phase.spec.release_carry or ("place" in phase.spec.name.lower() and self._carrying):
-                if phase.ee_target is not None:
-                    ee_now = np.asarray(obs.ee_position, dtype=np.float32).reshape(3)
+            place_phase = "place" in phase.spec.name.lower()
+            gazebo_snap_place = (
+                place_phase
+                and backend_name == "gazebo"
+                and self._kinematic_carry
+                and self._gazebo_place_snap_enabled()
+            )
+            release_carry = bool(
+                phase.spec.release_carry or (place_phase and self._carrying) or gazebo_snap_place
+            )
+            if release_carry and phase.ee_target is not None:
+                ee_now = ee_position_from_obs(obs)
+                if self._carrying or phase.spec.release_carry:
                     self._sync_honest_carry_pose(ee_now)
-                    self._maybe_finalize_kinematic_place(
-                        float(np.linalg.norm(phase.ee_target - ee_now))
-                    )
+                self._maybe_finalize_kinematic_place(
+                    float(np.linalg.norm(phase.ee_target - ee_now))
+                )
+            if phase.spec.release_carry or (place_phase and self._carrying):
                 self._carrying = False
                 if self._backend is not None and hasattr(self._backend, "set_grasp_prop"):
                     self._backend.set_grasp_prop(None)

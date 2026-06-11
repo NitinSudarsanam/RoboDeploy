@@ -78,6 +78,8 @@ class SensorSampleBuffer:
         camera_frames = dict(getattr(obs, "camera_frames", {}) or {})
         camera_intrinsics = dict(getattr(obs, "camera_intrinsics", {}) or {})
         camera_extrinsics = dict(getattr(obs, "camera_extrinsics", {}) or {})
+        ee_pose = getattr(obs, "ee_pose", None)
+        ee_pose_orientation = getattr(obs, "ee_pose_orientation", None)
         for name, sample in self._latest.items():
             ts = float(sample.timestamp_hw or sample.timestamp)
             if abs(ts - anchor) > self.window_s:
@@ -106,6 +108,10 @@ class SensorSampleBuffer:
                 objects.update(sample.objects)
             if getattr(sample, "contact_state", None):
                 contact_state.update(sample.contact_state)
+            if getattr(sample, "ee_pose", None) is not None:
+                ee_pose = sample.ee_pose
+            if getattr(sample, "ee_pose_orientation", None) is not None:
+                ee_pose_orientation = sample.ee_pose_orientation
             if getattr(sample, "frame_id", None):
                 camera_frames[name] = str(sample.frame_id)
             if getattr(sample, "intrinsics", None):
@@ -130,6 +136,8 @@ class SensorSampleBuffer:
             camera_frames=camera_frames,
             camera_intrinsics=camera_intrinsics,
             camera_extrinsics=camera_extrinsics,
+            ee_pose=ee_pose,
+            ee_pose_orientation=ee_pose_orientation,
         )
 
     def reset(self) -> None:

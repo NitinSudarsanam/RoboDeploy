@@ -1,0 +1,27 @@
+_backend_ros2_rviz_pick: &backend_ros2_rviz_pick
+  backend: ros2_rviz
+  backend_kwargs:
+    config:
+      rviz:
+        enabled: true
+      dev_fake_sim:
+        - robot_ns: /robot0
+          joint_names: [joint1, joint2, joint3, joint4, joint5, joint6, joint7]
+          joint_states_topic: joint_states
+          joint_pos_cmd_topic: joint_position_commands
+          publish_hz: 200.0
+          follow_tau_s: 0.03
+
+_backend_ros2_rviz_pick_headless: &backend_ros2_rviz_pick_headless
+  backend: ros2_rviz
+  backend_kwargs:
+    config:
+      rviz:
+        enabled: false
+      dev_fake_sim:
+        - robot_ns: /robot0
+          joint_names: [joint1, joint2, joint3, joint4, joint5, joint6, joint7]
+          joint_states_topic: joint_states
+          joint_pos_cmd_topic: joint_position_commands
+          publish_hz: 200.0
+          follow_tau_s: 0.03

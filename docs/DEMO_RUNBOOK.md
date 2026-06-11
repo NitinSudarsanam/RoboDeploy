@@ -2,9 +2,37 @@
 
 Operational guide for the V1 Track A pick-place demos across MuJoCo, ROS 2 + RViz, and Gazebo. Use this when rehearsing a live demo, recording insurance video, or validating a fresh install.
 
-**What these demos are:** scripted reach-trajectory policies (`example_reach_pick` + YAML phases) with FT-gated grasp engage and kinematic carry assist. They are **not** learned grasping and **not** force-closure grasping. Success is placement tolerance at the goal (plus sensor health gates on multimodal presets).
+**What these demos are:** sensor-driven reach policies (`example_sensor_reach_pick`, `sensor_only: true`) with FT/contact grasp engage and follow carry (kinematic on RViz fake-sim). Same **task + policy + sensor rig** across MuJoCo, RViz, and Gazebo; only `backend` / `backend_kwargs` differ.
 
-**Recommended headline preset (MuJoCo):** `kuka_ft_imu_pick_mujoco` — FT + IMU + contact + prop_pose, tuned for reliable success on Windows and Linux CI.
+**Recommended headline preset (MuJoCo):** `kuka_ft_imu_pick_mujoco` — FT + IMU + contact + prop_pose + ee_pose.
+
+**One command, any simulator:**
+
+```bash
+python -m examples.kuka_ft_imu_pick.run_visual --simulator mujoco --seed 0
+python -m examples.cli run-episode --preset kuka_ft_imu_pick --simulator mujoco --seed 0 --viewer --steps 1500 --json
+```
+
+Deprecated alias: `kuka_pick_ros2_rviz` → `kuka_ft_imu_pick_ros2_rviz`.
+
+### Visual vs headless presets (`kuka_ft_imu_pick_*`)
+
+| Preset | Viewer / GUI | Use when |
+|--------|--------------|----------|
+| `kuka_ft_imu_pick_mujoco` | MuJoCo viewer (`enable_viewer: true`) | Live demo on Windows/Linux |
+| `kuka_ft_imu_pick_mujoco_headless` | off | CI, `pytest`, quick smoke |
+| `kuka_ft_imu_pick_ros2_rviz` | RViz2 (`rviz.enabled: true`) | WSL2 / Linux rehearsal with GUI |
+| `kuka_ft_imu_pick_ros2_rviz_headless` | off (`rviz.enabled: false`) | Docker `demo-rviz-pick`, WSL headless smoke |
+| `kuka_ft_imu_pick_gazebo` | Gazebo GUI (`sim.headless: false`) | Interactive Gazebo pick |
+| `kuka_ft_imu_pick_gazebo_headless` | off | Docker `demo-gazebo-pick`, `ROBODEPLOY_GAZEBO_HEADLESS=1` |
+
+Any visual preset accepts `--headless` on `examples.cli run-episode` to force viewer/GUI off without swapping preset name.
+
+```bash
+# same task/policy/sensors; only backend display flags differ
+python -m examples.cli run-episode --preset kuka_ft_imu_pick_ros2_rviz --headless --seed 0 --steps 1500 --json
+python -m examples.cli run-episode --preset kuka_ft_imu_pick_ros2_rviz_headless --seed 0 --steps 1500 --json
+```
 
 ### Windows workflow (RViz / Gazebo)
 
@@ -62,7 +90,8 @@ pip install -e ".[sim,dev]"
 ### Headless smoke (CI parity)
 
 ```bash
-python -m examples.cli run-episode --preset kuka_ft_imu_pick_mujoco --seed 0 --steps 1500 --json
+python -m examples.cli run-episode --preset kuka_ft_imu_pick_mujoco_headless --seed 0 --steps 1500 --json
+# or: --preset kuka_ft_imu_pick_mujoco --headless
 ```
 
 Pass `--seed 0` for a reproducible demo run. Without `--seed`, episode randomization is nondeterministic and pick success may vary.
@@ -113,11 +142,11 @@ Target: **≥8/10** successes locally (CI asserts pick success on Linux).
 
 ---
 
-## ROS 2 + RViz — `kuka_pick_ros2_rviz`
+## ROS 2 + RViz — `kuka_ft_imu_pick_ros2_rviz`
 
 **Platform:** Linux or **WSL2** only. Native Windows Python cannot load `rclpy`.
 
-Preset wires embedded `dev_fake_sim` (no external robot graph), RViz markers, wrist FT/IMU/contact, and prop_pose — same reach policy family as MuJoCo.
+Preset wires embedded `dev_fake_sim`, wrist FT/IMU/contact, prop_pose, and ee_pose — **identical policy/task** to MuJoCo (`robodeploy config diff kuka_ft_imu_pick_mujoco kuka_ft_imu_pick_ros2_rviz` differs only in backend fields).
 
 ### WSL2 setup (one-time)
 
@@ -153,10 +182,12 @@ docker compose -f docker/docker-compose.yml --profile ros2 run --rm demo-gazebo-
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-python -m examples.cli run-episode --preset kuka_pick_ros2_rviz --steps 1500 --json
+python -m examples.kuka_ft_imu_pick.run_visual --simulator ros2_rviz --seed 0
+# headless Docker / CI:
+python -m examples.cli run-episode --preset kuka_ft_imu_pick_ros2_rviz_headless --seed 0 --steps 1500 --json
 ```
 
-RViz should open (preset `rviz.enabled: true`). Fixed frame: `world`. Robot model from bundled Kuka URDF.
+Visual preset has `rviz.enabled: true`. Fixed frame: `world`. Robot model from bundled Kuka URDF.
 
 ### Expected success signals
 

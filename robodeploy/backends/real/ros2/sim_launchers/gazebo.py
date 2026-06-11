@@ -154,7 +154,10 @@ class GazeboLauncher:
 
         # gz_ros2_control controller_manager blocks until /robot_description exists.
         if urdf_text is not None:
-            self._rsp = RobotStatePublisherLauncher(urdf_text)
+            # Gazebo joint_states are sim-stamped via /clock; RSP must use sim time so its
+            # publish_frequency timer does not stamp TF with wall time (TF_OLD_DATA spam).
+            rsp_use_sim_time = bool(self._cfg.start_ros_gz_bridge)
+            self._rsp = RobotStatePublisherLauncher(urdf_text, use_sim_time=rsp_use_sim_time)
             self._rsp.start()
             self._wait_for_topics(("/robot_description",), timeout_s=min(30.0, float(self._cfg.readiness_timeout_s)))
 

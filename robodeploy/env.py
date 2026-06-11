@@ -293,6 +293,7 @@ class RoboEnv:
                             base_imu=entry.get("base_imu"),
                             wrist_contact=entry.get("wrist_contact"),
                             prop_pose=entry.get("prop_pose"),
+                            ee_pose=entry.get("ee_pose"),
                         )
                     )
                 else:
@@ -442,6 +443,15 @@ class RoboEnv:
             transforms.append(transform_cls(**dict(entry.get("kwargs") or {})))
         return ObsPipeline(transforms)
 
+    @staticmethod
+    def _policy_config_from_kwargs(kwargs: Optional[dict]) -> dict:
+        """Unwrap ``policy_kwargs`` so ``config: {…}`` is passed flat to policies."""
+        pk = dict(kwargs or {})
+        inner = pk.get("config")
+        if isinstance(inner, dict):
+            return inner
+        return pk
+
     @classmethod
     def _coerce_policy(cls, value: Any, kwargs: Optional[dict]) -> IPolicy:
         if isinstance(value, str):
@@ -451,7 +461,7 @@ class RoboEnv:
 
                 return coerce_eval_policy(ref, kwargs or {})
             PolicyClass = get_policy(ref)
-            return PolicyClass(config=kwargs or {})
+            return PolicyClass(config=cls._policy_config_from_kwargs(kwargs))
         obj = cls._instantiate_component(value, kwargs)
         if not isinstance(obj, IPolicy):
             raise TypeError("policy must be a registry name, policy class, or IPolicy instance.")
@@ -527,6 +537,7 @@ class RoboEnv:
                                 base_imu=entry.get("base_imu"),
                                 wrist_contact=entry.get("wrist_contact"),
                                 prop_pose=entry.get("prop_pose"),
+                                ee_pose=entry.get("ee_pose"),
                             )
                         )
                     else:

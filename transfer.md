@@ -1,43 +1,50 @@
-# transfer.md — session handoff (2026-06-11, iteration 17)
+# transfer.md — session handoff (2026-06-11, cross-backend pick parity)
 
-Read with: `BROAD_GOALS.md` (strategic index), `BROAD_GOALS_PROGRESS.md` (tracker + iteration log), `plans/INTEGRATION_STATUS.md` (CI honesty), `plans/GOAL_*.md` (per-goal acceptance criteria).
+Read with: `PICK_PARITY_PROGRESS.md` (prior loop's tracker), `BROAD_GOALS_PROGRESS.md`, `plans/INTEGRATION_STATUS.md`.
 
-## State at handoff
+## Context
 
-- Branch `main`, working tree **clean**, everything committed:
-  - `e8db35a` — iterations 1–16 work (demo parity, `robodeploy.demos` packaging, Docker/WSL scripts, docs). This had been sitting **uncommitted** across 16 iterations.
-  - `7a3d4c4` — goal 9 LOC refactor: `robomimic.py`/`diffusion.py`/`vla.py` = **50/49/43** lines; extractions in `policies/learned/helpers.py` (`ActionSmoother`, `PlanQueue`, `build_plan`, `batch_first_actions`, `vla_packet`, `vla_heuristic_action`, `select_camera_image/depth`); LOC regression test in `tests/test_learned_policy_base.py`.
-  - `76f4601` — acceptance closure: tutorial-02 exec test + interface docstring audit (`tests/test_tutorial_02_task.py`); GOAL_01/02/07/09 checkboxes ticked with evidence.
-  - `0a67aa9` — leaderboard submit test now writes to tmp (was rewriting `benchmarks/leaderboard/submissions/.../cli_test_*.json` every suite run).
-  - Final commit (this one) — tracker iteration 17 + GOAL_04 ticks + this file.
-- Full suite `pytest -m "not hardware"`: **654 passed, 21 skipped** (~6m20s) post-refactor.
-- MuJoCo demo re-verified: `python -m examples.cli run-episode --preset kuka_ft_imu_pick_mujoco --seed 0 --steps 2000 --json` → `success=true` step **306**.
-- Stray `pick_out*.json` deleted and gitignored.
+User reported: RViz + Gazebo produced different scenes than MuJoCo, policy execution differed, and both ROS backends failed. A separate Cursor agent loop ("cross-simulator pick parity", tick 43, PID 27060 — **killed this session** to avoid concurrent writers; re-arm if wanted) had already built the unification layer in the working tree (uncommitted): canonical scene `robodeploy/demos/scenes/pick_table.py`, shared preset core `examples/presets/kuka_ft_imu_pick.yaml` + backend overlays, per-backend carry mapping in `reach_dsl.py`, parity tests (`tests/test_pick_parity.py`, `test_pick_scene_parity.py`), `demo/run_pick.py`.
 
-## BROAD_GOALS parity verdict
+## Root causes found + fixed this session (the actual parity bugs)
 
-~**95%** of acceptance criteria. **Zero software-only gaps remain actionable from this machine.** The 16 unchecked boxes across `plans/GOAL_*.md` all need external resources:
+1. **`KinematicsSolver.jacobian` returned all zeros** (`robodeploy/kinematics/solver.py`): it discarded `pin.computeFrameJacobian`'s return and read `pin.getFrameJacobian` without `computeJointJacobians` populated. Every Pinocchio-IK consumer got a zero Jacobian.
+2. **`PinIkSolver` semantics diverged from MuJoCo IK** (`robodeploy/kinematics/pin_ik.py`, rewritten): old version delegated to 6-DOF `solver.ik` (orientation term fights position), never clamped joint limits, and on non-convergence returned `q_init` unchanged → policy froze mid-episode (trace: EE parked at (0.335, 0.145, 0.372), 1396 joint-limit clamp warnings, timeout@1500). Now mirrors `MujocoIkSolver`: position-only DLS, per-iteration `np.clip` to `description.joint_position_limits`, best-effort return. `attach_pin_ik` passes limits.
+3. **Gazebo demo crashed at startup**: `examples/kuka_ft_imu_pick_gazebo/pick_episode.py` called instance method `ReachTrajectoryPolicy._gazebo_place_snap_enabled()` unbound → TypeError swallowed by run_gazebo's catch-all ("Requires Linux..." red herring). Replaced with standalone env check (`ROBODEPLOY_GAZEBO_PLACE_SNAP`, default **off** now — honest placement).
+4. **Stale test**: `test_reach_dsl.py::test_ros2_rviz_place_finalize_snaps_source` asserted the old RViz oracle snap; loop had removed the snap (honest placement). Inverted to `..._does_not_snap_source`.
 
-| Blocker | Boxes | What unblocks |
-|---------|-------|----------------|
-| PyPI `v0.2.0` tag + trusted publishing | 3 (goals 7/8) | Repo admin: tag `v0.2.0`; `publish.yml` is ready; `scripts/pypi_dry_run.ps1` + `twine check` already green |
-| Isaac Sim GPU Kit runtime | 7 (goal 6) | Self-hosted runner / GPU workstation — `docs/BACKEND_SETUP.md#isaac-sim-self-hosted-ci` |
-| Live teleop devices | 5 (goal 4) | Keyboard interactive session, SpaceMouse hardware, live ROS2 twist rehearsal |
-| Dashboard | 1 (goal 10) | Deferred by sign-off (`robodeploy/observability/DASHBOARD_DEFERRAL.md`) |
+Earlier this session (already pushed, commits `24fcab6..1575e59`): RViz scene markers latched (transient-local QoS + Jazzy nested-Topic `default.rviz` + 1 Hz republish), gz transport msgs module fix (`gz.msgs10` for Harmonic — kinematic carry was falling back to ~100ms subprocess per pose sync, causing the cube drop/snap glitch), RSP failure now RuntimeWarning, CRLF stripped from WSL scripts.
 
-Plus (tracked in tracker "Done vs deferred"): WSL Ubuntu **24.04** install for interactive RViz (current WSL is 22.04; `scripts/wsl24-bootstrap.sh` ready); Gazebo honest JTC sub-0.04 m is an **accepted limitation** (default `ROBODEPLOY_GAZEBO_PLACE_SNAP=1`; best honest 0.085 m, iter 14).
+## Verified results (WSL `Ubuntu` distro = 24.04 + Jazzy + `.venv-wsl`, pinocchio 4.0.0)
 
-## Next session: pick-up points (priority order)
+| Backend | Before fixes | After fixes |
+|---------|--------------|-------------|
+| MuJoCo (Win) | success step 466 | unchanged (uses native MuJoCo IK) |
+| RViz fake-sim (WSL) | timeout@1500 / failure@1256 (flaky) | **success step 544, honest placement (no snap)** |
+| Gazebo (WSL) | TypeError at startup | **success step 1406, 0.0379 m honest placement (no snap)** — beats old 0.085 m snap-off best |
 
-1. **PyPI release** (user action): configure trusted publishing, push `v0.2.0` tag, then tick the 3 publish boxes and the `pip install robodeploy` quickstart box in GOAL_07/08.
-2. **WSL 24.04** (user action, interactive): `wsl --install -d Ubuntu-24.04` → `bash scripts/wsl24-bootstrap.sh` → rehearse `kuka_pick_ros2_rviz` interactively (Docker headless path already PASS at step 950).
-3. **Isaac GPU**: on a Kit-capable machine run the goal 6 acceptance list (IMU sensor, capsule prop, `.usd` load, multi-robot, ≤1mm SceneIR pose round-trip).
-4. **Gazebo honest JTC** (optional, accepted limitation): if sub-0.04 m without snap is ever required, the remaining idea is a physics-level carry weld (not the kinematic oracle) — see iter 15/16 notes; `prefer_fk_ee_pose` driver hook exists but is off by default.
+Repro commands:
+- MuJoCo: `python -m examples.cli run-episode --preset kuka_ft_imu_pick_mujoco_headless --seed 0 --steps 1500 --json`
+- RViz: `wsl -d Ubuntu bash scripts/wsl_rviz_pick_smoke.sh` (never concurrently with Gazebo — stale `/clock` poisons the fake-sim graph)
+- Gazebo: `wsl -d Ubuntu bash scripts/wsl_gazebo_pick_smoke.sh`
+- Trace probe: `scripts/_wsl_rviz_trace.py` (per-100-step EE/cube/phase + final diagnostics)
+- IK probe: `scripts/_pin_ik_probe.py`
 
-## Gotchas for the next agent
+Tests: `test_pick_parity.py` + `test_pick_scene_parity.py` + `test_reach_dsl.py` + `test_pin_ik.py` (6/6 in WSL incl. pin-dependent; new regression tests for zero-jacobian, limit clamping, best-effort IK) + offline gazebo e2e — all green. Full Windows suite (`-m "not hardware"`) running at session end — was 654 passed/21 skipped before parity work.
 
-- The full suite leaves no repo churn anymore, but if you see `benchmarks/leaderboard/submissions/**` modified after a test run, an old checkout of `tests/test_benchmarks.py` is being used — the fix is in `0a67aa9`.
-- `train eval` in the robodeploy CLI is **dummy-only by design**; non-dummy checkpoint eval goes through `robodeploy eval --policy ckpt.pt --backend mujoco` (CI: `tests/training/test_train_eval_benchmark_e2e.py`).
-- Duplicate task registration raises `KeyError` — tests exec'ing tutorial code substitute a unique registry name (see `tests/test_tutorial_02_task.py`).
-- `.gitattributes` pins LF for text assets so `robodeploy/_assets/manifest.json` SHA256 hashes are platform-stable; don't fight it with `core.autocrlf` overrides.
-- Windows: MuJoCo env-build tests and PPO smoke are intentionally skipped (`platform.system() != "Windows"` guards); the 21 skips are expected.
+## Outstanding
+
+1. **Gazebo smoke result** — confirm `success=true` honest placement; if placement >0.04 m, the carry weld idea (Gazebo `DetachableJoint`) is the next step; gz transport bindings (`python3-gz-transport13`, `python3-gz-msgs10`) must be importable from `.venv-wsl` for fast kinematic carry (else subprocess fallback ~100ms/step).
+2. **Commit the parity work** — ~40 modified + ~15 new files uncommitted (loop's unification + this session's IK/scene/snap fixes). Suggested commit split: (a) kinematics fixes (solver.py, pin_ik.py, test_pin_ik.py), (b) pick_episode snap fix + reach_dsl test flip, (c) loop's unification layer wholesale, (d) docs/trackers. Push to `origin` + `github` remotes (both at `1575e59`).
+3. **Full-suite verdict** — confirm no regressions from solver.jacobian change (it was returning zeros, so any consumer behavior can only improve, but verify).
+4. **PICK_PARITY_PROGRESS.md** — update with this session's root-causes + results; loop tracker last wrote tick 43 (its WSL "blocked, no ROS" claims were wrong — it probed the wrong distro; `Ubuntu` = 24.04 with ROS).
+5. Cleanup candidates: `scripts/_wsl_rviz_trace.py`, `scripts/_pin_ik_probe.py`, `scripts/_wsl_gazebo_probe.py`, `scripts/_wsl_gazebo_quick.py`, `scripts/_wsl_rviz_diag.py` (one-off probes; keep or delete), `demo/` (loop's unified runner — decide whether it ships).
+6. RViz visual check: user should rerun episode + `rviz2 -d robodeploy/ros2_assets/rviz/default.rviz` — markers latched now; robot + cube + target should align and the arm should reach them (IK fixed).
+
+## Gotchas
+
+- **Never run RViz fake-sim and Gazebo WSL smokes concurrently** — Gazebo's `/clock`/bridges break the wall-time fake sim (CONNECTION_LOST, TF_OLD_DATA). Use `ROS_DOMAIN_ID` isolation if needed.
+- `pkill -f 'gz sim'` inside a `wsl bash -c` one-liner kills the shell itself (pattern matches own cmdline) — run pkill from script files only.
+- PowerShell expands `$?`/`$vars` inside double-quoted `wsl bash -c "..."` strings — use single quotes outside, escaped doubles inside.
+- `run_gazebo.py` catch-all hides real exceptions behind "Requires Linux" — print `exc` first when debugging (already prints it, line above the banner).
+- The committed `solver.ik()` 6-DOF method still exists and is used elsewhere (e.g. tests, planning); only `PinIkSolver` stopped using it. Its orientation+position behavior is unchanged.

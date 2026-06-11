@@ -38,9 +38,10 @@ LIVE_PICK_SEEDS = tuple(range(10))
 LIVE_PICK_MIN_SUCCESS_RATE = 0.5
 
 def _gazebo_place_snap_enabled() -> bool:
-    from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
-
-    return ReachTrajectoryPolicy._gazebo_place_snap_enabled()
+    # Mirrors ReachTrajectoryPolicy._gazebo_place_snap_enabled() env default
+    # (instance method; cannot be called unbound from module scope).
+    raw = os.environ.get("ROBODEPLOY_GAZEBO_PLACE_SNAP", "0").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
 
 
 RELAXED_POLICY_CONFIG: dict[str, Any] = {
@@ -55,8 +56,8 @@ RELAXED_POLICY_CONFIG: dict[str, Any] = {
     # Match MuJoCo reach_pick_place.yaml carry clearance; kinematic avoids gz follow lag.
     "carry_mode": "kinematic",
     "carry_offset": [0.0, 0.0, -0.06],
-    "tracking_blend": 0.38,
-    "steps_per_phase": 400,
+    "tracking_blend": 0.42,
+    "steps_per_phase": 280,
 }
 
 # Extra JTC horizon when measuring honest placement (ROBODEPLOY_GAZEBO_PLACE_SNAP=0).
@@ -117,7 +118,7 @@ def _gazebo_sim_cfg(
 
 def kuka_ft_imu_pick_gazebo_cfg(
     *,
-    max_episode_steps: int = 1200,
+    max_episode_steps: int = 3200,
     policy_config: dict | None = None,
     task_kwargs: dict | None = None,
     wait_for_topics: list[str] | None = None,
@@ -130,13 +131,17 @@ def kuka_ft_imu_pick_gazebo_cfg(
     merged_policy = {**dict(policy_kwargs.get("config", {})), **(policy_config or {})}
     policy_kwargs["config"] = merged_policy
     merged_task = {**dict(cfg.get("task_kwargs", {})), **(task_kwargs or {})}
-    merged_task.setdefault("max_steps", max_episode_steps)
-    topics = wait_for_topics or [
-        "/joint_states",
-        "/wrist_ft/wrench",
-        "/wrist_imu/imu",
-        "/wrist_camera/image_raw",
-    ]
+    merged_task["max_steps"] = max_episode_steps
+    if wait_for_topics is None:
+        from robodeploy.core.sensor_rig import readiness_topics_from_sensor_rig_yaml
+
+        rig_topics = readiness_topics_from_sensor_rig_yaml(
+            list(cfg.get("sensor_rigs") or []),
+            backend_name="gazebo",
+        )
+        topics = ["/joint_states", *rig_topics]
+    else:
+        topics = list(wait_for_topics)
     return {
         **cfg,
         "max_episode_steps": max_episode_steps,
@@ -226,7 +231,7 @@ def _ft_norm(obs) -> float:
 def run_pick_episode(
     *,
     seed: int | None = None,
-    max_steps: int = 1200,
+    max_steps: int = 3200,
     cfg_overrides: dict | None = None,
     policy_config: dict | None = None,
     task_kwargs: dict | None = None,
@@ -245,9 +250,9 @@ def run_pick_episode(
         task_kwargs={**RELAXED_TASK_KWARGS, **(task_kwargs or {})},
         world=world,
     )
-    if not _gazebo_place_snap_enabled():
-        backend_cfg = cfg.setdefault("backend_kwargs", {}).setdefault("config", {})
-        backend_cfg["jtc_time_from_start_s"] = 1.0
+    backend_cfg = cfg.setdefault("backend_kwargs", {}).setdefault("config", {})
+    backend_cfg["jtc_time_from_start_s"] = 1.0 if not _gazebo_place_snap_enabled() else 0.8
+    backend_cfg.setdefault("recovery_max_retries", 12)
     if cfg_overrides:
         cfg = {**cfg, **cfg_overrides}
 
@@ -279,6 +284,15 @@ def run_pick_episode(
             obs, _, done, final_info = env.step()
             steps = step + 1
             if done:
+                extra = getattr(final_info, "extra", None) or {}
+                if extra.get("truncated"):
+                    pass  # step budget exhausted
+                elif getattr(final_info, "failure", False):
+                    print(
+                        f"episode failure at step {steps} "
+                        f"(safety={extra.get('safety', {})})",
+                        flush=True,
+                    )
                 break
 
         distance = source_to_goal_distance(obs, task)
@@ -302,7 +316,7 @@ def run_pick_episode(
 def run_pick_episodes(
     seeds: tuple[int, ...] | list[int],
     *,
-    max_steps: int = 1200,
+    max_steps: int = 3200,
     **kwargs: Any,
 ) -> list[PickEpisodeResult]:
     return [run_pick_episode(seed=seed, max_steps=max_steps, **kwargs) for seed in seeds]

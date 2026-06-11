@@ -168,6 +168,13 @@ class RobotDescription(ABC):
         """
         return None
 
+    def ros2_rviz_extra_config(self, robot_id: str) -> dict | None:
+        """Extra ROS2 transport keys when using ``ROS2RvizBackend`` (frames, FK, RViz).
+
+        Keys should use the ``{robot_id}.`` prefix (e.g. ``robot0.base_frame``).
+        """
+        return None
+
     def mujoco_backend_extra_config(self) -> dict | None:
         """Extra ``MuJoCoBackend`` config merged after library defaults."""
         return None

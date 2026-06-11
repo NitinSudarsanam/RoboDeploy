@@ -118,6 +118,7 @@ class ROS2RealBackend(BackendBase):
                     pass
             self._rsp_launchers = []
         try:
+            Ros2Runtime.use_sim_time = False
             Ros2Runtime.shutdown()
         except Exception:
             pass
@@ -141,6 +142,7 @@ class ROS2RealBackend(BackendBase):
         self._scene_prop_names = [prop.name for prop in scene.to_world().props]
         self._sim_launcher = None
         self._drivers = {}
+        self._robots = list(robots)
         self._sensors_by_robot: dict[str, list[object]] = {}
         self._robot_sensors_by_robot: dict[str, list["ISensor"]] = {r.robot_id: list(r.sensors) for r in robots}
         self._shared_sensors = list(shared_sensors)
@@ -154,11 +156,18 @@ class ROS2RealBackend(BackendBase):
         self._recovery_managers: dict[str, object] = {}
 
         fake_sim_cfg_raw = self.config.get("dev_fake_sim")
+        # Align fake_joint_sim + RSP with /clock when an external sim shares the graph.
+        # Isolated ros2_rviz fake-sim must stay on wall time even if stale /clock publishers
+        # linger from another session (otherwise joint_states look stale → CONNECTION_LOST).
+        if fake_sim_cfg_raw is not None and self.config.get("sim") is None:
+            rsp_use_sim_time = bool(self.config.get("use_sim_time", False))
+        else:
+            rsp_use_sim_time = Ros2Runtime.ros_graph_has_clock()
         if fake_sim_cfg_raw is not None:
             fake_sim_specs = fake_sim_cfg_raw if isinstance(fake_sim_cfg_raw, list) else [fake_sim_cfg_raw]
             for spec in fake_sim_specs:
                 fake_cfg = self._coerce_fake_sim_config(spec, robots)
-                sim = FakeJointPosSim(fake_cfg)
+                sim = FakeJointPosSim(fake_cfg, use_sim_time=rsp_use_sim_time)
                 sim.start()
                 self._fake_sims.append(sim)
 
@@ -174,10 +183,15 @@ class ROS2RealBackend(BackendBase):
                 urdf_path = robots[0].description.asset_path(AssetFormat.URDF)
                 urdf_text = Path(urdf_path).read_text(encoding="utf-8")
                 # Remap /joint_states -> /<robot_id>/joint_states for multi-robot parity.
+                # Joint_states drive TF; disable the RSP timer (publish_frequency=0) so TF
+                # stamps match incoming joint_states and avoid TF_OLD_DATA when /clock is
+                # absent (wall time) or present (sim time, scoped to RSP + fake_joint_sim).
                 rsp = RobotStatePublisherLauncher(
                     urdf_text,
                     namespace=str(robots[0].robot_id),
                     joint_states_topic="joint_states",
+                    use_sim_time=rsp_use_sim_time,
+                    publish_frequency=0.0,
                 )
                 rsp.start()
                 self._rsp_launchers.append(rsp)
@@ -608,6 +622,15 @@ class ROS2RvizBackend(ROS2RealBackend):
         scene: SceneSpec,
         shared_sensors: list["ISensor"],
     ) -> None:
+        self._kinematics_solver = None
+        if robots:
+            try:
+                self._kinematics_solver = robots[0].description.get_kinematics_solver()
+            except Exception:
+                self._kinematics_solver = None
+        if self._kinematics_solver is not None:
+            self.config["_kinematics_solver"] = self._kinematics_solver
+
         super().initialize_multi(robots, scene, shared_sensors)
         if getattr(self, "_perception_source", None) is not None:
             return
@@ -619,6 +642,18 @@ class ROS2RvizBackend(ROS2RealBackend):
             )
             for prop in world.props
         }
+        self._prop_marker_specs: dict[str, dict] = {}
+        for prop in world.props:
+            geom = getattr(prop, "geom", None)
+            self._prop_marker_specs[str(prop.name)] = {
+                "kind": str(getattr(geom, "kind", "box")),
+                "size": tuple(getattr(geom, "size", ()) or ()),
+                "rgba": tuple(getattr(getattr(prop, "material", None), "rgba", (0.5, 0.5, 0.5, 1.0))),
+            }
+        terrain = getattr(world, "terrain", None)
+        self._scene_terrain_size = tuple(
+            getattr(terrain, "size", (4.0, 4.0)) or (4.0, 4.0)
+        )
         if not self._scene_prop_poses:
             return
         from .perception import ScenePropPerceptionSource
@@ -633,4 +668,30 @@ class ROS2RvizBackend(ROS2RealBackend):
             tuple(float(v) for v in position),
             tuple(float(v) for v in orientation),
         )
+        rviz = getattr(self, "_rviz", None)
+        if rviz is not None and hasattr(rviz, "publish_prop_poses"):
+            rviz.publish_prop_poses(
+                poses,
+                prop_specs=getattr(self, "_prop_marker_specs", None),
+                terrain_size=getattr(self, "_scene_terrain_size", (4.0, 4.0)),
+            )
+
+    def prop_near_ee(self, prop_name: str, *, threshold: float = 0.06) -> bool:
+        import numpy as np
+
+        try:
+            pos, _ = self.get_prop_pose(prop_name)
+        except (KeyError, NotImplementedError):
+            return False
+        latest = getattr(self, "_latest_obs", None)
+        if not isinstance(latest, dict) or not latest:
+            return False
+        obs = next(iter(latest.values()))
+        ee = getattr(obs, "ee_pose", None)
+        if ee is None:
+            ee = getattr(obs, "ee_position", None)
+        if ee is None:
+            return False
+        dist = float(np.linalg.norm(np.asarray(pos, dtype=np.float64) - np.asarray(ee, dtype=np.float64)))
+        return dist < float(threshold)
 

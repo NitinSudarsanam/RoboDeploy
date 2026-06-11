@@ -57,11 +57,29 @@ class GazeboSceneBuilder:
         """Build SDF XML from unified SceneIR."""
         return cls(world_name=world_name).build(ir_to_world_spec(ir))
 
+    @staticmethod
+    def _attach_world_plugins(world_elem: ET.Element) -> None:
+        """Harmonic needs explicit system plugins for physics, contacts, and URDF sensors."""
+        for filename, name in (
+            ("gz-sim-physics-system", "gz::sim::systems::Physics"),
+            ("gz-sim-user-commands-system", "gz::sim::systems::UserCommands"),
+            ("gz-sim-scene-broadcaster-system", "gz::sim::systems::SceneBroadcaster"),
+            ("gz-sim-contact-system", "gz::sim::systems::Contact"),
+        ):
+            ET.SubElement(world_elem, "plugin", {"filename": filename, "name": name})
+        sensors = ET.SubElement(
+            world_elem,
+            "plugin",
+            {"filename": "gz-sim-sensors-system", "name": "gz::sim::systems::Sensors"},
+        )
+        ET.SubElement(sensors, "render_engine").text = "ogre2"
+
     def build(self, world: WorldSpec) -> str:
         world = self._resolve_procedural_terrain(world)
         root = ET.Element("sdf", {"version": "1.9"})
         world_elem = ET.SubElement(root, "world", {"name": self.world_name})
         ET.SubElement(world_elem, "gravity").text = _fmt(world.gravity)
+        self._attach_world_plugins(world_elem)
         self._attach_terrain(world_elem, world)
         if world.lights:
             for idx, light in enumerate(world.lights):

@@ -196,12 +196,11 @@ class KinematicsSolver:
 
         q     = np.asarray(joint_positions, dtype=np.float64)
         ee_id = self._ee_frame_id
-        pin.computeFrameJacobian(
+        # computeFrameJacobian returns the frame Jacobian for q directly; it does
+        # not populate the buffers getFrameJacobian reads (those need
+        # computeJointJacobians), so reading via getFrameJacobian yields zeros.
+        return np.array(pin.computeFrameJacobian(
             self._model, self._data, q, ee_id,
-            pin.ReferenceFrame.LOCAL_WORLD_ALIGNED,
-        )
-        return np.array(pin.getFrameJacobian(
-            self._model, self._data, ee_id,
             pin.ReferenceFrame.LOCAL_WORLD_ALIGNED,
         ))
 

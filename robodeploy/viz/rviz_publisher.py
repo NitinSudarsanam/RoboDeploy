@@ -104,6 +104,106 @@ class RvizPublisher:
     def reset(self) -> None:
         self._trace_by_robot.clear()
 
+    def _append_prop_marker(
+        self,
+        markers: list,
+        *,
+        stamp,
+        marker_id: int,
+        name: str,
+        position: tuple[float, float, float],
+        orientation: tuple[float, float, float, float],
+        geom_kind: str = "box",
+        geom_size: tuple[float, ...] = (),
+        rgba: tuple[float, float, float, float] = (0.5, 0.5, 0.5, 1.0),
+    ) -> int:
+        from visualization_msgs.msg import Marker
+
+        m = Marker()
+        m.header.frame_id = self._fixed_frame
+        m.header.stamp = stamp
+        m.ns = "scene"
+        m.id = int(marker_id)
+        m.type = Marker.CUBE
+        m.action = Marker.ADD
+        m.pose.position.x, m.pose.position.y, m.pose.position.z = position
+        qw, qx, qy, qz = orientation
+        m.pose.orientation.w = qw
+        m.pose.orientation.x = qx
+        m.pose.orientation.y = qy
+        m.pose.orientation.z = qz
+        if geom_kind == "sphere":
+            m.type = Marker.SPHERE
+        elif geom_kind == "cylinder":
+            m.type = Marker.CYLINDER
+        size = tuple(geom_size or ())
+        if len(size) >= 3:
+            m.scale.x = float(size[0]) * 2.0
+            m.scale.y = float(size[1]) * 2.0
+            m.scale.z = float(size[2]) * 2.0
+        elif len(size) >= 1:
+            m.scale.x = m.scale.y = m.scale.z = float(size[0]) * 2.0
+        else:
+            m.scale.x = m.scale.y = m.scale.z = 0.05
+        m.color.r = float(rgba[0])
+        m.color.g = float(rgba[1])
+        m.color.b = float(rgba[2])
+        m.color.a = float(rgba[3])
+        markers.append(m)
+        return marker_id + 1
+
+    def publish_prop_poses(
+        self,
+        poses: dict[str, tuple[tuple[float, float, float], tuple[float, float, float, float]]],
+        *,
+        prop_specs: dict[str, dict] | None = None,
+        terrain_size: tuple[float, float] = (4.0, 4.0),
+        include_ground: bool = True,
+    ) -> None:
+        """Republish scene prop markers at updated world poses (kinematic carry)."""
+        if self._node is None:
+            return
+        from visualization_msgs.msg import Marker
+        from visualization_msgs.msg import MarkerArray
+
+        ma = MarkerArray()
+        stamp = self._node.get_clock().now().to_msg()
+        idx = 0
+        if include_ground:
+            ground = Marker()
+            ground.header.frame_id = self._fixed_frame
+            ground.header.stamp = stamp
+            ground.ns = "scene"
+            ground.id = idx
+            idx += 1
+            ground.type = Marker.CUBE
+            ground.action = Marker.ADD
+            ground.pose.orientation.w = 1.0
+            ground.pose.position.z = -0.001
+            ground.scale.x = float(terrain_size[0])
+            ground.scale.y = float(terrain_size[1])
+            ground.scale.z = 0.002
+            ground.color.r = 0.85
+            ground.color.g = 0.85
+            ground.color.b = 0.85
+            ground.color.a = 1.0
+            ma.markers.append(ground)
+        specs = prop_specs or {}
+        for name, (position, orientation) in poses.items():
+            spec = specs.get(name, {})
+            idx = self._append_prop_marker(
+                ma.markers,
+                stamp=stamp,
+                marker_id=idx,
+                name=name,
+                position=position,
+                orientation=orientation,
+                geom_kind=str(spec.get("kind", "box")),
+                geom_size=tuple(spec.get("size", ()) or ()),
+                rgba=tuple(spec.get("rgba", (0.5, 0.5, 0.5, 1.0))),
+            )
+        self._scene_pub.publish(ma)
+
     def publish_scene(self, scene: SceneSpec) -> None:
         if self._node is None:
             return
@@ -118,41 +218,43 @@ class RvizPublisher:
         world = scene.to_world() if hasattr(scene, "to_world") else scene
 
         idx = 0
-        for prop in getattr(world, "props", []) or []:
-            m = Marker()
-            m.header.frame_id = self._fixed_frame
-            m.header.stamp = stamp
-            m.ns = "scene"
-            m.id = idx
+        terrain = getattr(world, "terrain", None)
+        if terrain is not None and str(getattr(terrain, "kind", "flat")) == "flat":
+            size_xy = tuple(getattr(terrain, "size", (4.0, 4.0)) or (4.0, 4.0))
+            ground = Marker()
+            ground.header.frame_id = self._fixed_frame
+            ground.header.stamp = stamp
+            ground.ns = "scene"
+            ground.id = idx
             idx += 1
-            m.type = Marker.CUBE
-            m.action = Marker.ADD
-            m.pose.position.x, m.pose.position.y, m.pose.position.z = prop.position
-            qw, qx, qy, qz = prop.orientation
-            m.pose.orientation.w = qw
-            m.pose.orientation.x = qx
-            m.pose.orientation.y = qy
-            m.pose.orientation.z = qz
+            ground.type = Marker.CUBE
+            ground.action = Marker.ADD
+            ground.pose.orientation.w = 1.0
+            ground.pose.position.z = -0.001
+            ground.scale.x = float(size_xy[0])
+            ground.scale.y = float(size_xy[1])
+            ground.scale.z = 0.002
+            ground.color.r = 0.85
+            ground.color.g = 0.85
+            ground.color.b = 0.85
+            ground.color.a = 1.0
+            ma.markers.append(ground)
+
+        for prop in getattr(world, "props", []) or []:
             geom = getattr(prop, "geom", None)
             size = tuple(getattr(geom, "size", ()) or ())
-            if getattr(geom, "kind", "") == "sphere":
-                m.type = Marker.SPHERE
-            elif getattr(geom, "kind", "") == "cylinder":
-                m.type = Marker.CYLINDER
-            if len(size) >= 3:
-                m.scale.x = float(size[0]) * 2.0
-                m.scale.y = float(size[1]) * 2.0
-                m.scale.z = float(size[2]) * 2.0
-            elif len(size) >= 1:
-                m.scale.x = m.scale.y = m.scale.z = float(size[0]) * 2.0
-            else:
-                m.scale.x = m.scale.y = m.scale.z = 0.05
             rgba = tuple(getattr(getattr(prop, "material", None), "rgba", (0.2, 0.8, 0.2, 0.8)))
-            m.color.r = float(rgba[0])
-            m.color.g = float(rgba[1])
-            m.color.b = float(rgba[2])
-            m.color.a = float(rgba[3])
-            ma.markers.append(m)
+            idx = self._append_prop_marker(
+                ma.markers,
+                stamp=stamp,
+                marker_id=idx,
+                name=prop.name,
+                position=tuple(prop.position),
+                orientation=tuple(prop.orientation),
+                geom_kind=str(getattr(geom, "kind", "box")),
+                geom_size=size,
+                rgba=rgba,
+            )
 
         # Back-compat: objects
         for obj in getattr(scene, "objects", []) or []:

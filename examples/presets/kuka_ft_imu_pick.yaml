@@ -1,0 +1,37 @@
+# Shared Kuka FT+IMU pick-place core (task, policy, sensors, safety).
+_kuka_ft_imu_pick_core: &kuka_ft_imu_pick_core
+  robot: kuka
+  task: pick_place
+  policy: example_sensor_reach_pick
+  max_episode_steps: 1500
+  safety:
+    max_force_N: 150.0
+  task_kwargs:
+    require_objects: true
+    prefer_obs_objects: true
+    max_steps: 1500
+    grasp_success_force_min: 1.0
+  policy_kwargs:
+    config:
+      sensor_only: true
+      carry_mode: follow
+      grasp_detection: ft
+      force_threshold: 1.5
+      grasp_force_window: 3
+      grasp_force_loss_threshold: 0.0
+      imu_omega_max: 0.5
+      imu_settle_steps: 3
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      wrist_ft: {}
+      wrist_imu: {}
+      wrist_contact:
+        prop_name: source
+      prop_pose:
+        prop_names: [source, target]
+      ee_pose: {}
+  custom_modules:
+    - examples.tasks
+    - examples.sensors
+    - examples.policies

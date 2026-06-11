@@ -223,6 +223,8 @@ class BackendBase(IBackend):
         camera_frames = dict(getattr(obs, "camera_frames", {}) or {})
         camera_intrinsics = dict(getattr(obs, "camera_intrinsics", {}) or {})
         camera_extrinsics = dict(getattr(obs, "camera_extrinsics", {}) or {})
+        ee_pose = getattr(obs, "ee_pose", None)
+        ee_pose_orientation = getattr(obs, "ee_pose_orientation", None)
 
         for sensor in sensors:
             name = str(getattr(sensor, "name", type(sensor).__name__))
@@ -261,6 +263,10 @@ class BackendBase(IBackend):
                 objects.update(sd.objects)
             if getattr(sd, "contact_state", None):
                 contact_state.update(sd.contact_state)
+            if getattr(sd, "ee_pose", None) is not None:
+                ee_pose = sd.ee_pose
+            if getattr(sd, "ee_pose_orientation", None) is not None:
+                ee_pose_orientation = sd.ee_pose_orientation
             if getattr(sd, "frame_id", None):
                 camera_frames[name] = str(sd.frame_id)
             if getattr(sd, "intrinsics", None):
@@ -288,6 +294,8 @@ class BackendBase(IBackend):
             camera_frames=camera_frames,
             camera_intrinsics=camera_intrinsics,
             camera_extrinsics=camera_extrinsics,
+            ee_pose=ee_pose,
+            ee_pose_orientation=ee_pose_orientation,
             timestamp_hw=timestamp_hw,
             timestamp_recv=timestamp_recv,
         )

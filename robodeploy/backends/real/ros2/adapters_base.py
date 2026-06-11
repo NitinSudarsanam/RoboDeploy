@@ -26,6 +26,8 @@ class Ros2NodeAdapter:
 
     #: Override per subclass.
     node_name: str = "robodeploy_adapter"
+    #: When set, overrides ``Ros2Runtime.use_sim_time`` for this adapter only.
+    use_sim_time: bool | None = None
 
     def __init__(self) -> None:
         self._node = None  # rclpy.node.Node when started
@@ -38,6 +40,7 @@ class Ros2NodeAdapter:
         if self._node is not None:
             return
         try:
+            import rclpy
             import rclpy.node
         except ImportError as exc:
             raise ImportError(
@@ -46,7 +49,16 @@ class Ros2NodeAdapter:
             ) from exc
 
         Ros2Runtime.ensure_started()
-        self._node = rclpy.node.Node(self.node_name)
+        sim_time = self.use_sim_time if self.use_sim_time is not None else Ros2Runtime.use_sim_time
+        if sim_time:
+            from rclpy.parameter import Parameter
+
+            self._node = rclpy.create_node(
+                self.node_name,
+                parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)],
+            )
+        else:
+            self._node = rclpy.node.Node(self.node_name)
         Ros2Runtime.add_node(self._node)
         try:
             self._on_node_ready(self._node)

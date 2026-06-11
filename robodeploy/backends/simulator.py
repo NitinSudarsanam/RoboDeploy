@@ -131,12 +131,8 @@ def _ros2_auto_config(
         cfg[f"{rid}.ee_frame"] = desc.ros_ee_frame_id()
 
     if local_ros_graph:
-        if robots:
-            rviz = cfg.get("rviz")
-            if isinstance(rviz, dict):
-                rviz = dict(rviz)
-                rviz["fixed_frame"] = robots[0].description.ros_base_frame_id()
-                cfg["rviz"] = rviz
+        # Scene props and pick tasks use world-frame poses; keep rviz.fixed_frame at world
+        # unless a description/ros2_rviz_extra_config overrides it later.
         # ``so101_feetech`` publishes ``joint_states`` from hardware; do not spawn ``dev_fake_sim``.
         skip_fake = any(
             use_hardware_feetech
@@ -240,10 +236,14 @@ def backend_for_simulator(
     if simulator == "ros2_rviz":
         from robodeploy.backends.real.ros2.backend import ROS2RvizBackend
 
-        cfg = merge_simulator_config(
-            _ros2_auto_config(robots, local_ros_graph=local_ros_graph, resolved=resolved, use_hardware_feetech=False),
-            overrides,
+        base = _ros2_auto_config(
+            robots, local_ros_graph=local_ros_graph, resolved=resolved, use_hardware_feetech=False
         )
+        for r in robots:
+            extra = r.description.ros2_rviz_extra_config(r.robot_id)
+            if isinstance(extra, dict):
+                base = merge_simulator_config(base, extra)
+        cfg = merge_simulator_config(base, overrides)
         backend = ROS2RvizBackend(config=cfg)
         _apply_control_hz(backend, cfg, resolved)
         return backend

@@ -37,8 +37,9 @@ class FakeJointPosSimConfig:
 
 
 class FakeJointPosSim(Ros2NodeAdapter):
-    def __init__(self, cfg: FakeJointPosSimConfig) -> None:
+    def __init__(self, cfg: FakeJointPosSimConfig, *, use_sim_time: bool = False) -> None:
         super().__init__()
+        self.use_sim_time = bool(use_sim_time)
         self._cfg = cfg
         self._ns = (cfg.robot_ns or "").rstrip("/")
         self._lock = threading.Lock()

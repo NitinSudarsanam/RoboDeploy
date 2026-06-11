@@ -71,6 +71,9 @@ class Observation:
     gripper_state:        Optional[float] = None
 
     # --- Perception (populated by sensors / perception transforms) ---------
+    # Sensor FK path (ee_pose rig); policies should prefer over ee_position when set.
+    ee_pose:              Optional[jnp.ndarray] = None   # [3]    metres
+    ee_pose_orientation:  Optional[jnp.ndarray] = None   # [4]    wxyz
     # objects[name] = (position_xyz, orientation_wxyz)
     objects:              dict[str, tuple[tuple[float, float, float], tuple[float, float, float, float]]] = field(
         default_factory=dict
@@ -150,6 +153,8 @@ class SensorData:
         default_factory=dict
     )
     contact_state: dict[str, bool] = field(default_factory=dict)
+    ee_pose: Optional[jnp.ndarray] = None
+    ee_pose_orientation: Optional[jnp.ndarray] = None
     status: str = "ok"
     frame_id: Optional[str] = None
     intrinsics: Optional[dict[str, float]] = None

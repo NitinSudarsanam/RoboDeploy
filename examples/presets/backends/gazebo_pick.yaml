@@ -1,0 +1,19 @@
+_backend_gazebo_pick: &backend_gazebo_pick
+  backend: ros2_gazebo
+  backend_kwargs:
+    config:
+      sim:
+        kind: gazebo
+        headless: false
+        require_sensors: true
+        readiness_timeout_s: 60.0
+
+_backend_gazebo_pick_headless: &backend_gazebo_pick_headless
+  backend: ros2_gazebo
+  backend_kwargs:
+    config:
+      sim:
+        kind: gazebo
+        headless: true
+        require_sensors: true
+        readiness_timeout_s: 60.0

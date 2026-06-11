@@ -49,6 +49,61 @@ def _import_custom_modules(custom_modules: list[str]) -> None:
         use(str(mod))
 
 
+_PICK_SIMULATOR_ALIASES = {
+    "mujoco": "mujoco",
+    "gazebo": "gazebo",
+    "ros2_rviz": "ros2_rviz",
+    "rviz": "ros2_rviz",
+}
+
+
+def _resolve_preset_name(preset: str, simulator: str | None) -> str:
+    if not simulator or not str(simulator).strip():
+        return str(preset)
+    sim_key = _PICK_SIMULATOR_ALIASES.get(str(simulator).strip().lower())
+    if sim_key is None:
+        known = ", ".join(sorted(_PICK_SIMULATOR_ALIASES))
+        raise ValueError(f"Unknown --simulator {simulator!r}; expected one of: {known}")
+    base = str(preset).strip() or "kuka_ft_imu_pick"
+    for suffix in ("_mujoco", "_gazebo", "_ros2_rviz"):
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+            break
+    return f"{base}_{sim_key}"
+
+
+def _apply_viewer_headless(cfg: dict, *, viewer: bool, headless: bool) -> dict:
+    if not viewer and not headless:
+        return cfg
+    backend_kwargs = dict(cfg.get("backend_kwargs") or {})
+    backend_cfg = dict(backend_kwargs.get("config") or {})
+    backend = str(cfg.get("backend", ""))
+    if viewer:
+        if backend == "mujoco":
+            backend_cfg["enable_viewer"] = True
+        if backend == "ros2_gazebo":
+            sim = dict(backend_cfg.get("sim") or {})
+            sim["headless"] = False
+            backend_cfg["sim"] = sim
+        if backend == "ros2_rviz":
+            rviz = dict(backend_cfg.get("rviz") or {})
+            rviz["enabled"] = True
+            backend_cfg["rviz"] = rviz
+    if headless:
+        if backend == "mujoco":
+            backend_cfg["enable_viewer"] = False
+        if backend == "ros2_gazebo":
+            sim = dict(backend_cfg.get("sim") or {})
+            sim["headless"] = True
+            backend_cfg["sim"] = sim
+        if backend == "ros2_rviz":
+            rviz = dict(backend_cfg.get("rviz") or {})
+            rviz["enabled"] = False
+            backend_cfg["rviz"] = rviz
+    backend_kwargs["config"] = backend_cfg
+    return {**cfg, "backend_kwargs": backend_kwargs}
+
+
 def _make_env(
     *,
     preset: str,
@@ -56,6 +111,8 @@ def _make_env(
     presets_file: str | None,
     custom_modules: list[str],
     viewer: bool = False,
+    headless: bool = False,
+    simulator: str | None = None,
 ):
     from robodeploy.env import RoboEnv
 
@@ -78,16 +135,12 @@ def _make_env(
 
     path = _resolve_presets_file(presets_file)
     import_builtins()
-    cfg = load_preset(preset, presets_file=path)
+    resolved_preset = _resolve_preset_name(preset, simulator)
+    cfg = load_preset(resolved_preset, presets_file=path)
     merged_modules = list(custom_modules) + [str(m) for m in (cfg.get("custom_modules") or [])]
     if merged_modules:
         cfg = {**cfg, "custom_modules": merged_modules}
-    if viewer:
-        backend_kwargs = dict(cfg.get("backend_kwargs") or {})
-        backend_cfg = dict(backend_kwargs.get("config") or {})
-        backend_cfg["enable_viewer"] = True
-        backend_kwargs["config"] = backend_cfg
-        cfg = {**cfg, "backend_kwargs": backend_kwargs}
+    cfg = _apply_viewer_headless(cfg, viewer=viewer, headless=headless)
     return RoboEnv.from_config(cfg)
 
 
@@ -174,6 +227,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--viewer",
         action="store_true",
         help="Open the simulator viewer (overrides the preset's enable_viewer).",
+    )
+    p_run.add_argument(
+        "--headless",
+        action="store_true",
+        help="Force headless backend (MuJoCo viewer off, Gazebo/RViz GUI off).",
+    )
+    p_run.add_argument(
+        "--simulator",
+        default="",
+        help="Pick-place simulator suffix: mujoco | gazebo | ros2_rviz (maps preset base to *_<sim>).",
     )
     p_run.add_argument("--json", action="store_true", help="Print a structured JSON result.")
     p_run.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
@@ -404,6 +467,8 @@ def _cmd_run_episode(
     pretty: bool,
     as_json: bool,
     viewer: bool = False,
+    headless: bool = False,
+    simulator: str = "",
     seed: int | None = None,
 ) -> int:
     from robodeploy.policies.remote.http_client import to_jsonable
@@ -414,6 +479,8 @@ def _cmd_run_episode(
         presets_file=presets_file or None,
         custom_modules=custom_modules,
         viewer=viewer,
+        headless=headless,
+        simulator=simulator or None,
     )
 
     try:
@@ -481,6 +548,8 @@ def main(argv: list[str] | None = None) -> int:
             pretty=bool(args.pretty),
             as_json=bool(args.json),
             viewer=bool(args.viewer),
+            headless=bool(args.headless),
+            simulator=str(args.simulator),
             seed=args.seed,
         )
     if cmd == "teleop":

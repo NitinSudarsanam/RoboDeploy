@@ -150,9 +150,9 @@ class RepresentationGapTests(unittest.TestCase):
             self.assertTrue((REPO_ROOT / "examples/presets" / name).is_file())
 
     def test_pick_place_scene_ir_mujoco_gazebo_pose_tolerance(self):
-        from examples.tasks.pick_place import PickPlaceTask
+        from robodeploy.demos.scenes.pick_table import build_pick_place_scene
 
-        ir = PickPlaceTask().scene_spec().to_ir()
+        ir = build_pick_place_scene().to_ir()
         mjcf = MjcfSceneBuilder(
             '<mujoco><worldbody><body name="robot0"><joint name="j1"/></body></worldbody></mujoco>'
         ).from_ir(ir).emit()

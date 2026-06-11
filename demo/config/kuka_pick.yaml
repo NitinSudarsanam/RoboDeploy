@@ -1,0 +1,85 @@
+# Kuka pick-place presets (mujoco / rviz / gazebo). Loaded by demo/run_pick.py.
+
+_pick_core: &pick_core
+  robot: kuka
+  task: pick_place
+  policy: example_sensor_reach_pick
+  max_episode_steps: 2000
+  safety:
+    max_force_N: 150.0
+  task_kwargs:
+    require_objects: true
+    prefer_obs_objects: true
+    max_steps: 2000
+    grasp_success_force_min: 1.0
+  policy_kwargs:
+    config:
+      sensor_only: true
+      carry_mode: follow
+      gazebo_place_snap: false
+      grasp_detection: ft
+      force_threshold: 1.5
+      grasp_force_window: 3
+      grasp_force_loss_threshold: 0.0
+      imu_omega_max: 0.5
+      imu_settle_steps: 3
+  sensor_rigs:
+    - rig_id: arm_sensors
+      ee_link: robot0/ee_link
+      wrist_ft: {}
+      wrist_imu: {}
+      wrist_contact:
+        prop_name: source
+      prop_pose:
+        prop_names: [source, target]
+      ee_pose: {}
+  custom_modules:
+    - robodeploy.demos
+
+_backend_mujoco: &backend_mujoco
+  backend: mujoco
+  backend_kwargs:
+    config:
+      allow_actuator_name_fallback: true
+      enable_viewer: true
+
+_backend_rviz: &backend_rviz
+  backend: ros2_rviz
+  backend_kwargs:
+    config:
+      prefer_fk_ee_pose: true
+      robot0.base_frame: world
+      robot0.ee_frame: ee_link
+      rviz:
+        enabled: true
+        fixed_frame: world
+      dev_fake_sim:
+        - robot_ns: /robot0
+          joint_names: [joint1, joint2, joint3, joint4, joint5, joint6, joint7]
+          joint_states_topic: joint_states
+          joint_pos_cmd_topic: joint_position_commands
+          publish_hz: 200.0
+          follow_tau_s: 0.03
+
+_backend_gazebo: &backend_gazebo
+  backend: ros2_gazebo
+  backend_kwargs:
+    config:
+      sim:
+        kind: gazebo
+        headless: false
+        require_sensors: true
+        readiness_timeout_s: 60.0
+
+mujoco:
+  <<: *pick_core
+  <<: *backend_mujoco
+
+rviz:
+  <<: *pick_core
+  <<: *backend_rviz
+
+gazebo:
+  <<: *pick_core
+  <<: *backend_gazebo
+  max_episode_steps: 4000

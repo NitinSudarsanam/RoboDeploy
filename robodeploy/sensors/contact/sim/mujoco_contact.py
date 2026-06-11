@@ -63,7 +63,7 @@ class MuJoCoContactSensor(ContactSensorBase):
 @register_sensor_pair(
     "wrist_contact",
     sim=MuJoCoContactSensor,
-    by_backend={"mujoco": MuJoCoContactSensor},
+    by_backend={"mujoco": MuJoCoContactSensor, "ros2_rviz": MuJoCoContactSensor},
 )
 class WristContactPair:
     pass

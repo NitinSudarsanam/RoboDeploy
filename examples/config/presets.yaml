@@ -5,6 +5,10 @@
 include:
   - ../presets/base_sim.yaml
   - ../presets/manipulate.yaml
+  - ../presets/kuka_ft_imu_pick.yaml
+  - ../presets/backends/mujoco_pick.yaml
+  - ../presets/backends/gazebo_pick.yaml
+  - ../presets/backends/ros2_rviz_pick.yaml
 
 _base_kuka_mujoco: &base_kuka_mujoco
   <<: *base_kuka
@@ -61,44 +65,12 @@ kuka_sensor_pick_mujoco:
     - examples.policies
 
 kuka_ft_imu_pick_mujoco:
-  robot: kuka
-  backend: mujoco
-  task: pick_place
-  policy: example_reach_pick
-  # Sim-only: carry assist holds the prop inside the gripper geometry, so the wrist
-  # FT sensor reads sustained penetration forces well above the 50N hardware default.
-  safety:
-    max_force_N: 150.0
-  task_kwargs:
-    require_objects: true
-  policy_kwargs:
-    config:
-      carry_mode: follow
-      grasp_detection: ft
-      force_threshold: 1.5
-      grasp_force_window: 3
-      # Carry assist holds the prop clear of the gripper, so wrist force drops to
-      # ~0 while carrying; disable the FT carry-loss check (engage stays FT-gated).
-      grasp_force_loss_threshold: 0.0
-      imu_omega_max: 0.5
-      imu_settle_steps: 3
-  backend_kwargs:
-    config:
-      allow_actuator_name_fallback: true
-      enable_viewer: false
-  sensor_rigs:
-    - rig_id: arm_sensors
-      ee_link: robot0/ee_link
-      wrist_ft: {}
-      wrist_imu: {}
-      wrist_contact:
-        prop_name: source
-      prop_pose:
-        prop_names: [source, target]
-  custom_modules:
-    - examples.tasks
-    - examples.sensors
-    - examples.policies
+  <<: *kuka_ft_imu_pick_core
+  <<: *backend_mujoco_pick
+
+kuka_ft_imu_pick_mujoco_headless:
+  <<: *kuka_ft_imu_pick_core
+  <<: *backend_mujoco_pick_headless
 
 kuka_vision_pick_mujoco:
   robot: kuka
@@ -175,92 +147,26 @@ kuka_sensor_gazebo:
     - examples.policies
 
 kuka_ft_imu_pick_gazebo:
-  robot: kuka
-  backend: ros2_gazebo
-  task: pick_place
-  policy: example_reach_pick
-  task_kwargs:
-    require_objects: true
-    grasp_success_force_min: 1.0
-  policy_kwargs:
-    config:
-      carry_mode: follow
-      grasp_detection: ft
-      force_threshold: 0.5
-      grasp_force_window: 3
-      imu_omega_max: 0.5
-      imu_settle_steps: 3
-  backend_kwargs:
-    config:
-      sim:
-        kind: gazebo
-        headless: false
-        require_sensors: true
-        readiness_timeout_s: 60.0
-  sensor_rigs:
-    - rig_id: arm_sensors
-      ee_link: robot0/ee_link
-      wrist_rgbd:
-        width: 64
-        height: 48
-        depth: true
-      wrist_ft: {}
-      wrist_imu: {}
-      wrist_contact:
-        prop_name: source
-      prop_pose:
-        prop_names: [source, target]
-  custom_modules:
-    - examples.tasks
-    - examples.sensors
-    - examples.policies
+  <<: *kuka_ft_imu_pick_core
+  <<: *backend_gazebo_pick
 
-# Pick-place in RViz with embedded fake joint sim (no external ROS graph required).
+kuka_ft_imu_pick_gazebo_headless:
+  <<: *kuka_ft_imu_pick_core
+  <<: *backend_gazebo_pick_headless
+
+# Symmetric name; same core+backend as deprecated alias below.
+kuka_ft_imu_pick_ros2_rviz:
+  <<: *kuka_ft_imu_pick_core
+  <<: *backend_ros2_rviz_pick
+
+kuka_ft_imu_pick_ros2_rviz_headless:
+  <<: *kuka_ft_imu_pick_core
+  <<: *backend_ros2_rviz_pick_headless
+
+# Deprecated alias (one release cycle) — identical to kuka_ft_imu_pick_ros2_rviz.
 kuka_pick_ros2_rviz:
-  robot: kuka
-  backend: ros2_rviz
-  task: pick_place
-  policy: example_reach_pick
-  max_episode_steps: 1500
-  task_kwargs:
-    require_objects: true
-    max_steps: 1500
-    # Fake joint sim has no wrist wrench; success is placement-based.
-    grasp_success_force_min: 0.0
-  policy_kwargs:
-    config:
-      # kinematic carry uses set_prop_pose (ros2_rviz scene oracle); follow needs grasp weld.
-      carry_mode: kinematic
-      # No /wrench on dev_fake_sim — engage carry on reach, not FT.
-      grasp_detection: distance
-      grasp_force_loss_threshold: 0.0
-      blend: 0.18
-      tracking_blend: 0.32
-      steps_per_phase: 300
-      imu_omega_max: 0.5
-      imu_settle_steps: 3
-  backend_kwargs:
-    config:
-      rviz:
-        enabled: true
-      dev_fake_sim:
-        - robot_ns: /robot0
-          joint_names: [joint1, joint2, joint3, joint4, joint5, joint6, joint7]
-          joint_states_topic: joint_states
-          joint_pos_cmd_topic: joint_position_commands
-          publish_hz: 200.0
-          follow_tau_s: 0.05
-  sensor_rigs:
-    - rig_id: arm_sensors
-      ee_link: robot0/ee_link
-      wrist_ft: {}
-      wrist_imu: {}
-      prop_pose:
-        prop_names: [source, target]
-  custom_modules:
-    - examples.tasks
-    - examples.sensors
-    - examples.policies
+  <<: *kuka_ft_imu_pick_core
+  <<: *backend_ros2_rviz_pick
 
 kuka_ft_imu_multimodal_ros2:
   robot: kuka

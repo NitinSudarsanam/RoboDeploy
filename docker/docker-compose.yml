@@ -99,5 +99,5 @@ services:
       [
         "bash",
         "-lc",
-        "unset DISPLAY; source /opt/ros/jazzy/setup.bash; exec python3 -m examples.cli run-episode --preset kuka_pick_ros2_rviz --seed 0 --steps 2000 --json",
+        "unset DISPLAY; source /opt/ros/jazzy/setup.bash; exec python3 -m examples.cli run-episode --preset kuka_ft_imu_pick_ros2_rviz_headless --seed 0 --steps 2000 --json",
       ]

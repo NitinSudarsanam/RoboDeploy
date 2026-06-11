@@ -22,14 +22,8 @@ class SensorReachPickPlacePolicy(ReachPickPlacePolicy):
         super().__init__(*args, config=config, **kwargs)
 
     def bind_runtime(self, backend, description=None) -> None:
-        """Bind IK only; do not read prop poses directly from the backend."""
-        desc = description or self._description
-        if desc is None:
-            return
-        self._backend = backend
-        from robodeploy.kinematics.policy_ik import attach_policy_ik
-
-        attach_policy_ik(self, backend, desc)
+        """Bind IK + backend carry adapters; never read prop poses from the backend."""
+        super().bind_runtime(backend, description)
 
     def attach_mujoco(self, backend, description=None) -> None:
         self.bind_runtime(backend, description)

@@ -18,6 +18,8 @@ class Ros2Runtime:
     _executor = None
     _spin_thread: Optional[threading.Thread] = None
     _node_count = 0
+    # When True, RoboDeploy-created rclpy nodes set ``use_sim_time`` (Gazebo + bridged /clock).
+    use_sim_time: bool = False
 
     @classmethod
     def ensure_started(cls) -> None:
@@ -66,6 +68,32 @@ class Ros2Runtime:
             except Exception:
                 pass
             cls._node_count = max(0, int(cls._node_count) - 1)
+
+    @classmethod
+    def ros_graph_has_clock(cls, timeout_s: float = 0.5) -> bool:
+        """Return True when ``/clock`` has at least one publisher (sim-time graph)."""
+        cls.ensure_started()
+        try:
+            import rclpy.node
+        except ImportError:
+            return False
+
+        probe = rclpy.node.Node("robodeploy_clock_probe")
+        cls.add_node(probe)
+        try:
+            if timeout_s > 0:
+                import time
+
+                time.sleep(float(timeout_s))
+            return int(probe.count_publishers("/clock")) > 0
+        except Exception:
+            return False
+        finally:
+            try:
+                cls.remove_node(probe)
+                probe.destroy_node()
+            except Exception:
+                pass
 
     @classmethod
     def shutdown(cls) -> None:

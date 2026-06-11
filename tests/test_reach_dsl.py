@@ -174,7 +174,8 @@ class ReachDSLTests(unittest.TestCase):
             policy._maybe_finalize_kinematic_place(0.5)
         backend.set_prop_pose.assert_called_once()
 
-    def test_ros2_rviz_place_finalize_snaps_source(self):
+    def test_ros2_rviz_place_finalize_does_not_snap_source(self):
+        """RViz fake-sim places honestly (no oracle snap) since the pin IK fix."""
         from unittest.mock import MagicMock
 
         from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
@@ -189,7 +190,49 @@ class ReachDSLTests(unittest.TestCase):
         }
         policy.bind_runtime(backend, MagicMock())
         policy._maybe_finalize_kinematic_place(0.2)
-        backend.set_prop_pose.assert_called_once()
+        backend.set_prop_pose.assert_not_called()
+
+    def test_gazebo_place_phase_snap_without_carry(self):
+        import os
+
+        import numpy as np
+        from unittest.mock import MagicMock, patch
+
+        from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
+
+        spec = ReachTrajectoryPolicy.default_pick_place_spec()
+        policy = ReachTrajectoryPolicy(
+            spec,
+            config={"sensor_only": True, "carry_mode": "kinematic"},
+        )
+        backend = MagicMock()
+        backend.sensor_backend_name = "gazebo"
+        backend._scene_prop_poses = {
+            "target": ((0.6, 0.2, 0.38), (1.0, 0.0, 0.0, 0.0)),
+            "source": ((0.55, 0.0, 0.38), (1.0, 0.0, 0.0, 0.0)),
+        }
+        policy.bind_runtime(backend, MagicMock())
+        policy._waypoints = {
+            "source": np.array([0.55, 0.0, 0.405], dtype=np.float32),
+            "target": np.array([0.6, 0.2, 0.405], dtype=np.float32),
+        }
+        policy._recompile_phases()
+        place_idx = next(i for i, p in enumerate(policy._phases) if p.spec.name == "place")
+        policy._phase_idx = place_idx
+        policy._phase_step = policy._phases[place_idx].max_steps
+        policy._carrying = False
+        from dataclasses import replace
+
+        obs = replace(
+            _obs_at_ee([0.6, 0.2, 0.5]),
+            objects={
+                "source": ([0.55, 0.0, 0.38], [1.0, 0.0, 0.0, 0.0]),
+                "target": ([0.6, 0.2, 0.38], [1.0, 0.0, 0.0, 0.0]),
+            },
+        )
+        with patch.dict(os.environ, {"ROBODEPLOY_GAZEBO_PLACE_SNAP": "1"}):
+            policy.get_action(obs)
+        backend.set_prop_pose.assert_called()
 
     def test_honest_place_defers_release_until_within_tolerance(self):
         import os

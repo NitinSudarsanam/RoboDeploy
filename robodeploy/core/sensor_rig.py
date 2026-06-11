@@ -17,6 +17,7 @@ SensorKind = Literal[
     "base_imu",
     "wrist_contact",
     "sim_prop_pose",
+    "ee_pose",
 ]
 
 
@@ -70,6 +71,7 @@ class SensorRig:
         base_imu: dict[str, Any] | None = None,
         wrist_contact: dict[str, Any] | None = None,
         prop_pose: dict[str, Any] | None = None,
+        ee_pose: dict[str, Any] | None = None,
         ee_link: str = "robot0/ee_link",
     ) -> SensorRig:
         """Build a common manipulation sensor rig from shorthand kwargs."""
@@ -126,6 +128,9 @@ class SensorRig:
         if prop_pose is not None:
             cfg = dict(prop_pose)
             specs.append(SensorSpec(kind="sim_prop_pose", name="prop_pose", config=cfg))
+        if ee_pose is not None:
+            cfg = dict(ee_pose)
+            specs.append(SensorSpec(kind="ee_pose", name="ee_pose", config=cfg))
         return cls(rig_id=rig_id, specs=specs)
 
     def materialize(
@@ -203,3 +208,67 @@ def materialize_sensor_rigs(
     for rig in rigs:
         sensors.extend(rig.materialize(is_real=is_real, backend_name=backend_name))
     return sensors
+
+
+def _rig_topic(ns: str, leaf: str) -> str:
+    base = str(ns).rstrip("/")
+    if not base.startswith("/"):
+        base = f"/{base}"
+    return f"{base}/{str(leaf).lstrip('/')}"
+
+
+def readiness_topics_from_sensor_rig_yaml(
+    rig_entries: list[dict[str, Any]],
+    *,
+    backend_name: str | None = "gazebo",
+) -> list[str]:
+    """ROS topics to wait on at sim launch, derived from preset ``sensor_rigs`` YAML."""
+    topics: list[str] = []
+    for entry in rig_entries:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("wrist_rgbd") is not None:
+            cfg = _apply_backend_sensor_defaults(
+                "wrist_camera",
+                dict(entry["wrist_rgbd"]),
+                backend_name=backend_name,
+            )
+            ns = str(cfg.get("namespace", "/wrist_camera"))
+            topics.append(_rig_topic(ns, str(cfg.get("rgb", "image_raw"))))
+            topics.append(_rig_topic(ns, str(cfg.get("info", "camera_info"))))
+        if entry.get("overhead_rgbd") is not None:
+            cfg = _apply_backend_sensor_defaults(
+                "overhead_camera",
+                dict(entry["overhead_rgbd"]),
+                backend_name=backend_name,
+            )
+            logical = str(cfg.get("name", "overhead_camera"))
+            ns = str(cfg.get("namespace", f"/{logical}"))
+            topics.append(_rig_topic(ns, str(cfg.get("rgb", "image_raw"))))
+            topics.append(_rig_topic(ns, str(cfg.get("info", "camera_info"))))
+        if entry.get("wrist_ft") is not None:
+            cfg = _apply_backend_sensor_defaults(
+                "wrist_ft",
+                dict(entry["wrist_ft"]),
+                backend_name=backend_name,
+            )
+            ns = str(cfg.get("namespace", "/wrist_ft"))
+            topics.append(_rig_topic(ns, str(cfg.get("wrench_topic", "wrench"))))
+        if entry.get("wrist_imu") is not None:
+            cfg = _apply_backend_sensor_defaults(
+                "wrist_imu",
+                dict(entry["wrist_imu"]),
+                backend_name=backend_name,
+            )
+            ns = str(cfg.get("namespace", "/wrist_imu"))
+            topics.append(_rig_topic(ns, str(cfg.get("imu_topic", "imu"))))
+        if entry.get("base_imu") is not None:
+            cfg = _apply_backend_sensor_defaults(
+                "base_imu",
+                dict(entry["base_imu"]),
+                backend_name=backend_name,
+            )
+            logical = str(cfg.get("name", "base_imu"))
+            ns = str(cfg.get("namespace", f"/{logical}"))
+            topics.append(_rig_topic(ns, str(cfg.get("imu_topic", "imu"))))
+    return list(dict.fromkeys(topics))

@@ -45,6 +45,8 @@ class GazeboPickOfflineTests(unittest.TestCase):
         self.assertEqual(cfg["backend"], "ros2_gazebo")
         world = cfg["backend_kwargs"]["config"]["sim"]["world"]
         self.assertIn(Path(world).name, ("pick_minimal.sdf", "gazebo_pick_minimal.sdf"))
+        topics = cfg["backend_kwargs"]["config"]["sim"]["wait_for_topics"]
+        self.assertNotIn("/wrist_camera/image_raw", topics)
 
     def test_injected_contact_matches_grasp_query_offline(self):
         monitor = GazeboContactMonitor()

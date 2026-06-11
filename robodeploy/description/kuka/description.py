@@ -61,6 +61,14 @@ class KukaDescription(RobotDescription):
             "wait_for_topics": ["/clock", "/joint_states"],
         }
 
+    def ros2_rviz_extra_config(self, robot_id: str) -> dict | None:
+        return {
+            f"{robot_id}.base_frame": "world",
+            f"{robot_id}.ee_frame": "ee_link",
+            "prefer_fk_ee_pose": True,
+            "rviz": {"fixed_frame": "world"},
+        }
+
     def gazebo_ros2_extra_config(self, robot_id: str) -> dict | None:
         return {
             f"{robot_id}.preset": "kuka_jtc",
@@ -73,6 +81,7 @@ class KukaDescription(RobotDescription):
             # Scene props and Pinocchio FK use world frame (URDF root ``world`` link).
             f"{robot_id}.base_frame": "world",
             f"{robot_id}.ee_frame": "ee_link",
+            "prefer_fk_ee_pose": True,
             "jtc_time_from_start_s": 0.4,
         }
 

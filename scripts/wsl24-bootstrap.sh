@@ -42,7 +42,7 @@ python3 -m venv .venv-wsl
 # shellcheck disable=SC1091
 source .venv-wsl/bin/activate
 pip install --upgrade pip
-pip install -e ".[sim,kinematics,dev]"
+pip install -e ".[sim,kinematics,dev]"  # rclpy from apt; no separate [ros2] extra
 
 echo "==> robodeploy doctor"
 # shellcheck disable=SC1091
@@ -55,7 +55,7 @@ Bootstrap complete.
 
 Next steps:
   source /opt/ros/jazzy/setup.bash && source .venv-wsl/bin/activate
-  python -m examples.cli run-episode --preset kuka_pick_ros2_rviz --steps 1500 --json
+  python -m examples.cli run-episode --preset kuka_ft_imu_pick_ros2_rviz_headless --seed 0 --steps 1500 --json
   python -m examples.kuka_ft_imu_pick_gazebo.run_gazebo   # Gazebo pick (Linux/WSL)
 
 See docs/DEMO_RUNBOOK.md for success signals and Docker fallback on Ubuntu 22.04.
