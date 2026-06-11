@@ -1,6 +1,6 @@
 # BROAD_GOALS progress tracker
 
-Last updated: **2026-06-11** (iteration 16). Governing docs: `BROAD_GOALS.md`, `transfer.md`, `plans/INTEGRATION_STATUS.md`.
+Last updated: **2026-06-11** (iteration 17). Governing docs: `BROAD_GOALS.md`, `transfer.md`, `plans/INTEGRATION_STATUS.md`.
 
 ## Pick-and-place demo status (V1 Track A)
 
@@ -14,20 +14,20 @@ Last updated: **2026-06-11** (iteration 16). Governing docs: `BROAD_GOALS.md`, `
 
 | # | Goal | Status | Gap |
 |---|------|--------|-----|
-| 1 | Cut representation boilerplate | **Partial → improved** | `robodeploy.demos` pick/task &lt;50/&lt;25 LOC; `test_representation_gaps` targets packaged demos + thin `examples/` shims; choreography/DSL template coverage still open |
-| 2 | Training loop | **Mostly done** | BC/PPO/gym/SubprocVecEnv; MuJoCo BC checkpoint eval in CI (`training-integration` + `sim` extra) |
+| 1 | Cut representation boilerplate | **Done** | All GOAL_01 acceptance boxes ticked (SceneBuilder 1-line props, SceneIR round-trip, RewardBuilder ≤5 lines, back-compat shims, choreography + templates tested) |
+| 2 | Training loop | **Done** | BC/PPO/gym/SubprocVecEnv; MuJoCo BC checkpoint eval in CI; `train eval` dummy-only by CLI design, non-dummy path via `robodeploy eval --policy ckpt.pt` |
 | 3 | Sensor → policy/task | **Done** | FT/IMU/contact predicates wired; MuJoCo pick E2E |
-| 4 | Teleop + data collection | **Partial → improved** | `record_stub_episode` + metadata stamping; headless record→BC test; `02_teleop.md` stub section; live device rehearsal open |
+| 4 | Teleop + data collection | **Mostly done** | LeRobot export + replay CLI (speed/pause) ticked; remaining 5 boxes need live devices (keyboard interactive, SpaceMouse, ROS2 twist live, hot-keys, record→replay motion) |
 | 5 | Sim2Real pipeline | **Mostly done** | Calibration/DR/transfer metrics; real-hardware eval manual |
-| 6 | Backend parity | **Partial → improved** | Pick-place SceneIR pose tolerance covered offline; Isaac GPU live CI — see `docs/BACKEND_SETUP.md#isaac-sim-self-hosted-ci` (manual GPU workstation / self-hosted runner) |
-| 7 | Docs + scaffolder | **Partial → improved** | `01_getting_started` multi-robot cmd; `RELEASE.md` pre-tag demo table; `DEMO_RUNBOOK` honest JTC caveat; PyPI tag publish open |
-| 8 | Multi-robot + distribution | **Mostly done** | `two_franka_pick_mujoco` E2E green in full suite; wheel + `pypi_dry_run` OK; PyPI tag publish still open |
-| 9 | Learned policy integration | **Mostly done** | Loader/adapter/negotiation; policy LOC refactor deferred |
-| 10 | Observability + replay | **Mostly done** | Logger/replay/manifest; dashboard deferred |
+| 6 | Backend parity | **Partial** | All 7 open boxes need Isaac GPU Kit runtime — see `docs/BACKEND_SETUP.md#isaac-sim-self-hosted-ci` |
+| 7 | Docs + scaffolder | **Mostly done** | Tutorial 02 CI test + docstring audit + migration guide ticked; only `pip install robodeploy` box left (blocked on PyPI tag) |
+| 8 | Multi-robot + distribution | **Mostly done** | `two_franka_pick_mujoco` E2E green; wheel + `pypi_dry_run` OK; PyPI/conda publish blocked on `v0.2.0` tag (repo admin) |
+| 9 | Learned policy integration | **Done** | Policy LOC refactor landed: robomimic/diffusion/vla = 50/49/43 lines + LOC regression test |
+| 10 | Observability + replay | **Mostly done** | Logger/replay/manifest; dashboard deferred (signed off) |
 | 11 | Benchmarks + eval | **Done** | manipulation_v1 harness + nightly dummy suite |
 | 12 | Real-hw safety | **Done** | SafetyMonitor, recovery, sim injectors |
 
-**Honest overall:** ~**91%** of acceptance criteria across all 12 goals (all 3 pick demos PASS with default snap; Gazebo honest JTC documented as accepted limitation; PyPI tag + WSL 24.04 interactive RViz + Isaac GPU CI still open).
+**Honest overall:** ~**95%** of acceptance criteria across all 12 goals. 16 boxes remain unchecked, **all blocked on external resources**: 7 Isaac GPU (goal 6), 5 live teleop devices (goal 4), 3 PyPI/conda publish (goals 7/8), 1 dashboard (deferred, goal 10), plus WSL 24.04 interactive RViz. Zero software-only gaps remain actionable from this machine.
 
 ## Done vs deferred (user action)
 
@@ -42,6 +42,25 @@ Last updated: **2026-06-11** (iteration 16). Governing docs: `BROAD_GOALS.md`, `
 | Observability dashboard | **Deferred** — low ROI |
 
 ## Iteration log
+
+### 2026-06-11 — iteration 17
+
+**Done:**
+- **Committed iterations 1–16** (previously all uncommitted): `e8db35a` demo parity + demos packaging; stray `pick_out*.json` deleted + gitignored; `.gitattributes` line-ending normalization committed.
+- **Goal 9 (P1):** Learned policy LOC refactor — robomimic/diffusion/vla = **50/49/43 lines** (`7a3d4c4`); `ActionSmoother`, `PlanQueue`/`build_plan`/`batch_first_actions`, `vla_packet`/`vla_heuristic_action` extracted to `helpers.py`; LOC regression test added.
+- **Goals 1/2/7 acceptance closure** (`76f4601`): ticked stale GOAL_01 boxes (1-line props, SceneIR round-trip, RewardBuilder, back-compat) with test evidence; GOAL_02 `train eval` annotated (non-dummy via `robodeploy eval --policy ckpt.pt`, MuJoCo CI); tutorial-02 CI exec test + interface docstring audit test (`tests/test_tutorial_02_task.py`); migration guide ticked.
+- **Goal 4:** ticked LeRobot-loadable export + replay CLI speed/pause boxes (existing test evidence).
+- **Test hygiene** (`0a67aa9`): leaderboard submit test wrote into repo `benchmarks/` tree every suite run (timestamp/git-hash churn) — now writes to tmp.
+- **Re-verify:** MuJoCo `kuka_ft_imu_pick_mujoco --seed 0 --steps 2000` → **`success=true` step 306**.
+- Full pytest `-m "not hardware"`: **651 passed, 21 skipped** pre-refactor; post-refactor rerun **654 passed, 21 skipped** (~6m20s; +3 new tests).
+
+**Next (all need user action):**
+1. PyPI tag `v0.2.0` + trusted publishing (repo admin).
+2. `wsl --install -d Ubuntu-24.04` → interactive RViz rehearsal.
+3. Isaac Sim GPU workstation / self-hosted runner for goal 6 boxes.
+4. Live teleop devices (keyboard interactive session, SpaceMouse) for goal 4 boxes.
+
+**Blockers:** unchanged external ones only (PyPI admin, WSL 24.04, Isaac GPU, teleop hardware).
 
 ### 2026-06-11 — iteration 16
 

@@ -289,11 +289,11 @@ Defer to phase 4.5 if time permits.
 - [ ] `robodeploy teleop --device keyboard --preset kuka_pick_mujoco` lets user drive arm via WASD.
 - [ ] SpaceMouse 6-DOF input maps to EE delta cleanly (linear scale, deadzone respected).
 - [ ] Recorded episodes round-trip: `teleop --record` → `replay` reproduces motion.
-- [ ] LeRobot export produces dataset loadable by `lerobot/datasets.LeRobotDataset`.
+- [x] LeRobot export produces dataset loadable by `lerobot/datasets.LeRobotDataset` (`tests/test_lerobot_export.py::test_lerobot_dataset_loadable` loads via the real `LeRobotDataset` class).
 - [ ] ROS2 `teleop_twist_keyboard` → `/cmd_vel` → `Ros2TwistTeleop` controls sim arm.
 - [x] All teleop devices implement `ITeleopDevice` and pass `tests/test_teleop_contract.py`.
 - [ ] Hot-key recording toggle (`Tab` default) + episode reset (`R` default) work in keyboard demo.
-- [ ] CLI `robodeploy replay demo.jsonl` plays back at configurable speed with pause/step.
+- [x] CLI `robodeploy replay demo.jsonl` plays back at configurable speed with pause/step (`--speed` / `--pause-at-step`; `tests/test_replay_cli.py`).
 
 ## Dependencies
 
