@@ -488,6 +488,8 @@ class EvalCliTests(unittest.TestCase):
                     str(REPO_ROOT / "benchmarks"),
                 ]
             )
+            # Submit into the tmp root so the repo's committed submission
+            # snapshots are not rewritten on every test run.
             code = main(
                 [
                     "leaderboard",
@@ -498,10 +500,12 @@ class EvalCliTests(unittest.TestCase):
                     "--author",
                     "cli_test",
                     "--benchmarks-root",
-                    str(REPO_ROOT / "benchmarks"),
+                    str(Path(tmp) / "benchmarks"),
                 ]
             )
             self.assertEqual(code, 0)
+            submissions = Path(tmp) / "benchmarks" / "leaderboard" / "submissions"
+            self.assertTrue(any(submissions.rglob("cli_test_*.json")))
 
 
 class BenchmarkPresetBuildTests(unittest.TestCase):
