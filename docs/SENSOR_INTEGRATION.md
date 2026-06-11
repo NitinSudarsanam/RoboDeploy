@@ -64,6 +64,8 @@ At env build time, `RoboEnv` resolves each spec to a concrete `ISensor` via `res
 
 ## Built-in sensors
 
+Pose sensors (`prop_pose`, `ee_pose`) and the other modalities below register via `robodeploy/builtins.py` when `RoboEnv` starts — **no `custom_modules` import** required. List them in `sensor_rigs` only.
+
 ### Camera (RGB-D)
 
 - **MuJoCo**: `robodeploy/sensors/camera/sim/mujoco_camera.py`

@@ -52,7 +52,8 @@ Audit of sensor coverage across backends, policies, tasks. Status as of 2026-06-
 - ROS2/Gazebo: `camera_rgbd.py`, `wrench.py`, `imu.py`.
 - Real: `realsense.py`, `ati_ft.py` (RDT header + overflow validation), `xsens.py` (serial stub), `ft_threshold.py` (contact).
 - Tactile: `sensors/tactile/stub.py` — deferred with test skip.
-- Sim oracle: `examples/sensors/prop_pose.py` → `obs.objects`.
+- Sim oracle: `robodeploy/sensors/pose/sim/prop_pose.py` → `obs.objects` (rig kind `prop_pose`).
+- EE FK: `robodeploy/sensors/pose/sim/ee_pose.py` → `obs.ee_pose`.
 - Vision: `examples/perception/color_blob.py` + `vision_target_in_view` success predicate.
 
 ### Policy Sensor Consumption

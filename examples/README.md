@@ -63,14 +63,14 @@ Import via `custom_modules` in preset YAML or `use("examples.tasks")` in code:
 |--------|-----------|
 | `examples.tasks` | `pick_place`, `pour`, `peg_insertion`, `showcase_scene`, … |
 | `examples.policies` | `example_reach_pick`, `example_sensor_reach_pick`, `example_joint_track` |
-| `examples.sensors` | `sim_prop_pose` oracle reader |
+| `examples.sensors` | Re-exports built-in `sim_prop_pose` / `ee_pose` (optional; builtins load without this) |
 | `examples.user_kuka_sinusoid.components` | `user_kuka_sinusoid` task, `user_sinusoid` policy |
 
 ---
 
 ## Runnable pick-and-place demos (MuJoCo)
 
-Pick-place demos use **`example_sensor_reach_pick`** and `SimPropPoseSensor` by default (`kuka_pick_mujoco`). Object poses come from `Observation.objects`, not `backend.get_prop_pose()`.
+Pick-place demos use **`example_sensor_reach_pick`** with the `prop_pose` + `ee_pose` sensor rig (`kuka_pick_mujoco`). Prop poses are published into `Observation.objects` by the built-in `robodeploy.sensors.pose.sim.prop_pose` sensor — policies should not call `backend.get_prop_pose()` directly.
 
 | Example | Command |
 |---------|---------|

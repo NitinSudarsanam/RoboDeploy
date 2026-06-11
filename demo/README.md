@@ -25,13 +25,14 @@ On MuJoCo you typically see success around step 400 with the default seed. RViz 
 | **RViz** | WSL2 / Linux + ROS Jazzy | Config + registrations OK; run in WSL |
 | **Gazebo** | WSL2 / Linux + ROS Jazzy | Config + registrations OK; run in WSL |
 
-Registered names (loaded via `custom_modules` in `kuka_pick.yaml`):
+### Registrations
 
-| Registry name | Module |
-|---------------|--------|
-| `demo_pick_place` | `demo.tasks.pick_place` |
-| `demo_sensor_reach_pick` | `demo.policies.sensor_reach_pick` |
-| `ee_pose`, `prop_pose` sensors | Built into `robodeploy` (sensor rig YAML only) |
+| Name | Where it lives | How it loads |
+|------|----------------|--------------|
+| `demo_pick_place` | `demo/tasks/pick_place.py` | `custom_modules: [demo.tasks]` |
+| `demo_sensor_reach_pick` | `demo/policies/sensor_reach_pick.py` | `custom_modules: [demo.policies]` |
+| `ee_pose`, `prop_pose` (rig kinds) | `robodeploy/sensors/pose/sim/` | **Builtins** — no `custom_modules` entry |
+| FT, IMU, contact, cameras | `robodeploy/sensors/…` | Builtins when listed in `sensor_rigs` |
 
 ---
 
@@ -46,6 +47,8 @@ Registered names (loaded via `custom_modules` in `kuka_pick.yaml`):
 | `demo/policies/sensor_reach_pick.py` | Policy registration (`demo_sensor_reach_pick`) |
 | `demo/policies/reach_pick_place.yaml` | Reach phase waypoints and carry tuning |
 | `robodeploy/policies/reach_dsl.py` | Reach / carry / place engine used by the demo policy |
+| `robodeploy/sensors/pose/sim/ee_pose.py` | EE FK sensor (`ee_pose` rig) — library builtin |
+| `robodeploy/sensors/pose/sim/prop_pose.py` | Sim prop oracle (`prop_pose` rig) — library builtin |
 
 ---
 
@@ -294,7 +297,7 @@ The robot base sits at the world origin. If the arm appears to reach away from t
 
 ## Relationship to `examples/`
 
-`demo/` and `examples/` are **separate**: this demo owns its task (`demo_pick_place`), policy (`demo_sensor_reach_pick`), scene, and sensors under `demo/`. The `examples/` tree has parallel registrations (`pick_place`, `example_sensor_reach_pick`) for CLI presets and benchmarks.
+`demo/` and `examples/` are **separate** for task, policy, and scene: this demo registers `demo_pick_place` and `demo_sensor_reach_pick` under `demo/`. Pose sensors (`ee_pose`, `prop_pose`) and other rig modalities (FT, IMU, contact) come from **`robodeploy` builtins** — configured only via `sensor_rigs` in YAML. The `examples/` tree has parallel task/policy names (`pick_place`, `example_sensor_reach_pick`) for CLI presets and benchmarks.
 
 For the fuller preset/CLI workflow see [`docs/DEMO_RUNBOOK.md`](../docs/DEMO_RUNBOOK.md):
 
