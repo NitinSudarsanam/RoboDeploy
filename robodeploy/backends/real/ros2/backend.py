@@ -11,6 +11,7 @@ separate simulated backend so `is_real` remains honest.
 from __future__ import annotations
 
 import time
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -183,6 +184,12 @@ class ROS2RealBackend(BackendBase):
             except Exception as exc:
                 self._diagnostics.setdefault("warnings", []).append(
                     f"robot_state_publisher not started: {exc}"
+                )
+                warnings.warn(
+                    f"robot_state_publisher not started ({exc}); RViz will show the robot "
+                    "at its zero pose and TF ee-pose lookups will fail.",
+                    RuntimeWarning,
+                    stacklevel=2,
                 )
 
         for robot in robots:
