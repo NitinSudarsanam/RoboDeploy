@@ -55,7 +55,9 @@ class PropPoseSyncer:
         x, y, z = (float(v) for v in position)
         w, qx, qy, qz = (float(v) for v in orientation)
         service = f"/world/{world_name}/set_pose"
-        for msgs_mod in ("gz.msgs13", "gz.msgs12", "gz.msgs"):
+        # Harmonic pairs gz-transport13 with gz-msgs10 (Ionic: msgs11); the
+        # transport-versioned names never exist as msgs modules.
+        for msgs_mod in ("gz.msgs10", "gz.msgs11", "gz.msgs13", "gz.msgs12", "gz.msgs"):
             try:
                 msgs = __import__(msgs_mod, fromlist=["Pose", "Boolean"])
                 pose = msgs.Pose()
