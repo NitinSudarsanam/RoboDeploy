@@ -155,6 +155,8 @@ Isaac Sim uses NVIDIA's Kit Python environment; the `isaacsim` extra is a marker
 
 ## Quick start (5 minutes)
 
+**Pick-and-place demo (self-contained, no `examples/` imports):** edit `SIMULATOR` in [`demo/run_pick.py`](demo/run_pick.py) (`mujoco` | `rviz` | `gazebo`) and run `python demo/run_pick.py`. Full guide: [`demo/README.md`](demo/README.md). MuJoCo works on native Windows; RViz and Gazebo need WSL2/Linux with ROS 2 Jazzy.
+
 ```bash
 # 1. Environment check
 robodeploy doctor
@@ -162,13 +164,17 @@ robodeploy doctor
 # 2. No simulator required
 robodeploy run-episode --dummy --steps 10 --json
 
-# 3. List demo presets (examples/, not the PyPI package)
+# 3. Kuka pick demo (MuJoCo on Windows; task/policy live under demo/)
+pip install -e ".[sim,kinematics]"
+python demo/run_pick.py
+
+# 4. List CLI presets (examples/, parallel task/policy names)
 python -m examples.cli list-presets
 
-# 4. MuJoCo pick place smoke (Linux/macOS/Windows with [sim])
+# 5. MuJoCo pick via examples preset
 python -m examples.cli run-episode --preset kuka_pick_mujoco --steps 50
 
-# 5. Tier 1 benchmark eval on dummy backend
+# 6. Tier 1 benchmark eval on dummy backend
 robodeploy eval --benchmark manipulation_v1/reach_target --backend dummy --episodes 5
 ```
 
@@ -386,7 +392,9 @@ conda-recipe/            conda forge recipe metadata
 | [docs/index.md](docs/index.md) | MkDocs home + doc map |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Layer diagram and design principles |
 | [CONTRACTS.md](CONTRACTS.md) | Public API contracts |
-| [examples/README.md](examples/README.md) | Runnable demos and presets |
+| [demo/README.md](demo/README.md) | **Kuka pick demo** (`demo/`: task, policy, MuJoCo/RViz/Gazebo) |
+| [docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md) | Live demo rehearsal (CLI presets + Docker/WSL) |
+| [examples/README.md](examples/README.md) | Runnable examples and YAML presets |
 | [docs/PLATFORM_STATUS.md](docs/PLATFORM_STATUS.md) | What CI proves vs what is planned |
 | [docs/RELEASE.md](docs/RELEASE.md) | Versioning, PyPI, PR checklist |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |

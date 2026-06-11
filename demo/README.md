@@ -2,20 +2,36 @@
 
 A minimal, self-contained pick-and-place demo for the Kuka arm. The same task, policy, sensors, and scene run on **MuJoCo**, **ROS 2 + RViz**, and **Gazebo** — you only change which simulator is active.
 
-This folder is intentionally small: `demo/` holds the entry script and YAML preset. Example tasks, policies, sensors, and scenes live in `examples/`; robot models and backends live in `robodeploy/`.
+This folder is self-contained: `demo/` holds the entry script, YAML preset, task, policy, sensors, and scene. Only `robodeploy/` (installed library) is required at runtime — no `examples/` imports.
 
 ---
 
 ## What it does
 
-1. Spawns a table with a **red source cube** and a **green target sphere** at fixed world-frame poses (see `examples/scenes/pick_table.py`).
-2. Runs a sensor-driven reach policy (`example_sensor_reach_pick`) that:
+1. Spawns a table with a **red source cube** and a **green target sphere** at fixed world-frame poses (see `demo/scenes/pick_table.py`).
+2. Runs a sensor-driven reach policy (`demo_sensor_reach_pick`) that:
    - reaches the cube using wrist FT, contact, prop pose, and EE pose sensors;
    - engages a kinematic carry when grasp conditions are met;
    - moves the cube toward the target and reports success when placement criteria are satisfied.
 3. Prints progress every 100 steps and ends with `Success.` or `Done.`
 
-On MuJoCo you typically see success around step 400 with the default seed. RViz and Gazebo require a Linux or WSL2 environment with ROS 2 Jazzy.
+On MuJoCo you typically see success around step 400 with the default seed. RViz and Gazebo use the **same** task, policy, and sensors — only the backend block in YAML changes — but they require Linux or WSL2 with ROS 2 Jazzy (not native Windows).
+
+### Backend support
+
+| Backend | Where it runs | Verified |
+|---------|---------------|----------|
+| **MuJoCo** | Windows, Linux, macOS | Yes (native Windows) |
+| **RViz** | WSL2 / Linux + ROS Jazzy | Config + registrations OK; run in WSL |
+| **Gazebo** | WSL2 / Linux + ROS Jazzy | Config + registrations OK; run in WSL |
+
+Registered names (loaded via `custom_modules` in `kuka_pick.yaml`):
+
+| Registry name | Module |
+|---------------|--------|
+| `demo_pick_place` | `demo.tasks.pick_place` |
+| `demo_sensor_reach_pick` | `demo.policies.sensor_reach_pick` |
+| `ee_pose`, `prop_pose` sensors | `demo.sensors` |
 
 ---
 
@@ -25,9 +41,12 @@ On MuJoCo you typically see success around step 400 with the default seed. RViz 
 |------|---------|
 | `demo/run_pick.py` | Entry point — edit `SIMULATOR` and `SEED` here |
 | `demo/config/kuka_pick.yaml` | Per-backend config (task, policy, sensors, backend kwargs) |
-| `examples/scenes/pick_table.py` | Shared scene geometry (table, cube, target) |
-| `examples/tasks/pick_place.py` | Task registration (`pick_place`) |
-| `robodeploy/policies/reach_dsl.py` | Reach / carry / place policy logic |
+| `demo/scenes/pick_table.py` | Scene geometry (table, cube, target) |
+| `demo/tasks/pick_place.py` | Task registration (`demo_pick_place`) |
+| `demo/policies/sensor_reach_pick.py` | Policy registration (`demo_sensor_reach_pick`) |
+| `demo/policies/reach_pick_place.yaml` | Reach phase waypoints and carry tuning |
+| `demo/sensors/` | `ee_pose`, `prop_pose` sensors for the sensor rig |
+| `robodeploy/policies/reach_dsl.py` | Reach / carry / place engine used by the demo policy |
 
 ---
 
@@ -218,6 +237,9 @@ All tunables live in `demo/config/kuka_pick.yaml`. The file uses YAML anchors so
 
 | Key | Default | Meaning |
 |-----|---------|---------|
+| `task` | `demo_pick_place` | Demo task (scene from `demo/scenes/pick_table.py`) |
+| `policy` | `demo_sensor_reach_pick` | Sensor-driven reach policy (`demo/policies/`) |
+| `custom_modules` | `demo.tasks`, `demo.policies`, `demo.sensors` | Registers demo code (no `examples/` import) |
 | `max_episode_steps` | `2000` (4000 for gazebo) | Hard step limit; also passed to `run_pick.py` loop |
 | `policy_kwargs.config.sensor_only` | `true` | Use observation sensors only (no privileged state) |
 | `policy_kwargs.config.carry_mode` | `follow` | Remapped to kinematic carry on ROS backends |
@@ -258,7 +280,7 @@ Edit `max_episode_steps` under the relevant simulator block in `kuka_pick.yaml` 
 
 ## Scene layout (what you should see)
 
-All backends use the same world-frame layout from `pick_table.py`:
+All backends use the same world-frame layout from `demo/scenes/pick_table.py`:
 
 | Object | Position (x, y, z) m | Appearance |
 |--------|----------------------|------------|
@@ -273,27 +295,32 @@ The robot base sits at the world origin. If the arm appears to reach away from t
 
 ## Relationship to `examples/`
 
-This demo is a **simplified front door** to the same stack documented in [`docs/DEMO_RUNBOOK.md`](../docs/DEMO_RUNBOOK.md).
+`demo/` and `examples/` are **separate**: this demo owns its task (`demo_pick_place`), policy (`demo_sensor_reach_pick`), scene, and sensors under `demo/`. The `examples/` tree has parallel registrations (`pick_place`, `example_sensor_reach_pick`) for CLI presets and benchmarks.
+
+For the fuller preset/CLI workflow see [`docs/DEMO_RUNBOOK.md`](../docs/DEMO_RUNBOOK.md):
 
 | Use case | Command |
 |----------|---------|
-| **This demo** (minimal) | `python demo/run_pick.py` |
+| **This demo** (self-contained) | `python demo/run_pick.py` |
 | CLI with presets | `python -m examples.cli run-episode --preset kuka_ft_imu_pick --simulator mujoco --seed 0 --viewer` |
-| Visual runner module | `python -m examples.kuka_ft_imu_pick.run_visual --simulator mujoco --seed 0` |
-
-Presets in `examples/config/presets.yaml` and `examples/presets/` mirror the same task/policy; `demo/config/kuka_pick.yaml` is a standalone copy for presentations and quick edits without touching the examples tree.
 
 ---
 
 ## Automated tests
 
-From repo root:
+**Demo smoke (MuJoCo):**
+
+```bash
+python demo/run_pick.py   # SIMULATOR = "mujoco"
+```
+
+**Library / examples parity** (uses `examples/`, not `demo/` — parallel scene and policy):
 
 ```bash
 python -m pytest tests/test_pick_scene_parity.py tests/test_pick_parity.py -q
 ```
 
-These verify cross-backend scene pose equivalence, world-frame RViz config, EE sensor behavior, and marker republish on carry.
+These verify cross-backend scene pose equivalence, world-frame RViz config, EE sensor behavior, and marker republish on carry. The demo duplicates the same scene geometry and policy phases under `demo/` with separate registry names.
 
 ---
 

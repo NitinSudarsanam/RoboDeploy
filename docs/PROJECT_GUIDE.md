@@ -160,9 +160,9 @@ Tasks implement `ITask` / `TaskBase`:
 | `failure_fn(obs)` | Early termination |
 | `reset_routine(backend)` | Optional homing sequence (real hardware) |
 
-Example tasks: `pick_place`, `pour`, `peg_insertion`, `showcase_scene` in `examples/tasks/`.
+Example tasks: `pick_place`, `pour`, `peg_insertion`, `showcase_scene` in `examples/tasks/`. The self-contained Kuka pick demo under `demo/` registers `demo_pick_place` via `demo.tasks` (see [`demo/README.md`](../demo/README.md)).
 
-Register with `@register_task("name")` and import via `use("examples.tasks")`.
+Register with `@register_task("name")` and import via `use("examples.tasks")` or `use("demo.tasks")` for the demo package.
 
 ---
 

@@ -1,0 +1,21 @@
+reach_pick_place:
+  action_space: JOINT_POS
+  action_hz: 50.0
+  home: [0.0, -0.6, 0.0, -1.8, 0.0, 1.2, 0.0]
+  blend: 0.22
+  settle_dist: 0.025
+  steps_per_phase: 180
+  carry:
+    mode: kinematic
+    offset: [0.0, 0.0, -0.06]
+  phases:
+    - {name: settle_home, kind: settle, hold_steps: 40}
+    - {name: pregrasp, kind: reach, target: source, offset: [0, 0, 0.10], tracking_blend: 0.22, settle_threshold: 0.025}
+    - {name: grasp, kind: reach, target: source, offset: [0, 0, 0.025], engage_carry: true, tracking_blend: 0.10, settle_threshold: 0.02}
+    - {name: close_gripper, kind: gripper, command: close, hold_steps: 10}
+    - {name: lift, kind: reach, target: source, offset: [0, 0, 0.16]}
+    - {name: transit, kind: reach, target: target, offset: [0, 0, 0.14]}
+    - {name: place, kind: reach, target: target, offset: [0, 0, 0.085], release_carry: true, settle_threshold: 0.02}
+    - {name: open_gripper, kind: gripper, command: open, hold_steps: 10}
+    - {name: retreat, kind: reach, target: target, offset: [0, 0, 0.14]}
+    - {name: hold, kind: hold, steps: 30, target: target, offset: [0, 0, 0.14]}

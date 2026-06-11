@@ -2,9 +2,16 @@
 
 Operational guide for the V1 Track A pick-place demos across MuJoCo, ROS 2 + RViz, and Gazebo. Use this when rehearsing a live demo, recording insurance video, or validating a fresh install.
 
-**Quick path (minimal):** see [`demo/README.md`](../demo/README.md) — edit `SIMULATOR` in `demo/run_pick.py` and run `python demo/run_pick.py`. No CLI or `examples/` imports required.
+**Quick path (minimal):** see [`demo/README.md`](../demo/README.md) — edit `SIMULATOR` in `demo/run_pick.py` and run `python demo/run_pick.py`. The demo is **self-contained** under `demo/` (`demo_pick_place`, `demo_sensor_reach_pick`, local sensors/scene). No CLI or `examples/` imports required.
 
-**What these demos are:** sensor-driven reach policies (`example_sensor_reach_pick`, `sensor_only: true`) with FT/contact grasp engage and follow carry (kinematic on RViz fake-sim). Same **task + policy + sensor rig** across MuJoCo, RViz, and Gazebo; only `backend` / `backend_kwargs` differ.
+**Examples / CLI path:** presets in `examples/config/presets.yaml` use parallel registrations (`pick_place`, `example_sensor_reach_pick`) via `examples.tasks`, `examples.policies`, `examples.sensors`.
+
+**What both paths do:** sensor-driven reach (`sensor_only: true`) with FT/contact grasp engage and follow carry (kinematic on RViz fake-sim). Same **task + policy + sensor rig** shape across MuJoCo, RViz, and Gazebo; only `backend` / `backend_kwargs` differ.
+
+| Path | Task | Policy | Run |
+|------|------|--------|-----|
+| `demo/` | `demo_pick_place` | `demo_sensor_reach_pick` | `python demo/run_pick.py` |
+| `examples/` presets | `pick_place` | `example_sensor_reach_pick` | `python -m examples.cli run-episode --preset …` |
 
 **Recommended headline preset (MuJoCo):** `kuka_ft_imu_pick_mujoco` — FT + IMU + contact + prop_pose + ee_pose.
 

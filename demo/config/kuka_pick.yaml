@@ -2,8 +2,8 @@
 
 _pick_core: &pick_core
   robot: kuka
-  task: pick_place
-  policy: example_sensor_reach_pick
+  task: demo_pick_place
+  policy: demo_sensor_reach_pick
   max_episode_steps: 2000
   safety:
     max_force_N: 150.0
@@ -34,9 +34,9 @@ _pick_core: &pick_core
         prop_names: [source, target]
       ee_pose: {}
   custom_modules:
-    - examples.tasks
-    - examples.policies
-    - examples.sensors
+    - demo.tasks
+    - demo.policies
+    - demo.sensors
 
 _backend_mujoco: &backend_mujoco
   backend: mujoco

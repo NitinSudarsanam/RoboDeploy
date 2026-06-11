@@ -1,5 +1,6 @@
 """Kuka pick-and-place demo.
 
+Uses only ``robodeploy/`` (library) and ``demo/`` (task, policy, sensors, scene).
 Edit SIMULATOR below, then from repo root:
 
     python demo/run_pick.py
