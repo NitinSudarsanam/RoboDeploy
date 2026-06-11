@@ -35,6 +35,8 @@ _BUILTIN_MODULES: tuple[str, ...] = (
     "robodeploy.sensors.contact.sim.mujoco_contact",
     "robodeploy.sensors.contact.sim.gazebo_contact",
     "robodeploy.sensors.contact.real.ft_threshold",
+    "robodeploy.sensors.pose.sim.prop_pose",
+    "robodeploy.sensors.pose.sim.ee_pose",
     "robodeploy.sensors.tactile.stub",
     # Policies
     "robodeploy.policies.learned.robomimic",

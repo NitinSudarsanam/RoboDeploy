@@ -36,7 +36,6 @@ _pick_core: &pick_core
   custom_modules:
     - demo.tasks
     - demo.policies
-    - demo.sensors
 
 _backend_mujoco: &backend_mujoco
   backend: mujoco

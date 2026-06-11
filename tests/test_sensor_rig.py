@@ -11,9 +11,10 @@ if str(REPO_ROOT) not in sys.path:
 
 class SensorRigTests(unittest.TestCase):
     def test_robot_mounted_materializes_prop_pose_sensor(self):
+        from robodeploy.builtins import import_builtins
         from robodeploy.core.sensor_rig import SensorRig
 
-        use("examples.sensors")
+        import_builtins()
         rig = SensorRig.robot_mounted("rig0", prop_pose={"prop_names": ["source"]})
         sensors = rig.materialize(is_real=False, backend_name="mujoco")
         self.assertEqual(len(sensors), 1)

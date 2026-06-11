@@ -2,7 +2,7 @@
 
 A minimal, self-contained pick-and-place demo for the Kuka arm. The same task, policy, sensors, and scene run on **MuJoCo**, **ROS 2 + RViz**, and **Gazebo** — you only change which simulator is active.
 
-This folder is self-contained: `demo/` holds the entry script, YAML preset, task, policy, sensors, and scene. Only `robodeploy/` (installed library) is required at runtime — no `examples/` imports.
+This folder is self-contained: `demo/` holds the entry script, YAML preset, task, policy, and scene. Pose sensors (`ee_pose`, `prop_pose`) ship in `robodeploy/`; only `demo.tasks` and `demo.policies` need `custom_modules`.
 
 ---
 
@@ -31,7 +31,7 @@ Registered names (loaded via `custom_modules` in `kuka_pick.yaml`):
 |---------------|--------|
 | `demo_pick_place` | `demo.tasks.pick_place` |
 | `demo_sensor_reach_pick` | `demo.policies.sensor_reach_pick` |
-| `ee_pose`, `prop_pose` sensors | `demo.sensors` |
+| `ee_pose`, `prop_pose` sensors | Built into `robodeploy` (sensor rig YAML only) |
 
 ---
 
@@ -45,7 +45,6 @@ Registered names (loaded via `custom_modules` in `kuka_pick.yaml`):
 | `demo/tasks/pick_place.py` | Task registration (`demo_pick_place`) |
 | `demo/policies/sensor_reach_pick.py` | Policy registration (`demo_sensor_reach_pick`) |
 | `demo/policies/reach_pick_place.yaml` | Reach phase waypoints and carry tuning |
-| `demo/sensors/` | `ee_pose`, `prop_pose` sensors for the sensor rig |
 | `robodeploy/policies/reach_dsl.py` | Reach / carry / place engine used by the demo policy |
 
 ---
@@ -239,7 +238,7 @@ All tunables live in `demo/config/kuka_pick.yaml`. The file uses YAML anchors so
 |-----|---------|---------|
 | `task` | `demo_pick_place` | Demo task (scene from `demo/scenes/pick_table.py`) |
 | `policy` | `demo_sensor_reach_pick` | Sensor-driven reach policy (`demo/policies/`) |
-| `custom_modules` | `demo.tasks`, `demo.policies`, `demo.sensors` | Registers demo code (no `examples/` import) |
+| `custom_modules` | `demo.tasks`, `demo.policies` | Registers demo task/policy; pose sensors are library builtins |
 | `max_episode_steps` | `2000` (4000 for gazebo) | Hard step limit; also passed to `run_pick.py` loop |
 | `policy_kwargs.config.sensor_only` | `true` | Use observation sensors only (no privileged state) |
 | `policy_kwargs.config.carry_mode` | `follow` | Remapped to kinematic carry on ROS backends |

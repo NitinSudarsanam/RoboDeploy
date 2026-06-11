@@ -99,7 +99,11 @@ Exposed as `obs.contact_state[name] -> bool`. Used by `contact_held` success pre
 
 ### Prop pose (sim oracle)
 
-`examples/sensors/prop_pose.py` publishes ground-truth object poses into `obs.objects`. Use for sim development; replace with vision for sim2real transfer.
+`robodeploy/sensors/pose/sim/prop_pose.py` publishes ground-truth object poses into `obs.objects` (rig kind `prop_pose` → `sim_prop_pose`). Use for sim development; replace with vision or `perception_source` for sim2real transfer.
+
+### EE pose (sim FK)
+
+`robodeploy/sensors/pose/sim/ee_pose.py` publishes `obs.ee_pose` from joint encoders + FK (MuJoCo, Pinocchio, or ROS TF). Configure `prefer_fk_ee_pose` / `robot0.base_frame: world` on ROS backends for world-frame parity with scene props.
 
 ### Tactile (stub)
 
