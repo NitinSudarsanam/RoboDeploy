@@ -11,19 +11,49 @@ Visualization Manager:
   Displays:
     - Class: rviz_default_plugins/RobotModel
       Name: RobotModel
-      Robot Description: robot_description
+      Enabled: true
+      Description Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Description Source: Topic
     - Class: rviz_default_plugins/MarkerArray
       Name: SceneMarkers
-      Topic: /robodeploy/scene/markers
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robodeploy/scene/markers
     - Class: rviz_default_plugins/MarkerArray
       Name: TaskMarkers
-      Topic: /robodeploy/tasks/markers
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robodeploy/tasks/markers
     - Class: rviz_default_plugins/Pose
       Name: EE_Pose
-      Topic: /robodeploy/robot0/ee_pose
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robodeploy/robot0/ee_pose
     - Class: rviz_default_plugins/Marker
       Name: EE_Trace
-      Topic: /robodeploy/robot0/trace
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robodeploy/robot0/trace
   Global Options:
     Fixed Frame: world
-

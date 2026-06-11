@@ -9,6 +9,7 @@ RViz publishing without cross-layer imports.
 from __future__ import annotations
 
 import threading
+import time
 import warnings
 from typing import Optional
 
@@ -76,8 +77,16 @@ class RvizPublisher:
             except Exception as exc:
                 warnings.warn(f"Failed to publish static RViz transform: {exc}", RuntimeWarning, stacklevel=2)
 
-        self._scene_pub = self._node.create_publisher(MarkerArray, self._scene_topic, 10)
+        # Latch the scene topic: it is published once at backend init, and RViz
+        # typically attaches afterwards. Transient-local delivers the last
+        # MarkerArray to late subscribers (display must also request it).
+        from rclpy.qos import DurabilityPolicy, QoSProfile
+
+        scene_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self._scene_pub = self._node.create_publisher(MarkerArray, self._scene_topic, scene_qos)
         self._task_pub = self._node.create_publisher(MarkerArray, self._task_topic, 10)
+        self._last_scene = None
+        self._last_scene_publish_s = 0.0
         self._ee_pubs: dict[str, object] = {}
         self._trace_pubs: dict[str, object] = {}
         self._running = True
@@ -98,6 +107,8 @@ class RvizPublisher:
     def publish_scene(self, scene: SceneSpec) -> None:
         if self._node is None:
             return
+        self._last_scene = scene
+        self._last_scene_publish_s = time.monotonic()
         from visualization_msgs.msg import Marker
         from visualization_msgs.msg import MarkerArray
 
@@ -231,6 +242,10 @@ class RvizPublisher:
         """Publish task-goal markers from env-provided payload."""
         if self._node is None:
             return
+        # Fallback for subscribers whose QoS still misses the latched scene
+        # message: re-publish the cached scene at ~1 Hz off the step loop.
+        if self._last_scene is not None and time.monotonic() - self._last_scene_publish_s >= 1.0:
+            self.publish_scene(self._last_scene)
         from visualization_msgs.msg import Marker
         from visualization_msgs.msg import MarkerArray
 
