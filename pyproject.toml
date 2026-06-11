@@ -118,7 +118,6 @@ include = ["robodeploy*", "benchmarks*"]
 [tool.setuptools.package-data]
 benchmarks = ["**/*.yaml", "**/*.json", "**/*.md", "leaderboard/**/*"]
 robodeploy = [
-  "demos/**/*.yaml",
   "_assets/**/*.json",
   "description/**/*.urdf",
   "description/**/*.yaml",

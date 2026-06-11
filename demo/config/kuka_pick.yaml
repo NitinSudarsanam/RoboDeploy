@@ -34,7 +34,9 @@ _pick_core: &pick_core
         prop_names: [source, target]
       ee_pose: {}
   custom_modules:
-    - robodeploy.demos
+    - examples.tasks
+    - examples.policies
+    - examples.sensors
 
 _backend_mujoco: &backend_mujoco
   backend: mujoco

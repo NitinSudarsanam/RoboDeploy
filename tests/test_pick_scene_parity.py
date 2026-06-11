@@ -13,7 +13,7 @@ if str(REPO_ROOT) not in sys.path:
 
 class PickSceneParityTests(unittest.TestCase):
     def test_canonical_scene_has_table_source_target(self):
-        from robodeploy.demos.scenes.pick_table import build_pick_place_scene
+        from examples.scenes.pick_table import build_pick_place_scene
 
         names = {p.name for p in build_pick_place_scene().to_world().props}
         self.assertEqual(names, {"table", "source", "target"})
@@ -22,7 +22,7 @@ class PickSceneParityTests(unittest.TestCase):
         from robodeploy.backends.sim.gazebo.scene_builder import GazeboSceneBuilder
         from robodeploy.backends.sim.mujoco.scene_builder import MjcfSceneBuilder
         from robodeploy.core.scene_ir import assert_cross_backend_pose_equivalence
-        from robodeploy.demos.scenes.pick_table import build_pick_place_scene
+        from examples.scenes.pick_table import build_pick_place_scene
 
         ir = build_pick_place_scene().to_ir()
         mjcf = MjcfSceneBuilder(
@@ -51,7 +51,7 @@ class PickSceneParityTests(unittest.TestCase):
     def test_ee_pose_sensor_prefers_world_fk_when_configured(self):
         import numpy as np
 
-        from robodeploy.demos.sensors.ee_pose import EePoseSensor, _prefer_world_fk
+        from examples.sensors.ee_pose import EePoseSensor, _prefer_world_fk
 
         class _Backend:
             config = {"prefer_fk_ee_pose": True, "robot0.base_frame": "world"}

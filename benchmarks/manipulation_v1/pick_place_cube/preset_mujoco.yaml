@@ -16,6 +16,6 @@ sensor_rigs:
       prop_names: [source, target]
 max_episode_steps: 500
 custom_modules:
-  - robodeploy.demos.tasks
-  - robodeploy.demos.sensors
-  - robodeploy.demos.policies
+  - examples.tasks
+  - examples.sensors
+  - examples.policies

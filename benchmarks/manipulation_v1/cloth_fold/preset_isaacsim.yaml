@@ -15,6 +15,6 @@ sensor_rigs:
       prop_names: [showcase_box, showcase_cylinder, showcase_sphere, showcase_capsule]
 max_episode_steps: 1500
 custom_modules:
-  - robodeploy.demos.tasks
-  - robodeploy.demos.sensors
-  - robodeploy.demos.policies
+  - examples.tasks
+  - examples.sensors
+  - examples.policies

@@ -2,13 +2,13 @@
 
 A minimal, self-contained pick-and-place demo for the Kuka arm. The same task, policy, sensors, and scene run on **MuJoCo**, **ROS 2 + RViz**, and **Gazebo** — you only change which simulator is active.
 
-This folder is intentionally small: `demo/` holds the entry script and YAML preset; all robot models, backends, tasks, and policies live in `robodeploy/`.
+This folder is intentionally small: `demo/` holds the entry script and YAML preset. Example tasks, policies, sensors, and scenes live in `examples/`; robot models and backends live in `robodeploy/`.
 
 ---
 
 ## What it does
 
-1. Spawns a table with a **red source cube** and a **green target sphere** at fixed world-frame poses (see `robodeploy/demos/scenes/pick_table.py`).
+1. Spawns a table with a **red source cube** and a **green target sphere** at fixed world-frame poses (see `examples/scenes/pick_table.py`).
 2. Runs a sensor-driven reach policy (`example_sensor_reach_pick`) that:
    - reaches the cube using wrist FT, contact, prop pose, and EE pose sensors;
    - engages a kinematic carry when grasp conditions are met;
@@ -25,8 +25,8 @@ On MuJoCo you typically see success around step 400 with the default seed. RViz 
 |------|---------|
 | `demo/run_pick.py` | Entry point — edit `SIMULATOR` and `SEED` here |
 | `demo/config/kuka_pick.yaml` | Per-backend config (task, policy, sensors, backend kwargs) |
-| `robodeploy/demos/scenes/pick_table.py` | Shared scene geometry (table, cube, target) |
-| `robodeploy/demos/tasks/pick_place.py` | Task registration (`pick_place`) |
+| `examples/scenes/pick_table.py` | Shared scene geometry (table, cube, target) |
+| `examples/tasks/pick_place.py` | Task registration (`pick_place`) |
 | `robodeploy/policies/reach_dsl.py` | Reach / carry / place policy logic |
 
 ---

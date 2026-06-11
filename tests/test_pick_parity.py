@@ -71,7 +71,7 @@ class PickParityPresetTests(unittest.TestCase):
         import numpy as np
 
         from robodeploy.core.types import Observation
-        from robodeploy.demos.sensors.ee_pose import _ee_from_ros_transport
+        from examples.sensors.ee_pose import _ee_from_ros_transport
 
         z7 = np.zeros(7, dtype=np.float32)
         z3 = np.zeros(3, dtype=np.float32)
@@ -95,7 +95,7 @@ class PickParityPresetTests(unittest.TestCase):
         np.testing.assert_allclose(quat, [1.0, 0.0, 0.0, 0.0], rtol=1e-5)
 
     def test_sensor_reach_pick_maps_rviz_kinematic_carry(self):
-        from robodeploy.demos.policies.sensor_reach_pick import SensorReachPickPlacePolicy
+        from examples.policies.sensor_reach_pick import SensorReachPickPlacePolicy
         from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
 
         policy = SensorReachPickPlacePolicy(
@@ -129,7 +129,7 @@ class PickParityPresetTests(unittest.TestCase):
         self.assertTrue(policy._kinematic_carry)
 
     def test_sensor_reach_pick_maps_mujoco_kinematic_carry(self):
-        from robodeploy.demos.policies.sensor_reach_pick import SensorReachPickPlacePolicy
+        from examples.policies.sensor_reach_pick import SensorReachPickPlacePolicy
         from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
 
         policy = SensorReachPickPlacePolicy(
@@ -145,7 +145,7 @@ class PickParityPresetTests(unittest.TestCase):
         self.assertEqual(policy._grasp_detection, "ft")
 
     def test_sensor_reach_pick_maps_gazebo_kinematic_carry(self):
-        from robodeploy.demos.policies.sensor_reach_pick import SensorReachPickPlacePolicy
+        from examples.policies.sensor_reach_pick import SensorReachPickPlacePolicy
         from robodeploy.policies.reach_dsl import ReachTrajectoryPolicy
 
         policy = SensorReachPickPlacePolicy(
@@ -229,7 +229,7 @@ class PickParityPresetTests(unittest.TestCase):
         self.assertIn('"sensor_only"', text)
         self.assertIn("ee_position_from_obs", text)
 
-        bind_src = (REPO_ROOT / "robodeploy" / "demos" / "policies" / "sensor_reach_pick.py").read_text(
+        bind_src = (REPO_ROOT / "examples" / "policies" / "sensor_reach_pick.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn("get_prop_pose", bind_src)

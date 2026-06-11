@@ -413,7 +413,7 @@ YAML library with 4 presets (`minimal`, `bright`, `dark`, `randomized`). Referen
 - [x] `robodeploy scene validate scene.yaml --backend mujoco` exits non-zero on bad scene (`tests/test_cli.py::test_scene_validate_bad_scene_exits_nonzero`).
 - [x] `SceneIR` round-trips MuJoCo + Gazebo + Isaac with identical prop counts (`tests/test_backend_parity.py` — MuJoCo/Gazebo prop counts + poses; Isaac `from_ir` offline emits prop paths, live USD counts need GPU Kit runtime, see GOAL_06).
 - [x] Reward function composable in ≤ 5 lines for pick-place (`RewardBuilder().distance(...).bonus_lift(...).build()`; `tests/test_reward_builder.py`, templates use it in `robodeploy/tasks/templates/`).
-- [x] All existing example scenes work unchanged (back-compat shim: `SceneSpec.to_ir()`; `examples/*` are thin re-exports of `robodeploy.demos.*`, full suite green 2026-06-11).
+- [x] All existing example scenes work unchanged (back-compat shim: `SceneSpec.to_ir()`; `examples/*` are thin re-exports of `examples.*`, full suite green 2026-06-11).
 - [x] `tests/` adds: scene_ir, scene_validator, scene_builder, asset_loader, reach_dsl, policy_builder, reward_builder, task_templates.
 
 ## Risks

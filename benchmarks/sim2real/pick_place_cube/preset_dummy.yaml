@@ -10,5 +10,5 @@ policy_kwargs:
 max_episode_steps: 500
 sim2real_pair: kuka_pick_dummy
 custom_modules:
-  - robodeploy.demos.tasks
+  - examples.tasks
   - benchmarks.manipulation_v1.reach_target.task

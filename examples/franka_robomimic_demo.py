@@ -1,6 +1,6 @@
 """Franka Panda robomimic policy demo (structure-only).
 
-This demo was migrated from `robodeploy.demos` to `examples/` as part of the
+This demo was migrated from `examples` to `examples/` as part of the
 architecture cleanup. It now demonstrates the intended *public* API wiring:
 
 - `RoboEnv` orchestrates

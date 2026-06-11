@@ -7,5 +7,5 @@ task_kwargs:
 max_episode_steps: 500
 sim2real_pair: kuka_pick_real
 custom_modules:
-  - robodeploy.demos.tasks
-  - robodeploy.demos.policies.sensor_reach_pick
+  - examples.tasks
+  - examples.policies.sensor_reach_pick

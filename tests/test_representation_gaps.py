@@ -31,19 +31,14 @@ from robodeploy.tasks.success_predicates import liquid_in_target, peg_in_hole
 
 class RepresentationGapTests(unittest.TestCase):
     def test_reach_pick_place_policy_under_50_lines(self):
-        path = REPO_ROOT / "robodeploy/demos/policies/reach_pick_place.py"
+        path = REPO_ROOT / "examples/policies/reach_pick_place.py"
         lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
         self.assertLessEqual(len(lines), 50)
 
     def test_pick_place_task_under_25_lines(self):
-        path = REPO_ROOT / "robodeploy/demos/tasks/pick_place.py"
+        path = REPO_ROOT / "examples/tasks/pick_place.py"
         lines = path.read_text(encoding="utf-8").splitlines()
         self.assertLessEqual(len(lines), 25)
-
-    def test_examples_pick_place_shims_are_thin(self):
-        for rel in ("examples/policies/reach_pick_place.py", "examples/tasks/pick_place.py"):
-            lines = (REPO_ROOT / rel).read_text(encoding="utf-8").splitlines()
-            self.assertLessEqual(len(lines), 10, msg=rel)
 
     def test_procedural_generators_ridge_and_stairs(self):
         ridge = ProceduralTerrainGenerator.ridge(resolution=32, seed=1)
@@ -150,7 +145,7 @@ class RepresentationGapTests(unittest.TestCase):
             self.assertTrue((REPO_ROOT / "examples/presets" / name).is_file())
 
     def test_pick_place_scene_ir_mujoco_gazebo_pose_tolerance(self):
-        from robodeploy.demos.scenes.pick_table import build_pick_place_scene
+        from examples.scenes.pick_table import build_pick_place_scene
 
         ir = build_pick_place_scene().to_ir()
         mjcf = MjcfSceneBuilder(
