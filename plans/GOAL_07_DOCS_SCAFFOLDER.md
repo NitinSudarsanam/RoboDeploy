@@ -310,17 +310,17 @@ For users on 0.1.x. Show old→new for:
 
 ## Acceptance Criteria
 
-- [ ] New user runs `pip install robodeploy && robodeploy run-episode --preset dummy` and sees output in < 60 seconds.
-- [ ] Tutorial 02 produces working custom task in <30 lines from scratch (`docs/tutorials/02_your_first_task.md`; uses `examples.cli`, no CI integration test yet).
+- [ ] New user runs `pip install robodeploy && robodeploy run-episode --preset dummy` and sees output in < 60 seconds — **blocked on PyPI `v0.2.0` tag** (publish workflow ready; wheel + CLI smoke covered by `tests/test_package_build.py`).
+- [x] Tutorial 02 produces working custom task in <30 lines from scratch (`docs/tutorials/02_your_first_task.md`; CI integration test `tests/test_tutorial_02_task.py::test_tutorial_code_block_compiles_and_builds_scene` execs the doc code block and builds the scene).
 - [x] `robodeploy scaffold task --name X --template pick_place` produces compilable file (`tests/test_cli.py::test_scaffold_task_writes_compilable_file`).
 - [x] `robodeploy scaffold policy --name X --template reach_dsl` produces working YAML + loader (`tests/test_cli.py::test_scaffold_policy_reach_dsl_yaml`).
 - [x] `robodeploy lint task examples/tasks/pick_place.py` reports no issues; introducing a missing method triggers error (`tests/test_cli.py::test_lint_task_*`).
 - [x] `robodeploy scene validate scene.yaml --backend mujoco` exits non-zero on bad scene (`tests/test_cli.py::test_scene_validate_bad_scene_exits_nonzero`).
 - [x] `robodeploy doctor` accurately reports installed dependencies (`tests/test_cli.py::test_doctor_*`).
-- [ ] Every public class in `robodeploy/core/interfaces/` has API docstring.
+- [x] Every public class in `robodeploy/core/interfaces/` has API docstring (enforced by `tests/test_tutorial_02_task.py::test_every_public_interface_class_has_docstring`).
 - [x] `docs/` builds via `mkdocs build` without warnings (`.github/workflows/docs.yml` on push to `main`).
 - [x] GitHub Pages auto-deploy on `main` push (`.github/workflows/docs.yml` deploy job).
-- [ ] Migration guide covers each renamed/removed symbol in 0.1.x → 0.2.x.
+- [x] Migration guide covers each renamed/removed symbol in 0.1.x → 0.2.x (`docs/MIGRATION_0.2.md`, linked from `docs/index.md` + `docs/PROJECT_GUIDE.md`).
 
 ## Dependencies
 
